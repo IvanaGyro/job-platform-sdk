@@ -50,6 +50,7 @@ async def main():
             version = summaries[0]["versionNo"]
             resume = await client.get_resume(version)
             schema = await client.get_schema(version)
+            bio_section = await client.get_section(version, "bio")
 
 asyncio.run(main())
 ```
@@ -67,6 +68,7 @@ xvfb-run -a job-platform --provider tw104 probe
 xvfb-run -a job-platform --provider tw104 list
 xvfb-run -a job-platform --provider tw104 get VERSION_NO
 xvfb-run -a job-platform --provider tw104 schema VERSION_NO
+xvfb-run -a job-platform --provider tw104 get-section VERSION_NO bio
 xvfb-run -a job-platform --provider tw104 plan VERSION_NO --patch-file changes.json
 # Experimental: writes BIO only. The precondition is resumeTimestamp from a prior GET:
 xvfb-run -a job-platform --provider tw104 apply VERSION_NO --patch-file changes.json \
@@ -92,6 +94,7 @@ Routes:
 - `GET /v1/{provider}/resumes`
 - `GET /v1/{provider}/resumes/{resume_id}`
 - `GET /v1/{provider}/resumes/{resume_id}/schema`
+- `GET /v1/{provider}/resumes/{resume_id}/sections/{section}`
 - `POST /v1/{provider}/resumes` (requires `Idempotency-Key`)
 - `POST /v1/{provider}/resumes/{resume_id}/plan` (dry run only)
 - `PATCH /v1/{provider}/resumes/{resume_id}` (**501 by default**; experimental BIO-only write when explicitly enabled)

@@ -23,6 +23,9 @@ def _parser() -> argparse.ArgumentParser:
     get.add_argument("resume_id")
     schema = sub.add_parser("schema", help="Print the nested field schema")
     schema.add_argument("resume_id")
+    section = sub.add_parser("get-section", help="Read one native resume section")
+    section.add_argument("resume_id")
+    section.add_argument("section", choices=Resume104Client.SECTIONS)
     create = sub.add_parser("create", help="Create exactly one real resume")
     create.add_argument("--confirm", choices=["create-one"], required=True)
     plan = sub.add_parser("plan", help="Validate multi-field edits without saving")
@@ -52,6 +55,8 @@ async def _run(args):
             result = await client.get_resume(args.resume_id)
         elif args.command == "schema":
             result = await client.get_schema(args.resume_id)
+        elif args.command == "get-section":
+            result = await client.get_section(args.resume_id, args.section)
         elif args.command == "create":
             result = await client.create_resume()
         elif args.command in ("plan", "apply"):

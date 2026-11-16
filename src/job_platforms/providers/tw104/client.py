@@ -62,6 +62,16 @@ class Resume104Client:
             raise ResumeNotFound("Requested resume version was not returned")
         return data
 
+    async def get_section(self, resume_id: str | int, section: str) -> dict:
+        """Read one named 104 section without stripping any native fields."""
+        if section not in self.SECTIONS:
+            raise ValueError("Unknown 104 editable section")
+        document = await self.get_resume(resume_id)
+        item = document.get(section)
+        if not isinstance(item, dict):
+            raise ResumeNotFound("Selected resume section is unavailable")
+        return item
+
     async def get_schema(self, resume_id: str | int) -> dict:
         document = await self.get_resume(resume_id)
         return {name: describe_schema(document[name])

@@ -129,6 +129,19 @@ def create_app(
         except JobPlatformError as exc:
             translate_error(exc)
 
+    @app.get(
+        "/v1/{provider}/resumes/{resume_id}/sections/{section}",
+        dependencies=[Depends(authorize)],
+    )
+    async def resume_section(provider: str, resume_id: str, section: str, request: Request):
+        require_provider(provider)
+        if section not in Resume104Client.SECTIONS:
+            raise HTTPException(400, "Unknown resume section")
+        try:
+            return await request.app.state.client.get_section(resume_id, section)
+        except JobPlatformError as exc:
+            translate_error(exc)
+
     @app.post("/v1/{provider}/resumes", dependencies=[Depends(authorize)])
     async def create_resume(
         provider: str,
