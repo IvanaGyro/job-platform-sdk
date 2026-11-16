@@ -137,11 +137,13 @@ Its HTTP interceptor also propagates the **private `104-profile-ver` version hea
 from a prior server response into all `PUT` / `POST` / `DELETE` requests.
 The SDK now replicates this handshake in memory, without logging the header.
 
-In preliminary live tests, PUT without this header returned HTTP 400, and the
-remote biography remained unchanged. A later test with the header did not reach
-the PUT because the fresh-login session was denied; **successful real persistence
-is therefore still unverified**. Existing biographical data was compared against
-its private backup and found unchanged.
+In preliminary live tests, a PUT without this header returned HTTP 400.
+A subsequent **identical-content** PUT with the header returned HTTP 200, and
+read-back confirmed the original fields stayed unchanged. A temporary zero-width
+character modification was not read back identically; the immediate restoration
+was independently verified. Another punctuation-change test was blocked during
+fresh login, before sending a write. **Persisting a real field change therefore
+remains unverified**. The original biography still matches its private backup.
 
 For local HTTP writes, set `JOB_PLATFORM_104_ENABLE_EXPERIMENTAL_WRITES=1`
 **only when you accept the risk of an unverified writer**. `PATCH` additionally

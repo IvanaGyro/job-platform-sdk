@@ -91,11 +91,13 @@ The SDK's BIO adapter preserves the non-targeted sibling language if only
 one is changed, writes both values once, and reads back to compare exactly.
 
 **Live verification status:** A same-origin BIO PUT without
-`104-profile-ver` returned HTTP 400 and did not change the existing resume.
-The version-header implementation is covered by unit tests but has **not yet
-been shown to complete a live PUT** because later browser login attempts
-failed before the write phase. This adapter is deliberately marked
-experimental, and the HTTP PATCH endpoint defaults to 501 unless opted in.
+`104-profile-ver` returned HTTP 400. An identical-content PUT with the
+version header returned HTTP 200 and retained the original values. A test
+that appended an invisible zero-width character failed exact read-back;
+its restoration was verified against the private backup. A follow-up
+punctuation-change test did not complete authentication, so **a changed
+field has not yet been confirmed persisted end-to-end**. The adapter remains
+experimental and HTTP PATCH returns 501 by default unless explicitly opted in.
 
 ## Safe implementation approach for remaining blocks
 

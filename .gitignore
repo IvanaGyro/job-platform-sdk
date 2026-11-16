@@ -33,3 +33,11 @@ artifacts/
 # Playwright artifacts
 test-results/
 playwright-report/
+
+# Local authenticated integration harnesses and generated staging artifacts
+tests/private_*.py
+tests/live_*.py
+**/*bio-backup*
+**/*private-profile*
+http-new-*.txt
+readme-new-*.txt
