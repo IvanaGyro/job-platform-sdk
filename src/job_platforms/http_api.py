@@ -102,7 +102,10 @@ def create_app(
         return {
             "tw104": {
                 **TW104_CAPABILITIES.to_dict(),
-                "experimental_writable_sections": ["bio", "certificate", "sidebar", "jobCondition"],
+                "experimental_writable_sections": [
+                    "bio", "certificate", "sidebar", "jobCondition",
+                    "experience.seniority",
+                ],
                 "experimental_writes_enabled": allow_experimental_writes,
             },
             "cake": {"provider": "cake", "implemented": False},

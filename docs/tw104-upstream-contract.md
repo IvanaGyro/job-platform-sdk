@@ -163,9 +163,25 @@ unexpected arrays fail before any remote write. The encoder preserves all
 known unaffected sibling fields. This has synthetic contract/read-back tests,
 **not a confirmed real 104 PUT**.
 
+### EXPERIENCE seniority-only update (experimental)
+
+The frontend exposes an independent action for the overall seniority value:
+
+```json
+{"blockValueList":{"experience":{"seniority":3}}}
+```
+
+The synthetic value `3` above illustrates the shape, not an actual user
+value. This uses `PUT /profile/ajax/resumeByBlock/experience?vno=...`.
+It is **not** an update to `experiences[]`, which is a separate array with
+its own POST/PUT/DELETE/sort workflows. The SDK allows only a replacement of
+`/experience/formData/seniority/value`, verifies that value on read-back, and
+does not send the experiences array. This mapping is source-observed and
+synthetic-tested, but not live write-tested.
+
 ### Non-atomic multi-section edits
 
-One patch can target multiple supported sections (BIO, CERTIFICATE, SIDEBAR or JOB_CONDITION),
+One patch can target multiple supported sections (BIO, CERTIFICATE, SIDEBAR, JOB_CONDITION or EXPERIENCE seniority),
 but the server receives separate PUT requests. The SDK validates all mappings before the first write and
 verifies each section after saving it. A later error after earlier confirmed
 writes raises `PartialWriteError` containing only block names; the failed

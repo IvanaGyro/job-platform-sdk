@@ -13,7 +13,7 @@ An unofficial, extensible Python SDK, CLI and optional HTTP API for managing job
 | Read full resume | Live tested | Planned | Planned | Platform-dependent |
 | Create resume | Browser flow tested; SDK not yet live-tested | Planned | Planned | Platform-dependent |
 | Edit multiple fields locally | JSON Patch supported | Planned | Planned | Platform-dependent |
-| Persist edits to website | **BIO live-tested; certificate/sidebar/jobCondition experimental** | Planned | Planned | Platform-dependent |
+| Persist edits to website | **BIO live-tested; other mapped fields experimental** | Planned | Planned | Platform-dependent |
 | HTTP wrapper | Mock-tested | Planned | Planned | Planned |
 
 The SDK does **not** claim successful persistence from local-only edits. Unsupported write operations return an explicit error.
@@ -79,7 +79,12 @@ copy** of the original response. `client.save_edit(plan)` supports:
   handles the 104-specific salary and onboarding branches. Unrecognized
   shapes are rejected before any request. **Synthetic-tested, not live-tested.**
   Theme changes use a distinct upstream `layout` operation and are not yet
+  Theme changes use a distinct upstream `layout` operation and are not yet
   implemented.
+- `/experience/formData/seniority/value` updates only the overall seniority
+  selection, using an independent 104 `experience.seniority` PUT. It never
+  submits or overwrites the individual `experiences` list. **Synthetic-tested,
+  not live-tested.** Other experience fields and record CRUD remain unsupported.
 
 Each modified section is written once with sibling fields preserved, then
 verified by reading back. **Multiple sections are not atomic**: if a later
@@ -98,7 +103,7 @@ xvfb-run -a job-platform --provider tw104 get VERSION_NO
 xvfb-run -a job-platform --provider tw104 schema VERSION_NO
 xvfb-run -a job-platform --provider tw104 get-section VERSION_NO bio
 xvfb-run -a job-platform --provider tw104 plan VERSION_NO --patch-file changes.json
-# BIO has a verified writer; CERTIFICATE, SIDEBAR and JOBCONDITION remain experimental. Require resumeTimestamp:
+# BIO has a verified writer; CERTIFICATE, SIDEBAR, JOBCONDITION and EXPERIENCE seniority remain experimental. Require resumeTimestamp:
 xvfb-run -a job-platform --provider tw104 apply VERSION_NO --patch-file changes.json \
   --if-match TIMESTAMP --confirm experimental-bio-write
 # For certificate, sidebar, job-condition or multi-section updates, use:

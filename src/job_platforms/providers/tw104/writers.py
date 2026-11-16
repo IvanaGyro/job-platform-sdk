@@ -26,11 +26,15 @@ CERTIFICATE_PATHS = frozenset((
     "/certificate/formData/certificate/others",
 ))
 SIDEBAR_PATHS = frozenset(("/sidebar",))
+EXPERIENCE_SENIORITY_PATHS = frozenset((
+    "/experience/formData/seniority/value",
+))
 WRITE_PATH_TO_SECTION = {
     **{path: "bio" for path in BIO_PATHS},
     **{path: "certificate" for path in CERTIFICATE_PATHS},
     **{path: "sidebar" for path in SIDEBAR_PATHS},
     **{path: "jobCondition" for path in JOB_CONDITION_PATHS},
+    **{path: "experience" for path in EXPERIENCE_SENIORITY_PATHS},
 }
 
 
@@ -99,6 +103,24 @@ def validate_section_edit(before: dict, after: dict, section: str) -> None:
         )
 
 
+def experience_seniority_data(document: dict[str, Any]) -> dict[str, Any]:
+    """Project the single-field 104 experience seniority PUT contract.
+
+    The UI sends only the selected seniority value, not the experiences list.
+    This projection verifies the value without comparing derived display text.
+    """
+    try:
+        seniority = document["experience"]["formData"]["seniority"]
+        value = seniority["value"]
+    except (KeyError, TypeError) as exc:
+        raise UnsupportedWrite(
+            "104 EXPERIENCE seniority response shape is not supported"
+        ) from exc
+    if isinstance(value, bool) or value is not None and not isinstance(value, (int, str)):
+        raise UnsupportedWrite("104 EXPERIENCE seniority must be numeric/string/null")
+    return {"value": value}
+
+
 def section_data(document: dict[str, Any], section: str) -> dict[str, Any]:
     if section == "bio":
         return bio_data(document)
@@ -108,6 +130,8 @@ def section_data(document: dict[str, Any], section: str) -> dict[str, Any]:
         return sidebar_data(document)
     if section == "jobCondition":
         return native_job_condition(document)
+    if section == "experience":
+        return experience_seniority_data(document)
     raise UnsupportedWrite("No verified serializer for this 104 section")
 
 
@@ -115,6 +139,11 @@ def section_request_body(document: dict[str, Any], section: str) -> dict:
     """Preserve unaffected sibling values inside the same section."""
     if section == "jobCondition":
         return job_condition_request_body(document)
+    if section == "experience":
+        value = experience_seniority_data(document)["value"]
+        if value is None or value == "":
+            raise UnsupportedWrite("104 EXPERIENCE seniority write needs a selected value")
+        return {"blockValueList": {"experience": {"seniority": value}}}
     return {"blockValueList": {section: (
         {"bio": bio_data(document)} if section == "bio"
         else certificate_data(document) if section == "certificate"
