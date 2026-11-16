@@ -109,6 +109,28 @@ ambiguous failure or use stale positions. **Synthetic-tested only; real
 104 writes are not yet confirmed.** Ordering uses a different upstream
 operation and is not yet implemented.
 
+### Experimental 104 education records (CRUD)
+
+The SDK also supports `Resume104Client.mutate_education()` for one
+record at a time. The HTTP API exposes:
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| POST | `/v1/tw104/resumes/{resume_id}/educations` | Add a school |
+| PUT | `/v1/tw104/resumes/{resume_id}/educations/{position}` | Update fields |
+| DELETE | `/v1/tw104/resumes/{resume_id}/educations/{position}` | Delete a school |
+
+Here `position` is the **current 1-based 104 `sort` number**.
+Creation currently requires every mapped 104 native school field except
+`sort`; updating accepts a nonempty subset of native fields, excluding
+`sort`. Both send 104-specific flattened selectors and department ID lists.
+Only the intended record is submitted, with unrelated records checked in the
+read-back. All HTTP mutations require the API Bearer token, experimental opt-in,
+`If-Match` and an `Idempotency-Key` of at least 16 characters. **Synthetic
+tests passed; the writer is not yet live write-verified.** This is not a
+generic cross-platform education model. Education ordering uses a different
+upstream operation and remains unsupported.
+
 Each modified section is written once with sibling fields preserved, then
 verified by reading back. **Multiple sections are not atomic**: if a later
 section fails, `PartialWriteError` reports earlier verified sections and the

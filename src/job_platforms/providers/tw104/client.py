@@ -18,6 +18,9 @@ from job_platforms.core.patch import (
 )
 from .transport import BrowserTransport
 from .skill_records import skill_list, skill_operation_body, verify_skill_operation
+from .education_records import (
+    education_list, education_operation_body, verify_education_operation,
+)
 from .writers import (
     checked_write_paths, changed_sections, section_data, section_request_body,
     validate_section_edit,
@@ -228,6 +231,66 @@ class Resume104Client:
             raise VerificationError(
                 "SKILL request submitted but no exact matching record change "
                 "could be verified; inspect before retrying"
+            )
+
+    async def mutate_education(
+        self,
+        resume_id: str | int,
+        action: str,
+        *,
+        expected_timestamp: int | str,
+        changes: dict | None = None,
+        position: int | None = None,
+    ) -> dict:
+        """Source-mapped 104 EDUCATION record POST/PUT/DELETE.
+
+        Each position is the current 1-based sort value. Unrecognized source
+        shapes and stale resume versions are rejected before writing.
+        """
+        if action not in ("create", "update", "delete"):
+            raise UnsupportedWrite("Unsupported 104 EDUCATION action")
+        version = self._version(resume_id)
+        async with self._write_lock:
+            before = await self.get_resume(version)
+            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+                raise ConflictError("104 resume changed before education operation")
+            body = education_operation_body(
+                before, action, changes=changes, position=position
+            )
+            education_list(before)
+            method = {"create": "POST", "update": "PUT", "delete": "DELETE"}[action]
+            await self.transport.request(
+                method,
+                "/profile/ajax/resumeByBlock/education",
+                params={"vno": version}, json_data=body,
+            )
+            for attempt in range(4):
+                try:
+                    after = await self.get_resume(version)
+                    if verify_education_operation(
+                        before, after, action, body=body, position=position
+                    ):
+                        return {
+                            "resume_id": version,
+                            "action": action,
+                            "section": "education",
+                            "persisted": True,
+                            "verified": True,
+                            "atomic": True,
+                            "position": (
+                                len(education_list(after)) if action == "create"
+                                else position
+                            ),
+                        }
+                except Exception:
+                    raise VerificationError(
+                        "EDUCATION request submitted; read-back unavailable"
+                    ) from None
+                if attempt < 3:
+                    await asyncio.sleep(0.75)
+            raise VerificationError(
+                "EDUCATION write submitted but record state could not be "
+                "verified; inspect before retrying"
             )
 
     async def create_resume(self) -> dict:

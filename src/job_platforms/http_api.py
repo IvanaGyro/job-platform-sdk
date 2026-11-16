@@ -22,6 +22,7 @@ from job_platforms.core.errors import (
 )
 from job_platforms.providers.tw104 import AuthConfig, FreshBrowserSession, Resume104Client
 from job_platforms.providers.tw104.skill_records import skill_operation_body
+from job_platforms.providers.tw104.education_records import education_operation_body
 
 
 TW104_CAPABILITIES = ProviderCapabilities(
@@ -109,6 +110,7 @@ def create_app(
                 ],
                 "experimental_record_operations": {
                     "skill": ["create", "update", "delete"],
+                    "education": ["create", "update", "delete"],
                 },
                 "experimental_writes_enabled": allow_experimental_writes,
             },
@@ -365,6 +367,107 @@ def create_app(
         idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     ):
         return await skill_operation_http(
+            resume_id, request, "delete", changes=None, position=position,
+            if_match=if_match, idempotency_key=idempotency_key,
+        )
+
+    async def education_operation_http(
+        resume_id: str, request: Request, action: str, *,
+        changes: dict | None, position: int | None,
+        if_match: str | None, idempotency_key: str | None,
+    ):
+        """104-specific EDUCATION CRUD, not a cross-provider data model."""
+        if not allow_experimental_writes:
+            raise HTTPException(501, "104 EDUCATION writes require explicit opt-in")
+        if if_match is None:
+            raise HTTPException(428, "If-Match: <resumeTimestamp> is required")
+        if not idempotency_key or len(idempotency_key) < 16:
+            raise HTTPException(400, "Idempotency-Key of at least 16 characters required")
+        expected = if_match.strip('"')
+        fingerprint = hashlib.sha256(
+            json.dumps(
+                {"action": action, "position": position, "changes": changes,
+                 "timestamp": expected},
+                ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        key = ("EDUCATION", resume_id, idempotency_key)
+        async with request.app.state.action_lock:
+            cached = request.app.state.idempotency_results.get(key)
+            if cached is not None:
+                if cached["fingerprint"] != fingerprint:
+                    raise HTTPException(409, "Idempotency-Key reused with different payload")
+                if cached["state"] != "succeeded":
+                    raise HTTPException(
+                        409, "EDUCATION write outcome indeterminate; inspect before retrying"
+                    )
+                return cached["result"]
+            try:
+                before = await request.app.state.client.get_resume(resume_id)
+                if str(before.get("resumeTimestamp")) != expected:
+                    raise HTTPException(412, "Resume changed since caller's read")
+                education_operation_body(
+                    before, action, changes=changes, position=position
+                )
+            except (ValueError, KeyError, TypeError, IndexError, UnsupportedWrite):
+                raise HTTPException(
+                    422, "Invalid EDUCATION fields or record position"
+                ) from None
+            except JobPlatformError as exc:
+                translate_error(exc)
+            record = {"fingerprint": fingerprint, "state": "indeterminate"}
+            request.app.state.idempotency_results[key] = record
+            try:
+                result = await request.app.state.client.mutate_education(
+                    resume_id, action, changes=changes, position=position,
+                    expected_timestamp=expected,
+                )
+            except JobPlatformError as exc:
+                translate_error(exc)
+            else:
+                record.update({"state": "succeeded", "result": result})
+                return result
+
+    @app.post(
+        "/v1/tw104/resumes/{resume_id}/educations",
+        dependencies=[Depends(authorize)],
+    )
+    async def create_education(
+        resume_id: str, request: Request,
+        changes: dict = Body(...),
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        return await education_operation_http(
+            resume_id, request, "create", changes=changes, position=None,
+            if_match=if_match, idempotency_key=idempotency_key,
+        )
+
+    @app.put(
+        "/v1/tw104/resumes/{resume_id}/educations/{position}",
+        dependencies=[Depends(authorize)],
+    )
+    async def update_education(
+        resume_id: str, position: int, request: Request,
+        changes: dict = Body(...),
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        return await education_operation_http(
+            resume_id, request, "update", changes=changes, position=position,
+            if_match=if_match, idempotency_key=idempotency_key,
+        )
+
+    @app.delete(
+        "/v1/tw104/resumes/{resume_id}/educations/{position}",
+        dependencies=[Depends(authorize)],
+    )
+    async def delete_education(
+        resume_id: str, position: int, request: Request,
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        return await education_operation_http(
             resume_id, request, "delete", changes=None, position=position,
             if_match=if_match, idempotency_key=idempotency_key,
         )

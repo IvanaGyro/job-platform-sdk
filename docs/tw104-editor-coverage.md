@@ -10,7 +10,7 @@ and successful real 104 writes.** Each is a separate evidence level.
 | Native group | Frontend operation families seen | Implementation in this PR | Live 104 write/read-back |
 |---|---|---|---|
 | `info` | PUT; related identity and optional information | Read/plan only | No |
-| `education` | POST, PUT, DELETE; ordering | Read/plan only | No |
+| `education` | POST, PUT, DELETE; ordering | Native record CRUD source-mapped (experimental); sorting unavailable | **No** |
 | `experience` | POST, PUT, DELETE; ordering, seniority | Seniority-only PUT source-mapped; records read/plan only | **No** |
 | `jobCondition` | PUT; separate layout/theme PUT | Source-mapped full native form serializer, experimental | **No** |
 | `skill` | POST, PUT, DELETE; ordering | Source-mapped record CRUD (experimental); sorting remains unavailable | **No** |

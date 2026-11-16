@@ -213,6 +213,33 @@ intact (allowing sort reindexing after deletion). Never confuse this with
 `PUT /profile/ajax/swapRecordBySort/skill`, which handles reordering.
 These operations have **synthetic tests but no real 104 write verification**.
 
+### EDUCATION records: native CRUD (experimental)
+
+The official frontend uses separate 104 endpoints:
+
+- `POST /profile/ajax/resumeByBlock/education` — create a record
+- `PUT /profile/ajax/resumeByBlock/education` — update a record
+- `DELETE /profile/ajax/resumeByBlock/education` — delete one 1-based
+  position using `{"blockValueList":{"education":{"educations":{"sort":[1]}}}}`
+
+The POST/PUT body includes
+`blockValueList.education.educations` (a **single-item array**) and
+`themeChoose.selectedTheme`. Each record includes school ID/name, departments,
+degree, duration, status, optional in-school status and foreign/region selection.
+The frontend converts:
+
+- Selector objects `highest`, `status`, date months and theme to `value`
+- Department category options and `foreign` to their `no` identifiers
+- `inSchoolStatus` to `""` unless the student is still in school
+- General education ("普通科") to a first department without category types
+- Abroad region to its special region-ID array
+
+Create omits `sort`, while update uses the existing 1-based position. The
+SDK refuses unknown/missing native fields and compares unchanged sibling
+records after the write. Sorting itself uses `swapRecordBySort` and is
+not implemented. **Contract and HTTP tests are synthetic, not real 104
+read-after-write verification**.
+
 ### Non-atomic multi-section edits
 
 One patch can target multiple supported sections (BIO, CERTIFICATE, SIDEBAR, JOB_CONDITION or EXPERIENCE seniority),
