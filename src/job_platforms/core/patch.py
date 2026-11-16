@@ -80,6 +80,27 @@ def _lookup(value: Any, parts: list[str]) -> Any:
     return value
 
 
+def _json_equal(a: Any, b: Any) -> bool:
+    """JSON value equality: booleans are not numbers, even in nested values."""
+    if isinstance(a, bool) or isinstance(b, bool):
+        return isinstance(a, bool) and isinstance(b, bool) and a == b
+    if a is None or b is None:
+        return a is None and b is None
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        return a == b
+    if isinstance(a, str) or isinstance(b, str):
+        return isinstance(a, str) and isinstance(b, str) and a == b
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(
+            _json_equal(x, y) for x, y in zip(a, b)
+        )
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(
+            _json_equal(a[key], b[key]) for key in a
+        )
+    return False
+
+
 def apply_json_patch(document: Any, operations: list[JsonPatchOperation]) -> Any:
     """Create a modified copy; never mutate the provided document."""
     value = deepcopy(document)
@@ -88,7 +109,7 @@ def apply_json_patch(document: Any, operations: list[JsonPatchOperation]) -> Any
         if not parts:
             raise ValueError("Changing the entire root document is prohibited")
         if operation.op == "test":
-            if _lookup(value, parts) != operation.value:
+            if not _json_equal(_lookup(value, parts), operation.value):
                 raise ValueError("JSON Patch test failed")
             continue
         parent = _lookup(value, parts[:-1])

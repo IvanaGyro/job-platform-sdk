@@ -103,6 +103,25 @@ class PatchApiTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(mock.write_count,0)
         finally:await http.__aexit__(None,None,None)
 
+    async def test_ambiguous_patch_never_repeats_same_key(self):
+        from job_platforms.core.errors import VerificationError
+        http,mock=await self.create_client(True)
+        try:
+            async def uncertain_save(plan):
+                mock.write_count += 1
+                raise VerificationError("Synthetic unknown outcome")
+            mock.save_edit=uncertain_save
+            headers=self.headers(**{
+                "If-Match":"123",
+                "Idempotency-Key":"synthetic-unknown-save-key",
+            })
+            first=await http.patch(PATCH_PATH,json=BASE_OP,headers=headers)
+            repeat=await http.patch(PATCH_PATH,json=BASE_OP,headers=headers)
+            self.assertEqual((first.status_code,repeat.status_code),(409,409))
+            self.assertEqual(mock.write_count,1)
+        finally:
+            await http.__aexit__(None,None,None)
+
     async def test_other_sections_explicitly_unimplemented(self):
         http,mock=await self.create_client(True)
         try:

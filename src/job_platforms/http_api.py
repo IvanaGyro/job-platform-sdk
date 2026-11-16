@@ -114,7 +114,8 @@ def create_app(
     async def list_resumes(provider: str, request: Request):
         require_provider(provider)
         try:
-            return await request.app.state.client.list_resumes()
+            async with request.app.state.action_lock:
+                return await request.app.state.client.list_resumes()
         except JobPlatformError as exc:
             translate_error(exc)
 
@@ -122,7 +123,8 @@ def create_app(
     async def get_resume(provider: str, resume_id: str, request: Request):
         require_provider(provider)
         try:
-            return await request.app.state.client.get_resume(resume_id)
+            async with request.app.state.action_lock:
+                return await request.app.state.client.get_resume(resume_id)
         except JobPlatformError as exc:
             translate_error(exc)
 
@@ -133,7 +135,8 @@ def create_app(
     async def resume_schema(provider: str, resume_id: str, request: Request):
         require_provider(provider)
         try:
-            return await request.app.state.client.get_schema(resume_id)
+            async with request.app.state.action_lock:
+                return await request.app.state.client.get_schema(resume_id)
         except JobPlatformError as exc:
             translate_error(exc)
 
@@ -146,7 +149,8 @@ def create_app(
         if section not in Resume104Client.SECTIONS:
             raise HTTPException(400, "Unknown resume section")
         try:
-            return await request.app.state.client.get_section(resume_id, section)
+            async with request.app.state.action_lock:
+                return await request.app.state.client.get_section(resume_id, section)
         except JobPlatformError as exc:
             translate_error(exc)
 
@@ -164,13 +168,24 @@ def create_app(
                 (provider, idempotency_key)
             )
             if cached is not None:
-                return cached
+                if cached["state"] == "succeeded":
+                    return cached["result"]
+                raise HTTPException(
+                    409, "Create outcome is indeterminate; inspect resumes before retrying"
+                )
+            cache_key = (provider, idempotency_key)
+            request.app.state.idempotency_results[cache_key] = {
+                "state": "indeterminate"
+            }
             try:
                 item = await request.app.state.client.create_resume()
-                request.app.state.idempotency_results[(provider, idempotency_key)] = item
-                return item
             except JobPlatformError as exc:
                 translate_error(exc)
+            else:
+                request.app.state.idempotency_results[cache_key] = {
+                    "state": "succeeded", "result": item
+                }
+                return item
 
     @app.post(
         "/v1/{provider}/resumes/{resume_id}/plan",
@@ -182,12 +197,15 @@ def create_app(
     ):
         require_provider(provider)
         try:
-            plan, _ = await request.app.state.client.plan_edit(
-                resume_id, operations
-            )
+            async with request.app.state.action_lock:
+                plan, _ = await request.app.state.client.plan_edit(
+                    resume_id, operations
+                )
             return {"plan": plan.to_dict(), "persisted": False}
         except JobPlatformError as exc:
             translate_error(exc)
+        except (ValueError, KeyError, IndexError, TypeError):
+            raise HTTPException(422, "Invalid edit operations or field path") from None
 
     @app.patch(
         "/v1/{provider}/resumes/{resume_id}", dependencies=[Depends(authorize)]
@@ -213,18 +231,24 @@ def create_app(
         key = ("PATCH",provider,resume_id,idempotency_key)
         async with request.app.state.action_lock:
             cached = request.app.state.idempotency_results.get(key)
-            if cached:
+            if cached is not None:
                 if cached["fingerprint"] != fingerprint:
                     raise HTTPException(409, "Idempotency-Key reused with different payload")
+                if cached["state"] != "succeeded":
+                    raise HTTPException(
+                        409, "Save outcome is indeterminate; inspect before retrying"
+                    )
                 return cached["result"]
             try:
                 plan, _ = await request.app.state.client.plan_edit(resume_id, operations)
                 if str(plan.base_timestamp) != expected_timestamp:
                     raise HTTPException(412, "Resume has changed since the caller read it")
+                # Reserve the key *before* any upstream write. A transport error
+                # can occur after the remote server has committed the request.
+                record = {"fingerprint": fingerprint, "state": "indeterminate"}
+                request.app.state.idempotency_results[key] = record
                 result = await request.app.state.client.save_edit(plan)
-                request.app.state.idempotency_results[key] = {
-                    "fingerprint": fingerprint, "result": result,
-                }
+                record.update({"state": "succeeded", "result": result})
                 return result
             except JobPlatformError as exc:
                 translate_error(exc)

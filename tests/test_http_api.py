@@ -90,6 +90,56 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((first.status_code, second.status_code), (200, 200))
         self.assertEqual(self.fake.creates, 1)
 
+    async def test_ambiguous_create_never_repeats_same_key(self):
+        from job_platforms.core.errors import VerificationError
+
+        async def uncertain():
+            self.fake.creates += 1
+            raise VerificationError("Synthetic unknown outcome")
+
+        self.fake.create_resume = uncertain
+        headers = self.bearer(**{"Idempotency-Key": "uncertain-create-key-0001"})
+        first = await self.http.post("/v1/tw104/resumes", headers=headers)
+        repeat = await self.http.post("/v1/tw104/resumes", headers=headers)
+        self.assertEqual((first.status_code, repeat.status_code), (409, 409))
+        self.assertEqual(self.fake.creates, 1)
+
+    async def test_plan_validation_is_client_error(self):
+        async def invalid_plan(version, operations):
+            raise ValueError("Synthetic invalid pointer")
+        self.fake.plan_edit = invalid_plan
+        response = await self.http.post(
+            "/v1/tw104/resumes/test-1/plan",
+            headers=self.bearer(), json=[{"op": "remove", "path": "/bad"}],
+        )
+        self.assertEqual(response.status_code, 422)
+
+    async def test_reads_wait_for_create_navigation(self):
+        entering = asyncio.Event()
+        release = asyncio.Event()
+
+        async def slow_create():
+            self.fake.creates += 1
+            entering.set()
+            await release.wait()
+            return {"versionNo": "created"}
+        self.fake.create_resume = slow_create
+        headers = self.bearer(**{"Idempotency-Key": "locked-create-key-0001"})
+        create_task = asyncio.create_task(
+            self.http.post("/v1/tw104/resumes", headers=headers)
+        )
+        try:
+            await asyncio.wait_for(entering.wait(), timeout=1)
+            read_task = asyncio.create_task(
+                self.http.get("/v1/tw104/resumes", headers=self.bearer())
+            )
+            await asyncio.sleep(0.02)
+            self.assertFalse(read_task.done(), "Read bypassed navigation lock")
+        finally:
+            release.set()
+        created, read = await asyncio.gather(create_task, read_task)
+        self.assertEqual((created.status_code, read.status_code), (200, 200))
+
     async def test_other_provider_is_not_falsely_implemented(self):
         response = await self.http.get("/v1/cake/resumes",
                                        headers=self.bearer())

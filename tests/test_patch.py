@@ -60,6 +60,23 @@ class PatchTests(unittest.TestCase):
                 JsonPatchOperation("replace", "/a/missing", "value")
             ])
 
+    def test_boolean_is_not_json_number_in_preconditions(self):
+        original = {"flags": [True, {"nested": False}], "numeric": [1.0]}
+        invalid = [1, {"nested": 0}]
+        with self.assertRaisesRegex(ValueError, "test failed"):
+            apply_json_patch(original, [
+                JsonPatchOperation("test", "/flags", invalid),
+                JsonPatchOperation("replace", "/flags/0", False),
+            ])
+        with self.assertRaisesRegex(ValueError, "test failed"):
+            apply_json_patch(original, [
+                JsonPatchOperation("test", "/flags/0", 1),
+            ])
+        # JSON numbers compare by numeric value, unlike booleans.
+        apply_json_patch(original, [
+            JsonPatchOperation("test", "/numeric/0", 1),
+        ])
+
     def test_schema_does_not_include_values(self):
         schema = describe_schema({"info": {"name": "not-a-real-person"}})
         self.assertNotIn("not-a-real-person", str(schema))

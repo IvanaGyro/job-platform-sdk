@@ -45,6 +45,7 @@ class SectionTests(unittest.IsolatedAsyncioTestCase):
                 return {"formData":{"example":"synthetic"}}
         app=create_app(AuthConfig("unused","unused"),api_token=TOKEN)
         app.state.client=Mock()
+        app.state.action_lock=asyncio.Lock()
         async with AsyncClient(transport=ASGITransport(app=app),base_url="http://test") as http:
             header={"Authorization":"Bearer "+TOKEN}
             r=await http.get("/v1/tw104/resumes/synthetic/sections/bio",headers=header)

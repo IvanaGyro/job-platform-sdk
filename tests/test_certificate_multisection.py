@@ -137,6 +137,39 @@ class MultiSectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(client.doc["bio"]["formData"]["bio"]["chi"], "new Chinese")
         self.assertEqual(certificate_data(client.doc)["others"], "original")
 
+    async def test_concurrent_certificate_change_aborts_next_put(self):
+        client = WriterClient()
+        original_put = client.transport.put_json
+
+        async def concurrent_put(path, data, *, params):
+            response = await original_put(path, data, params=params)
+            if path.endswith("/bio"):
+                # A different browser session added a certificate while BIO
+                # was being saved. The pending certificate body is now stale.
+                client.doc["certificate"]["formData"]["certificate"][
+                    "certificates"
+                ].append({"id": 8, "name": "External synthetic certificate"})
+            return response
+
+        client.transport.put_json = concurrent_put
+        plan = EditPlan("synthetic-id", 123, [
+            JsonPatchOperation("replace", "/bio/formData/bio/chi", "changed"),
+            JsonPatchOperation(
+                "replace", "/certificate/formData/certificate/others",
+                "local change",
+            ),
+        ])
+        with self.assertRaises(PartialWriteError) as err:
+            await client.save_edit(plan)
+        self.assertEqual(err.exception.verified_sections, ["bio"])
+        self.assertEqual(err.exception.failed_section, "certificate")
+        self.assertEqual(len(client.transport.calls), 1)
+        self.assertEqual(
+            len(client.doc["certificate"]["formData"]["certificate"][
+                "certificates"
+            ]), 2
+        )
+
     async def test_invalid_section_detected_before_any_put(self):
         client = WriterClient()
         plan = EditPlan("synthetic-id", 123, [

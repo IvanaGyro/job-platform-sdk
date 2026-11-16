@@ -115,10 +115,19 @@ class Resume104Client:
             desired = {name: section_data(updated, name) for name in sections}
             before = {name: section_data(current, name) for name in sections}
             bodies = {name: section_request_body(updated, name) for name in sections}
+            latest = current
             for name in sections:
                 if before[name] == desired[name]:
                     continue
                 try:
+                    # Prior section read-backs refresh the version header. Never
+                    # use that fresh header to overwrite a stale pending block.
+                    # A cross-block transaction is not atomic; this detects
+                    # intervening changes before each subsequent request.
+                    if section_data(latest, name) != before[name]:
+                        raise ConflictError(
+                            "A pending resume section changed during the save"
+                        )
                     # Do not automatically retry if the response is ambiguous.
                     await self.transport.put_json(
                         f"/profile/ajax/resumeByBlock/{name}",
@@ -126,6 +135,7 @@ class Resume104Client:
                     )
                     for attempt in range(4):
                         after = await self.get_resume(plan.resume_id)
+                        latest = after
                         if section_data(after, name) == desired[name]:
                             verified_sections.append(name)
                             break
