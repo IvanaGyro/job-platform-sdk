@@ -1,0 +1,44 @@
+name: 104 resume read-only smoke test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CREDENTIALS_B64: ${{ secrets.JOB_PLATFORM_104_CREDENTIALS_B64 }}
+      PROXIES_B64: ${{ secrets.JOB_PLATFORM_104_PROXIES_B64 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install package and Chromium
+        run: |
+          python -m pip install .
+          python -m patchright install --with-deps chromium
+      - name: Write private runtime files
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          if [[ -z "$CREDENTIALS_B64" || -z "$PROXIES_B64" ]]; then
+            echo "Required GitHub Actions Secrets are missing" >&2
+            exit 1
+          fi
+          printf '%s' "$CREDENTIALS_B64" | base64 --decode > "$RUNNER_TEMP/resume-credentials.txt"
+          printf '%s' "$PROXIES_B64" | base64 --decode > "$RUNNER_TEMP/provider-proxies.txt"
+      - name: Read-only login and resume-count check
+        env:
+          JOB_PLATFORM_104_CREDENTIALS_FILE: ${{ runner.temp }}/resume-credentials.txt
+          JOB_PLATFORM_104_PROXY_FILE: ${{ runner.temp }}/provider-proxies.txt
+        run: xvfb-run -a job-platform --provider tw104 probe
+      - name: Clean private temporary files
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/resume-credentials.txt" "$RUNNER_TEMP/provider-proxies.txt"
