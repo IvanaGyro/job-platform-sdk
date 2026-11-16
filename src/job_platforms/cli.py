@@ -28,6 +28,13 @@ def _parser() -> argparse.ArgumentParser:
     plan = sub.add_parser("plan", help="Validate multi-field edits without saving")
     plan.add_argument("resume_id")
     plan.add_argument("--patch-file", required=True)
+    apply_cmd = sub.add_parser("apply", help="Explicitly write supported BIO fields (experimental)")
+    apply_cmd.add_argument("resume_id")
+    apply_cmd.add_argument("--patch-file", required=True)
+    apply_cmd.add_argument("--if-match", required=True,
+                           help="resumeTimestamp from a prior GET, used as precondition")
+    apply_cmd.add_argument("--confirm", required=True,
+                           choices=["experimental-bio-write"])
     return parser
 
 
@@ -47,16 +54,22 @@ async def _run(args):
             result = await client.get_schema(args.resume_id)
         elif args.command == "create":
             result = await client.create_resume()
-        elif args.command == "plan":
+        elif args.command in ("plan", "apply"):
             operations = json.loads(Path(args.patch_file).read_text(encoding="utf-8"))
             plan, _ = await client.plan_edit(args.resume_id, operations)
-            result = {
-                "resume_id": plan.resume_id,
-                "base_timestamp": plan.base_timestamp,
-                "operations": [{"op": op.op, "path": op.path}
-                               for op in plan.operations],
-                "persisted": False,
-            }
+            if args.command == "plan":
+                result = {
+                    "resume_id": plan.resume_id,
+                    "base_timestamp": plan.base_timestamp,
+                    "operations": [{"op": op.op, "path": op.path}
+                                   for op in plan.operations],
+                    "persisted": False,
+                }
+            else:
+                from job_platforms.core.errors import ConflictError
+                if str(plan.base_timestamp) != args.if_match.strip('"'):
+                    raise ConflictError("Resume has changed since the caller read it")
+                result = await client.save_edit(plan)
         else:
             raise ValueError("Unrecognized command")
         print(json.dumps(result, ensure_ascii=False, indent=2, default=str))

@@ -7,7 +7,9 @@ browser session for its lifetime and serializes non-idempotent operations.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import hmac
+import json
 import os
 from contextlib import asynccontextmanager
 
@@ -27,11 +29,18 @@ TW104_CAPABILITIES = ProviderCapabilities(
 )
 
 
-def create_app(config: AuthConfig | None = None, *, api_token: str | None = None) -> FastAPI:
+def create_app(
+    config: AuthConfig | None = None, *, api_token: str | None = None,
+    allow_experimental_writes: bool | None = None,
+) -> FastAPI:
     token = api_token or os.getenv("JOB_PLATFORM_API_TOKEN")
     if not token or len(token) < 24:
         raise ValueError("JOB_PLATFORM_API_TOKEN must contain at least 24 characters")
     config = config or AuthConfig.from_env()
+    if allow_experimental_writes is None:
+        allow_experimental_writes = (
+            os.getenv("JOB_PLATFORM_104_ENABLE_EXPERIMENTAL_WRITES") == "1"
+        )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -83,7 +92,11 @@ def create_app(config: AuthConfig | None = None, *, api_token: str | None = None
     @app.get("/v1/providers", dependencies=[Depends(authorize)])
     async def providers():
         return {
-            "tw104": TW104_CAPABILITIES.to_dict(),
+            "tw104": {
+                **TW104_CAPABILITIES.to_dict(),
+                "experimental_writable_sections": ["bio"],
+                "experimental_writes_enabled": allow_experimental_writes,
+            },
             "cake": {"provider": "cake", "implemented": False},
             "yourator": {"provider": "yourator", "implemented": False},
             "greenhouse": {"provider": "greenhouse", "implemented": False},
@@ -159,10 +172,42 @@ def create_app(config: AuthConfig | None = None, *, api_token: str | None = None
         "/v1/{provider}/resumes/{resume_id}", dependencies=[Depends(authorize)]
     )
     async def save_resume(
-        provider: str, resume_id: str, operations: list[dict] = Body(...)
+        provider: str, resume_id: str, request: Request,
+        operations: list[dict] = Body(...),
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     ):
         require_provider(provider)
-        # Upstream 104 section-specific persistence is not yet validated.
-        raise HTTPException(501, "Resume editing persistence is not implemented")
+        if not allow_experimental_writes:
+            raise HTTPException(501, "104 write adapters require explicit opt-in")
+        if if_match is None:
+            raise HTTPException(428, "If-Match: <resumeTimestamp> is required")
+        if not idempotency_key or len(idempotency_key) < 16:
+            raise HTTPException(400, "Idempotency-Key of at least 16 characters is required")
+        expected_timestamp = if_match.strip('"')
+        fingerprint = hashlib.sha256(json.dumps(
+            {"timestamp":expected_timestamp,"operations":operations},
+            ensure_ascii=False,sort_keys=True,separators=(",",":")
+        ).encode("utf-8")).hexdigest()
+        key = ("PATCH",provider,resume_id,idempotency_key)
+        async with request.app.state.action_lock:
+            cached = request.app.state.idempotency_results.get(key)
+            if cached:
+                if cached["fingerprint"] != fingerprint:
+                    raise HTTPException(409, "Idempotency-Key reused with different payload")
+                return cached["result"]
+            try:
+                plan, _ = await request.app.state.client.plan_edit(resume_id, operations)
+                if str(plan.base_timestamp) != expected_timestamp:
+                    raise HTTPException(412, "Resume has changed since the caller read it")
+                result = await request.app.state.client.save_edit(plan)
+                request.app.state.idempotency_results[key] = {
+                    "fingerprint": fingerprint, "result": result,
+                }
+                return result
+            except JobPlatformError as exc:
+                translate_error(exc)
+            except (ValueError,KeyError,IndexError,TypeError):
+                raise HTTPException(422, "Invalid edit operations or field path") from None
 
     return app

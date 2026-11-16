@@ -26,6 +26,9 @@ class BrowserTransport:
     def __init__(self, page: Any):
         self.page = page
         self._lock = asyncio.Lock()
+        # 104's official frontend copies the 104-profile-ver response header
+        # into each subsequent PUT/POST/DELETE request. Keep it in memory only.
+        self._profile_version: str | None = None
 
     @staticmethod
     def _path(path: str) -> str:
@@ -56,6 +59,12 @@ class BrowserTransport:
         async with self._lock:
             if urlsplit(self.page.url).hostname != "pda.104.com.tw":
                 raise AuthenticationRequired("Browser is not on authenticated My104")
+            if method in ("POST", "PUT", "DELETE") and not self._profile_version:
+                from job_platforms.core.errors import VerificationError
+                raise VerificationError(
+                    "104-profile-ver was not observed on a prior GET response; "
+                    "write request not submitted"
+                )
             response = await self.page.evaluate(
                 """async arg => {
                     const url = new URL(arg.path, location.origin);
@@ -63,6 +72,9 @@ class BrowserTransport:
                         throw Error('Cross-origin request prohibited');
                     }
                     const headers = {Accept: 'application/json, text/plain, */*'};
+                    if (['PUT','POST','DELETE'].includes(arg.method)) {
+                        headers['104-profile-ver'] = arg.profile_version;
+                    }
                     let body;
                     if (arg.json !== null) {
                         headers['Content-Type'] = 'application/json';
@@ -82,20 +94,31 @@ class BrowserTransport:
                     if (type.includes('json')) {
                         try { data = JSON.parse(text); } catch(e) {}
                     }
-                    return {status:r.status, content_type:type, data};
+                    return {status:r.status, content_type:type, data,
+                            profile_version:r.headers.get('104-profile-ver')};
                 }""",
                 {"path": path, "method": method,
-                 "json": json_data, "form": form_data},
+                 "json": json_data, "form": form_data,
+                 "profile_version": self._profile_version},
             )
+            if response.get("profile_version"):
+                self._profile_version = response["profile_version"]
         if response["status"] in (401, 403):
             raise AuthenticationRequired("104 browser authentication expired")
         if not 200 <= response["status"] < 300 or response["data"] is None:
             # Do not include query parameters or response bodies in errors.
             raise UpstreamError(urlsplit(path).path, response["status"])
-        return BrowserResponse(**response)
+        return BrowserResponse(
+            status=response["status"],
+            content_type=response["content_type"],
+            data=response["data"],
+        )
 
     async def get_json(self, path: str, *, params: dict | None = None) -> Any:
         return (await self.request("GET", path, params=params)).data
+
+    async def put_json(self, path: str, data: Any, *, params: dict | None = None) -> Any:
+        return (await self.request("PUT", path, params=params, json_data=data)).data
 
     async def ensure_authenticated(self) -> bool:
         try:

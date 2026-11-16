@@ -5,6 +5,7 @@ each upstream section writer has been verified against website read-back.
 """
 from __future__ import annotations
 
+import asyncio
 import re
 from typing import Any
 
@@ -16,6 +17,7 @@ from job_platforms.core.patch import (
     EditPlan, JsonPatchOperation, apply_json_patch, describe_schema,
 )
 from .transport import BrowserTransport
+from .writers import bio_data, bio_request_body, checked_write_paths
 
 
 class Resume104Client:
@@ -28,6 +30,7 @@ class Resume104Client:
     def __init__(self, page: Any):
         self.page = page
         self.transport = BrowserTransport(page)
+        self._write_lock = asyncio.Lock()
 
     @staticmethod
     def _version(value: str | int) -> str:
@@ -82,12 +85,43 @@ class Resume104Client:
         return plan, updated
 
     async def save_edit(self, plan: EditPlan) -> dict:
-        current = await self.get_resume(plan.resume_id)
-        if current.get("resumeTimestamp") != plan.base_timestamp:
-            raise ConflictError("Resume changed since the edit plan was prepared")
-        raise UnsupportedWrite(
-            "104 save adapters have not yet been verified; no edit was submitted"
-        )
+        """Persist supported edits, then independently read back changed fields.
+
+        A single BIO PUT writes both language values. Unsupported sections are
+        rejected *before* any write. We never auto-retry a submitted PUT.
+        """
+        paths = checked_write_paths(plan.operations)
+        async with self._write_lock:
+            current = await self.get_resume(plan.resume_id)
+            if current.get("resumeTimestamp") != plan.base_timestamp:
+                raise ConflictError("Resume changed since the edit plan was prepared")
+            updated = apply_json_patch(current, plan.operations)
+            if not paths:
+                return {"resume_id": plan.resume_id, "persisted": False,
+                        "verified": True, "changed_paths": []}
+            original_bio = bio_data(current)
+            desired_bio = bio_data(updated)
+            if original_bio == desired_bio:
+                return {"resume_id": plan.resume_id, "persisted": False,
+                        "verified": True, "changed_paths": []}
+            # One write only. Do not retry automatically on errors or timeouts.
+            await self.transport.put_json(
+                "/profile/ajax/resumeByBlock/bio",
+                bio_request_body(updated),
+                params={"vno": plan.resume_id},
+            )
+            for attempt in range(4):
+                after = await self.get_resume(plan.resume_id)
+                if bio_data(after) == desired_bio:
+                    return {"resume_id": plan.resume_id, "persisted": True,
+                            "verified": True, "changed_paths": paths,
+                            "resume_timestamp": after.get("resumeTimestamp")}
+                if attempt < 3:
+                    await asyncio.sleep(0.75)
+            raise VerificationError(
+                "104 BIO write was submitted but read-back did not match. "
+                "Inspect the resume before retrying."
+            )
 
     async def create_resume(self) -> dict:
         """Create one actual resume; do not blindly retry ambiguous failures."""

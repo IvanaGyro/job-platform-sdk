@@ -13,7 +13,7 @@ An unofficial, extensible Python SDK, CLI and optional HTTP API for managing job
 | Read full resume | Live tested | Planned | Planned | Platform-dependent |
 | Create resume | Browser flow tested; SDK not yet live-tested | Planned | Planned | Platform-dependent |
 | Edit multiple fields locally | JSON Patch supported | Planned | Planned | Platform-dependent |
-| Persist edits to website | **Not yet implemented** | Planned | Planned | Platform-dependent |
+| Persist edits to website | **BIO only: experimental, website write unverified** | Planned | Planned | Platform-dependent |
 | HTTP wrapper | Mock-tested | Planned | Planned | Planned |
 
 The SDK does **not** claim successful persistence from local-only edits. Unsupported write operations return an explicit error.
@@ -56,7 +56,7 @@ asyncio.run(main())
 
 `client.create_resume()` creates **one real** resume through the website, then verifies the list delta. Do not call merely to test imports.
 
-`client.plan_edit(version, changes)` applies RFC 6901 JSON Pointers to a **local copy** of the original response. `client.save_edit(...)` currently raises `UnsupportedWrite` until 104's per-section save requests are verified.
+`client.plan_edit(version, changes)` applies RFC 6901 JSON Pointers to a **local copy** of the original response. `client.save_edit(plan)` currently supports *only* replacing `/bio/formData/bio/chi` and `/bio/formData/bio/eng` and preserves the unchanged sibling. It uses a versioned `PUT`, then reads the fields back for exact verification. **The upstream write has not yet passed a live integration test, so treat it as experimental.** Other sections still raise `UnsupportedWrite`.
 
 ## CLI
 
@@ -68,6 +68,9 @@ xvfb-run -a job-platform --provider tw104 list
 xvfb-run -a job-platform --provider tw104 get VERSION_NO
 xvfb-run -a job-platform --provider tw104 schema VERSION_NO
 xvfb-run -a job-platform --provider tw104 plan VERSION_NO --patch-file changes.json
+# Experimental: writes BIO only. The precondition is resumeTimestamp from a prior GET:
+xvfb-run -a job-platform --provider tw104 apply VERSION_NO --patch-file changes.json \
+  --if-match TIMESTAMP --confirm experimental-bio-write
 # Explicitly creates a resume; no automatic retry after an uncertain outcome:
 xvfb-run -a job-platform --provider tw104 create --confirm create-one
 ```
@@ -91,7 +94,7 @@ Routes:
 - `GET /v1/{provider}/resumes/{resume_id}/schema`
 - `POST /v1/{provider}/resumes` (requires `Idempotency-Key`)
 - `POST /v1/{provider}/resumes/{resume_id}/plan` (dry run only)
-- `PATCH /v1/{provider}/resumes/{resume_id}` (**501 until persisted writes are verified**)
+- `PATCH /v1/{provider}/resumes/{resume_id}` (**501 by default**; experimental BIO-only write when explicitly enabled)
 
 Except `/healthz`, routes require `Authorization: Bearer <token>`. The HTTP process maintains a browser session while running. In-process idempotency is not durable across server restarts. Keep it on localhost behind an authenticated TLS reverse proxy if remote access is needed.
 
@@ -119,3 +122,30 @@ The 104 provider uses same-origin browser `fetch()` for private My104 API calls.
 The 104 frontend uses `resumeByBlock` for sections including personal data, education, experience, job conditions, skill, certificates, language, projects, portfolio, biography, and referees. The correct write payloads and server-side read-back checks still need to be implemented and verified one section at a time.
 
 **No guarantee is made that these unofficial integrations will continue to work if the upstream websites change.**
+
+## Experimental BIO write protocol
+
+The official 104 frontend sends `PUT /profile/ajax/resumeByBlock/bio?vno=VERSION_NO`
+with JSON `{"blockValueList":{"bio":{"bio":{"chi":"...","eng":"..."}}}}`.
+Its HTTP interceptor also propagates the **private `104-profile-ver` version header**
+from a prior server response into all `PUT` / `POST` / `DELETE` requests.
+The SDK now replicates this handshake in memory, without logging the header.
+
+In preliminary live tests, PUT without this header returned HTTP 400, and the
+remote biography remained unchanged. A later test with the header did not reach
+the PUT because the fresh-login session was denied; **successful real persistence
+is therefore still unverified**. Existing biographical data was compared against
+its private backup and found unchanged.
+
+For local HTTP writes, set `JOB_PLATFORM_104_ENABLE_EXPERIMENTAL_WRITES=1`
+**only when you accept the risk of an unverified writer**. `PATCH` additionally
+requires `If-Match: <resumeTimestamp>` and a unique `Idempotency-Key` of at
+least 16 characters. The cache is in-process only; it does not survive server
+restarts. On an ambiguous error, inspect the resume before attempting another
+write. Neither this opt-in nor the presence of the API guarantees support for
+all editable sections. The BIO writer currently supports one or both biography
+language fields in a single PUT. Other fields return HTTP 501.
+
+Run the unit test suite with `python -m unittest discover -s tests -v`.
+This repository contains only synthetic fixtures, never account data or backup
+content. Dedicated live integration scripts stay outside the public repository.
