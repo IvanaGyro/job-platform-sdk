@@ -4,7 +4,7 @@ import unittest
 
 from httpx import ASGITransport, AsyncClient
 
-from job_platforms.core.errors import UnsupportedWrite
+from job_platforms.core.errors import UnsupportedWrite, PartialWriteError
 from job_platforms.core.patch import EditPlan, JsonPatchOperation
 from job_platforms.http_api import create_app
 from job_platforms.providers.tw104.auth import AuthConfig
@@ -75,6 +75,23 @@ class PatchApiTests(unittest.IsolatedAsyncioTestCase):
             ],headers=headers)
             self.assertEqual((first.status_code,repeat.status_code,conflict.status_code),(200,200,409))
             self.assertEqual(mock.write_count,1)
+        finally:await http.__aexit__(None,None,None)
+
+    async def test_partial_write_returns_safe_block_status(self):
+        http,mock=await self.create_client(True)
+        try:
+            async def fail_after_first(plan):
+                mock.write_count += 1
+                raise PartialWriteError(["bio"], "certificate")
+            mock.save_edit=fail_after_first
+            headers=self.headers(**{
+                "If-Match":"123", "Idempotency-Key":"synthetic-partial-write-key"
+            })
+            r=await http.patch(PATCH_PATH,json=BASE_OP,headers=headers)
+            self.assertEqual(r.status_code,409)
+            self.assertEqual(r.json()["detail"]["verified_sections"],["bio"])
+            self.assertEqual(r.json()["detail"]["failed_section"],"certificate")
+            self.assertNotIn("synthetic",str(r.json()))
         finally:await http.__aexit__(None,None,None)
 
     async def test_stale_version_rejected(self):

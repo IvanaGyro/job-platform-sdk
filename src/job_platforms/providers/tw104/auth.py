@@ -273,7 +273,17 @@ class FreshBrowserSession:
             raise AuthenticationRequired("104 account step changed")
         await account.fill(creds["A"])
         await next_button.click(timeout=15000)
-        await self.page.wait_for_timeout(2100)
+        # The account-validation request is asynchronous. A fixed 2.1-second
+        # sleep occasionally classified a valid, still-loading page as a
+        # changed login form. Wait for the actual password UI instead.
+        try:
+            await self.page.locator('input[type="password"]:visible').first.wait_for(
+                state="visible", timeout=20000
+            )
+        except Exception as exc:
+            raise AuthenticationRequired(
+                "104 password step unavailable after account validation"
+            ) from None
         password = await _visible(self.page.locator('input[type="password"]:visible'))
         submit = await _visible(
             self.page.get_by_role("button", name=re.compile("登入|login|sign in", re.I)),

@@ -13,7 +13,7 @@ An unofficial, extensible Python SDK, CLI and optional HTTP API for managing job
 | Read full resume | Live tested | Planned | Planned | Platform-dependent |
 | Create resume | Browser flow tested; SDK not yet live-tested | Planned | Planned | Platform-dependent |
 | Edit multiple fields locally | JSON Patch supported | Planned | Planned | Platform-dependent |
-| Persist edits to website | **BIO only: experimental, website write unverified** | Planned | Planned | Platform-dependent |
+| Persist edits to website | **BIO live-tested; certificate experimental** | Planned | Planned | Platform-dependent |
 | HTTP wrapper | Mock-tested | Planned | Planned | Planned |
 
 The SDK does **not** claim successful persistence from local-only edits. Unsupported write operations return an explicit error.
@@ -57,7 +57,22 @@ asyncio.run(main())
 
 `client.create_resume()` creates **one real** resume through the website, then verifies the list delta. Do not call merely to test imports.
 
-`client.plan_edit(version, changes)` applies RFC 6901 JSON Pointers to a **local copy** of the original response. `client.save_edit(plan)` currently supports *only* replacing `/bio/formData/bio/chi` and `/bio/formData/bio/eng` and preserves the unchanged sibling. It uses a versioned `PUT`, then reads the fields back for exact verification. **The upstream write has not yet passed a live integration test, so treat it as experimental.** Other sections still raise `UnsupportedWrite`.
+
+`client.plan_edit(version, changes)` applies RFC 6901 JSON Pointers to a **local
+copy** of the original response. `client.save_edit(plan)` supports:
+
+- `/bio/formData/bio/chi` and `/bio/formData/bio/eng`. The BIO PUT has passed
+  a real modified-value write, exact read-back, restore and read-back test.
+- `/certificate/formData/certificate/others` and
+  `/certificate/formData/certificate/certificates`. The CERTIFICATE PUT is
+  frontend-source-mapped and unit-tested but **not yet live-tested**. It
+  requires the native certificate section to be populated.
+
+Each modified section is written once with sibling fields preserved, then
+verified by reading back. **Multiple sections are not atomic**: if a later
+section fails, `PartialWriteError` reports earlier verified sections and the
+failed section without exposing resume data. Unmapped paths and operations are
+rejected before any write.
 
 ## CLI
 
@@ -70,9 +85,11 @@ xvfb-run -a job-platform --provider tw104 get VERSION_NO
 xvfb-run -a job-platform --provider tw104 schema VERSION_NO
 xvfb-run -a job-platform --provider tw104 get-section VERSION_NO bio
 xvfb-run -a job-platform --provider tw104 plan VERSION_NO --patch-file changes.json
-# Experimental: writes BIO only. The precondition is resumeTimestamp from a prior GET:
+# BIO has a verified writer; CERTIFICATE remains experimental. Require resumeTimestamp:
 xvfb-run -a job-platform --provider tw104 apply VERSION_NO --patch-file changes.json \
   --if-match TIMESTAMP --confirm experimental-bio-write
+# For certificate or multi-section updates, use:
+# --confirm experimental-section-write
 # Explicitly creates a resume; no automatic retry after an uncertain outcome:
 xvfb-run -a job-platform --provider tw104 create --confirm create-one
 ```
@@ -97,7 +114,7 @@ Routes:
 - `GET /v1/{provider}/resumes/{resume_id}/sections/{section}`
 - `POST /v1/{provider}/resumes` (requires `Idempotency-Key`)
 - `POST /v1/{provider}/resumes/{resume_id}/plan` (dry run only)
-- `PATCH /v1/{provider}/resumes/{resume_id}` (**501 by default**; experimental BIO-only write when explicitly enabled)
+- `PATCH /v1/{provider}/resumes/{resume_id}` (**501 by default**; experimental BIO / CERTIFICATE write when explicitly enabled)
 
 Except `/healthz`, routes require `Authorization: Bearer <token>`. The HTTP process maintains a browser session while running. In-process idempotency is not durable across server restarts. Keep it on localhost behind an authenticated TLS reverse proxy if remote access is needed.
 
@@ -137,22 +154,27 @@ Its HTTP interceptor also propagates the **private `104-profile-ver` version hea
 from a prior server response into all `PUT` / `POST` / `DELETE` requests.
 The SDK now replicates this handshake in memory, without logging the header.
 
-In preliminary live tests, a PUT without this header returned HTTP 400.
-A subsequent **identical-content** PUT with the header returned HTTP 200, and
-read-back confirmed the original fields stayed unchanged. A temporary zero-width
-character modification was not read back identically; the immediate restoration
-was independently verified. Another punctuation-change test was blocked during
-fresh login, before sending a write. **Persisting a real field change therefore
-remains unverified**. The original biography still matches its private backup.
+
+**BIO live verification:** a PUT without `104-profile-ver` returned HTTP 400.
+With that header an identical-content PUT returned HTTP 200. A subsequent
+bounded test changed one punctuation character, read back the **exact**
+new value, restored the original, and again verified an exact match against
+the protected private backup. Test contents were never logged or committed.
+
+**CERTIFICATE remains experimental:** the update request structure is
+confirmed from 104 frontend JavaScript, but the examined resume returned an
+empty certificate formData. The SDK rejects unknown/missing section shapes
+instead of guessing how to create a new section.
 
 For local HTTP writes, set `JOB_PLATFORM_104_ENABLE_EXPERIMENTAL_WRITES=1`
-**only when you accept the risk of an unverified writer**. `PATCH` additionally
+**only when you explicitly accept the risks of direct upstream writes**. `PATCH` additionally
 requires `If-Match: <resumeTimestamp>` and a unique `Idempotency-Key` of at
 least 16 characters. The cache is in-process only; it does not survive server
 restarts. On an ambiguous error, inspect the resume before attempting another
 write. Neither this opt-in nor the presence of the API guarantees support for
-all editable sections. The BIO writer currently supports one or both biography
-language fields in a single PUT. Other fields return HTTP 501.
+all editable sections. BIO updates are verified and CERTIFICATE updates are
+experimental; either may be combined in one plan, with non-atomic per-section
+PUT requests. Other fields return HTTP 501.
 
 Run the unit test suite with `python -m unittest discover -s tests -v`.
 This repository contains only synthetic fixtures, never account data or backup

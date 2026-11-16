@@ -23,3 +23,16 @@ class UnsupportedWrite(JobPlatformError):
 
 class ConflictError(JobPlatformError):
     """Resume changed since the read/edit plan was prepared."""
+
+
+class PartialWriteError(VerificationError):
+    """One or more sections were written before a later section failed.
+
+    The failed section's remote status is uncertain; callers must not retry
+    the full patch without reading the resume again. No values are attached.
+    """
+
+    def __init__(self, verified_sections: list[str], failed_section: str):
+        self.verified_sections = list(verified_sections)
+        self.failed_section = failed_section
+        super().__init__("Multi-section save only partially verified; inspect before retrying.")

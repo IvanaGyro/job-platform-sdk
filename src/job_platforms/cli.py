@@ -37,7 +37,8 @@ def _parser() -> argparse.ArgumentParser:
     apply_cmd.add_argument("--if-match", required=True,
                            help="resumeTimestamp from a prior GET, used as precondition")
     apply_cmd.add_argument("--confirm", required=True,
-                           choices=["experimental-bio-write"])
+                           choices=["experimental-bio-write", "experimental-section-write"],
+                           help="Explicitly acknowledge unverified section writers")
     return parser
 
 
@@ -74,6 +75,13 @@ async def _run(args):
                 from job_platforms.core.errors import ConflictError
                 if str(plan.base_timestamp) != args.if_match.strip('"'):
                     raise ConflictError("Resume has changed since the caller read it")
+                if args.confirm == "experimental-bio-write":
+                    from job_platforms.providers.tw104.writers import checked_write_paths
+                    paths = checked_write_paths(plan.operations)
+                    if any(not path.startswith("/bio/") for path in paths):
+                        raise ValueError(
+                            "The BIO-only confirmation cannot authorize other sections"
+                        )
                 result = await client.save_edit(plan)
         else:
             raise ValueError("Unrecognized command")

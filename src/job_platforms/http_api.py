@@ -18,7 +18,7 @@ from fastapi import Body, Depends, FastAPI, Header, HTTPException, Request
 from job_platforms.core.capabilities import ProviderCapabilities
 from job_platforms.core.errors import (
     AuthenticationRequired, ConflictError, JobPlatformError, ResumeNotFound,
-    UnsupportedWrite, UpstreamError, VerificationError,
+    UnsupportedWrite, UpstreamError, VerificationError, PartialWriteError,
 )
 from job_platforms.providers.tw104 import AuthConfig, FreshBrowserSession, Resume104Client
 
@@ -77,6 +77,14 @@ def create_app(
             raise HTTPException(409, "Resume changed since last read") from None
         if isinstance(exc, UnsupportedWrite):
             raise HTTPException(501, "Save operation not implemented") from None
+        if isinstance(exc, PartialWriteError):
+            raise HTTPException(
+                409, {
+                    "reason": "Partial multi-section write; do not retry blindly",
+                    "verified_sections": exc.verified_sections,
+                    "failed_section": exc.failed_section,
+                },
+            ) from None
         if isinstance(exc, VerificationError):
             raise HTTPException(
                 409, "Website result not verified; inspect before retrying"
@@ -94,7 +102,7 @@ def create_app(
         return {
             "tw104": {
                 **TW104_CAPABILITIES.to_dict(),
-                "experimental_writable_sections": ["bio"],
+                "experimental_writable_sections": ["bio", "certificate"],
                 "experimental_writes_enabled": allow_experimental_writes,
             },
             "cake": {"provider": "cake", "implemented": False},

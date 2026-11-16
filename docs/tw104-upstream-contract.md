@@ -90,14 +90,35 @@ The current frontend's outgoing BODY for updating both languages is:
 The SDK's BIO adapter preserves the non-targeted sibling language if only
 one is changed, writes both values once, and reads back to compare exactly.
 
-**Live verification status:** A same-origin BIO PUT without
-`104-profile-ver` returned HTTP 400. An identical-content PUT with the
-version header returned HTTP 200 and retained the original values. A test
-that appended an invisible zero-width character failed exact read-back;
-its restoration was verified against the private backup. A follow-up
-punctuation-change test did not complete authentication, so **a changed
-field has not yet been confirmed persisted end-to-end**. The adapter remains
-experimental and HTTP PATCH returns 501 by default unless explicitly opted in.
+
+**Live verification status:** A BIO PUT without `104-profile-ver` returned
+HTTP 400. With this header, an identical-content PUT returned HTTP 200.
+A later test performed a real punctuation modification, verified it by
+reading the 104 API, then restored the exact original data and verified
+the restoration. The BIO writer has now passed end-to-end validation.
+
+### CERTIFICATE writer (experimental)
+
+The official frontend uses:
+
+```json
+{"blockValueList":{"certificate":{"certificates":[],"others":"example"}}}
+```
+
+The SDK maps the existing native `certificate.formData.certificate` fields
+`certificates` (array) and `others` (text). Changing either field preserves
+the other. This is **source-mapped and unit-tested, not live-tested**.
+The target resume's certificate formData was empty, so the SDK refuses
+to guess a creation payload. Separate certification associations, array-item
+CRUD and record ordering are still pending.
+
+### Non-atomic multi-section edits
+
+One patch can target BIO and CERTIFICATE, but the server receives separate
+PUT requests. The SDK validates all mappings before the first write and
+verifies each section after saving it. A later error after earlier confirmed
+writes raises `PartialWriteError` containing only block names; the failed
+block's remote status may be ambiguous. Callers must inspect before retrying.
 
 ## Safe implementation approach for remaining blocks
 
