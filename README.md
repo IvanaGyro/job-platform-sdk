@@ -117,6 +117,9 @@ src/job_platforms/
 tests/                  # synthetic fixtures only
 ```
 
+For the upstream block naming and exact version-header handshake, see
+[104 editor contract notes](docs/tw104-upstream-contract.md).
+
 The 104 provider uses same-origin browser `fetch()` for private My104 API calls. Simply copying browser cookies to `curl-cffi` caused HTTP 403 on some authenticated endpoints, even though `login/init` sometimes worked. An authenticated browser is the known-good baseline.
 
 The 104 frontend uses `resumeByBlock` for sections including personal data, education, experience, job conditions, skill, certificates, language, projects, portfolio, biography, and referees. The correct write payloads and server-side read-back checks still need to be implemented and verified one section at a time.
