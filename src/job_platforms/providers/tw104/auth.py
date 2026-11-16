@@ -33,9 +33,23 @@ class AuthConfig:
         proxies = os.getenv("JOB_PLATFORM_104_PROXY_FILE")
         if not credentials or not proxies:
             raise ValueError("104 credential and proxy paths must be set")
+        priority = os.getenv("JOB_PLATFORM_104_PROXY_PRIORITY")
+        if priority is not None:
+            parts = priority.split(",")
+            if (not parts or any(
+                not part.isascii() or not part.isdecimal() or part.startswith("0")
+                for part in parts
+            )):
+                raise ValueError("104 proxy priority must be comma-separated positive indices")
+            indices = tuple(int(part) for part in parts)
+            if len(indices) != len(set(indices)) or any(not 1 <= i <= 100 for i in indices):
+                raise ValueError("104 proxy priority indices must be unique and in range")
+        else:
+            indices = cls.__dataclass_fields__["proxy_priority"].default
         return cls(
             credentials_file=credentials,
             proxy_file=proxies,
+            proxy_priority=indices,
             storage_state_file=os.getenv("JOB_PLATFORM_104_STATE_FILE"),
         )
 

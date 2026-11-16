@@ -21,6 +21,7 @@ from job_platforms.core.errors import (
     UnsupportedWrite, UpstreamError, VerificationError, PartialWriteError,
 )
 from job_platforms.providers.tw104 import AuthConfig, FreshBrowserSession, Resume104Client
+from job_platforms.providers.tw104.skill_records import skill_operation_body
 
 
 TW104_CAPABILITIES = ProviderCapabilities(
@@ -106,6 +107,9 @@ def create_app(
                     "bio", "certificate", "sidebar", "jobCondition",
                     "experience.seniority",
                 ],
+                "experimental_record_operations": {
+                    "skill": ["create", "update", "delete"],
+                },
                 "experimental_writes_enabled": allow_experimental_writes,
             },
             "cake": {"provider": "cake", "implemented": False},
@@ -257,5 +261,112 @@ def create_app(
                 translate_error(exc)
             except (ValueError,KeyError,IndexError,TypeError):
                 raise HTTPException(422, "Invalid edit operations or field path") from None
+
+    async def skill_operation_http(
+        resume_id: str, request: Request, action: str, *,
+        changes: dict | None, position: int | None,
+        if_match: str | None, idempotency_key: str | None,
+    ):
+        # This route is intentionally 104-native, not a cross-provider schema.
+        if not allow_experimental_writes:
+            raise HTTPException(501, "104 SKILL writes require explicit opt-in")
+        if if_match is None:
+            raise HTTPException(428, 'If-Match: <resumeTimestamp> is required')
+        if not idempotency_key or len(idempotency_key) < 16:
+            raise HTTPException(400, "Idempotency-Key of at least 16 characters is required")
+        expected = if_match.strip('"')
+        data = {
+            "action": action, "position": position,
+            "changes": changes, "timestamp": expected,
+        }
+        fingerprint = hashlib.sha256(
+            json.dumps(data, sort_keys=True, ensure_ascii=False,
+                       separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        key = ("SKILL", resume_id, idempotency_key)
+
+        async with request.app.state.action_lock:
+            cached = request.app.state.idempotency_results.get(key)
+            if cached is not None:
+                if cached["fingerprint"] != fingerprint:
+                    raise HTTPException(409, "Idempotency-Key reused with different payload")
+                if cached["state"] != "succeeded":
+                    raise HTTPException(
+                        409, "SKILL write outcome is indeterminate; inspect before retrying"
+                    )
+                return cached["result"]
+
+            # All field/path validation and the caller's precondition must pass
+            # before reserving the key and attempting a remote mutation.
+            try:
+                before = await request.app.state.client.get_resume(resume_id)
+                if str(before.get("resumeTimestamp")) != expected:
+                    raise HTTPException(412, "Resume has changed since caller's read")
+                skill_operation_body(
+                    before, action, changes=changes, position=position
+                )
+            except (ValueError, KeyError, TypeError, IndexError, UnsupportedWrite):
+                raise HTTPException(
+                    422, "Invalid SKILL field values or record position"
+                ) from None
+            except JobPlatformError as exc:
+                translate_error(exc)
+
+            record = {"fingerprint": fingerprint, "state": "indeterminate"}
+            request.app.state.idempotency_results[key] = record
+            try:
+                result = await request.app.state.client.mutate_skill(
+                    resume_id, action, changes=changes, position=position,
+                    expected_timestamp=expected,
+                )
+            except JobPlatformError as exc:
+                translate_error(exc)
+            else:
+                record.update({"state": "succeeded", "result": result})
+                return result
+
+    @app.post(
+        "/v1/tw104/resumes/{resume_id}/skills",
+        dependencies=[Depends(authorize)],
+    )
+    async def create_skill(
+        resume_id: str, request: Request,
+        changes: dict = Body(...),
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        return await skill_operation_http(
+            resume_id, request, "create", changes=changes, position=None,
+            if_match=if_match, idempotency_key=idempotency_key,
+        )
+
+    @app.put(
+        "/v1/tw104/resumes/{resume_id}/skills/{position}",
+        dependencies=[Depends(authorize)],
+    )
+    async def update_skill(
+        resume_id: str, position: int, request: Request,
+        changes: dict = Body(...),
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        return await skill_operation_http(
+            resume_id, request, "update", changes=changes, position=position,
+            if_match=if_match, idempotency_key=idempotency_key,
+        )
+
+    @app.delete(
+        "/v1/tw104/resumes/{resume_id}/skills/{position}",
+        dependencies=[Depends(authorize)],
+    )
+    async def delete_skill(
+        resume_id: str, position: int, request: Request,
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        return await skill_operation_http(
+            resume_id, request, "delete", changes=None, position=position,
+            if_match=if_match, idempotency_key=idempotency_key,
+        )
 
     return app

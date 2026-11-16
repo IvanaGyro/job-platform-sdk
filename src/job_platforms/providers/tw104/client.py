@@ -17,6 +17,7 @@ from job_platforms.core.patch import (
     EditPlan, JsonPatchOperation, apply_json_patch, describe_schema,
 )
 from .transport import BrowserTransport
+from .skill_records import skill_list, skill_operation_body, verify_skill_operation
 from .writers import (
     checked_write_paths, changed_sections, section_data, section_request_body,
     validate_section_edit,
@@ -162,6 +163,72 @@ class Resume104Client:
                                   if path.split("/")[1] in verified_sections],
                 "atomic": False,
             }
+
+    async def mutate_skill(
+        self,
+        resume_id: str | int,
+        action: str,
+        *,
+        expected_timestamp: int | str,
+        changes: dict | None = None,
+        position: int | None = None,
+    ) -> dict:
+        """Execute one source-mapped 104 SKILL record operation.
+
+        The provider stores records individually and routes CREATE/UPDATE/
+        DELETE to different HTTP methods. Never emulate these with a full
+        skills-list replacement, and never retry ambiguous writes.
+        """
+        if action not in ("create", "update", "delete"):
+            raise UnsupportedWrite("Unsupported 104 SKILL action")
+        version = self._version(resume_id)
+        async with self._write_lock:
+            before = await self.get_resume(version)
+            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+                raise ConflictError("104 resume changed before the skill operation")
+            body = skill_operation_body(
+                before, action, changes=changes, position=position
+            )
+            # Ensure all source-specific validation succeeds before any write.
+            skill_list(before)
+            method = {"create": "POST", "update": "PUT", "delete": "DELETE"}[action]
+            await self.transport.request(
+                method,
+                "/profile/ajax/resumeByBlock/skill",
+                params={"vno": version},
+                json_data=body,
+            )
+            # An HTTP success does not prove that a record was committed.
+            # Do not retry the mutation, even when the read-back is ambiguous.
+            for attempt in range(4):
+                try:
+                    after = await self.get_resume(version)
+                    if verify_skill_operation(
+                        before, after, action, body=body, position=position
+                    ):
+                        return {
+                            "resume_id": version,
+                            "action": action,
+                            "section": "skill",
+                            "persisted": True,
+                            "verified": True,
+                            "atomic": True,
+                            "position": (
+                                len(skill_list(after)) if action == "create"
+                                else position
+                            ),
+                        }
+                except Exception:
+                    # Do not propagate unpredictable raw upstream data.
+                    raise VerificationError(
+                        "SKILL request submitted; read-back unavailable"
+                    ) from None
+                if attempt < 3:
+                    await asyncio.sleep(0.75)
+            raise VerificationError(
+                "SKILL request submitted but no exact matching record change "
+                "could be verified; inspect before retrying"
+            )
 
     async def create_resume(self) -> dict:
         """Create one actual resume; do not blindly retry ambiguous failures."""

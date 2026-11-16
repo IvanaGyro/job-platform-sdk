@@ -160,9 +160,9 @@ def job_condition_request_body(document: dict[str, Any]) -> dict[str, Any]:
     month = _require_object(value["salaryOfMonth"], "salaryOfMonth")
     if not all(key in month for key in ("unitOfTenThousand", "unitOfThousand")):
         raise UnsupportedWrite("104 JOB_CONDITION salaryOfMonth is incomplete")
-    if str(out["salary"]) == "2" and str(out["salaryPeriod"]) not in ("4", "5", "6"):
+    if str(out["salary"]) == "4" and str(out["salaryPeriod"]) not in ("4", "5", "6"):
         raise UnsupportedWrite("104 JOB_CONDITION unknown custom salary period")
-    if str(out["salary"]) == "2":  # frontend constant customSalary
+    if str(out["salary"]) == "4":  # frontend constant customSalary
         out["salary"] = out["salaryPeriod"]
         out["salaryOfMonth"] = {
             key: _optional_value(month[key], "salaryOfMonth." + key)

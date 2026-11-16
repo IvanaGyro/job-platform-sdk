@@ -13,7 +13,7 @@ and successful real 104 writes.** Each is a separate evidence level.
 | `education` | POST, PUT, DELETE; ordering | Read/plan only | No |
 | `experience` | POST, PUT, DELETE; ordering, seniority | Seniority-only PUT source-mapped; records read/plan only | **No** |
 | `jobCondition` | PUT; separate layout/theme PUT | Source-mapped full native form serializer, experimental | **No** |
-| `skill` | POST, PUT, DELETE; ordering | Read/plan only | No |
+| `skill` | POST, PUT, DELETE; ordering | Source-mapped record CRUD (experimental); sorting remains unavailable | **No** |
 | `certificate` | PUT, DELETE; separate certification connections | Existing certificates/others PUT only, experimental | **No** (test formData empty) |
 | `language` | POST, PUT, DELETE; local/foreign records | Read/plan only | No |
 | `project` | POST, PUT, DELETE; reorder; attachments | Read/plan only | No |

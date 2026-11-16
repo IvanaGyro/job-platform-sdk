@@ -25,7 +25,7 @@ FORM = {
         "customOnBoardDate": {
             "year": "2027", "month": {"value": 4}, "date": {"value": 5}
         },
-        "salary": {"text": "Custom", "value": 2},
+        "salary": {"text": "Custom", "value": 4},
         "salaryPeriod": {"text": "Monthly", "value": 5},
         "salaryOfHours": "800",
         "salaryOfMonth": {
@@ -103,6 +103,19 @@ class JobConditionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(data["workShift"], 1)
         self.assertEqual(data["remoteWork"], 2)
         self.assertEqual(data["preferJobTitle"], "Engineer")
+
+    def test_salary_selection_two_is_not_custom(self):
+        doc = deepcopy(BASE)
+        value = doc["jobCondition"]["formData"]["jobCondition"]
+        value["salary"]["value"] = 2  # accordanceWithCompany, not custom
+        outgoing = job_condition_request_body(doc)["blockValueList"]["jobCondition"]["jobCondition"]
+        self.assertEqual(outgoing["salary"], 2)
+        self.assertEqual(outgoing["salaryOfHours"], "")
+        self.assertEqual(outgoing["salariesOfYear"], "")
+        self.assertEqual(
+            outgoing["salaryOfMonth"],
+            {"unitOfTenThousand": "", "unitOfThousand": ""},
+        )
 
     def test_custom_on_board_date_and_non_custom_salary(self):
         doc = deepcopy(BASE)

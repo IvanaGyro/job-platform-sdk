@@ -152,6 +152,7 @@ GET, the outgoing payload converts:
   objects to scalar `value` values (with branch-specific defaults)
 - `preferJobTitle`: `text` member only
 - `workShift`: Boolean to 0/1
+- Salary option values: `1` negotiable, `2` company-standard, `3` per-case, `4` custom. **Only value 4 activates custom salary serialization.**
 - Conditional arrival-date and salary controls: inactive branches are
   converted to empty strings, matching the current frontend `postData()`
 - `themeChoose.selectedTheme`: selector object to scalar `value`
@@ -178,6 +179,39 @@ its own POST/PUT/DELETE/sort workflows. The SDK allows only a replacement of
 `/experience/formData/seniority/value`, verifies that value on read-back, and
 does not send the experiences array. This mapping is source-observed and
 synthetic-tested, but not live write-tested.
+
+### SKILL records: POST / PUT / DELETE (experimental)
+
+The 104 frontend's skill store uses the following source-mapped requests
+with a `vno` query parameter:
+
+- Create: `POST /profile/ajax/resumeByBlock/skill`
+- Update: `PUT /profile/ajax/resumeByBlock/skill`
+- Delete: `DELETE /profile/ajax/resumeByBlock/skill`
+
+Create/update body:
+
+```json
+{"blockValueList":{"skill":{"skills":[{"name":"Synthetic",
+"desc":"Example","tag":[{"text":"Tag","value":"tag-id"}],"sort":1}],
+"themeChoose":{"selectedTheme":1}}}}
+```
+
+For creation, **omit** `sort` (the frontend sends `undefined`, which
+JSON.stringify omits). Update uses the existing 1-based `sort`.
+Delete sends:
+
+```json
+{"blockValueList":{"skill":{"skills":{"sort":[1]}}}}
+```
+
+The `skill` and `themeChoose` objects are specific to 104. The SDK
+validates the current native list, known record fields, and the caller's
+`resumeTimestamp` before issuing a request. The returned list must match
+the intended create/update/delete change with all unrelated skill records
+intact (allowing sort reindexing after deletion). Never confuse this with
+`PUT /profile/ajax/swapRecordBySort/skill`, which handles reordering.
+These operations have **synthetic tests but no real 104 write verification**.
 
 ### Non-atomic multi-section edits
 

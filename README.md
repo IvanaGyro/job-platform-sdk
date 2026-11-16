@@ -85,6 +85,30 @@ copy** of the original response. `client.save_edit(plan)` supports:
   submits or overwrites the individual `experiences` list. **Synthetic-tested,
   not live-tested.** Other experience fields and record CRUD remain unsupported.
 
+### Experimental 104 skill records (CRUD)
+
+The 104 editor uses *distinct* POST, PUT and DELETE requests for skills, not
+a full-array replacement in JSON Patch. The SDK exposes
+`Resume104Client.mutate_skill()`, and the optional HTTP service exposes:
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| POST | `/v1/tw104/resumes/{resume_id}/skills` | Create a skill |
+| PUT | `/v1/tw104/resumes/{resume_id}/skills/{position}` | Update its name, description or tags |
+| DELETE | `/v1/tw104/resumes/{resume_id}/skills/{position}` | Delete the position |
+
+`position` is the **1-based upstream `sort` value**, not a UUID.
+Create accepts a JSON object with a nonempty `name` string and optional
+`desc` string and `tag` list of `{"text":"...","value":"..."}` objects.
+Update accepts any nonempty subset of these three fields. DELETE has no body.
+All writes require the API Bearer token, experimental opt-in, an
+`If-Match: <resumeTimestamp>` header, and an `Idempotency-Key` of at
+least 16 characters. Each operation reads back the full skill list and
+checks that unrelated records are unchanged. Do **not** blindly repeat an
+ambiguous failure or use stale positions. **Synthetic-tested only; real
+104 writes are not yet confirmed.** Ordering uses a different upstream
+operation and is not yet implemented.
+
 Each modified section is written once with sibling fields preserved, then
 verified by reading back. **Multiple sections are not atomic**: if a later
 section fails, `PartialWriteError` reports earlier verified sections and the
@@ -96,6 +120,9 @@ rejected before any write.
 ```bash
 export JOB_PLATFORM_104_CREDENTIALS_FILE=/run/secrets/104-credentials
 export JOB_PLATFORM_104_PROXY_FILE=/run/secrets/104-proxies
+# Optional: restrict connection attempts to a previously tested proxy index.
+# Avoids lengthy retries across proxies during diagnosis:
+export JOB_PLATFORM_104_PROXY_PRIORITY=4
 xvfb-run -a job-platform --provider tw104 probe
 xvfb-run -a job-platform --provider tw104 list
 xvfb-run -a job-platform --provider tw104 get VERSION_NO
