@@ -79,7 +79,6 @@ copy** of the original response. `client.save_edit(plan)` supports:
   handles the 104-specific salary and onboarding branches. Unrecognized
   shapes are rejected before any request. **Synthetic-tested, not live-tested.**
   Theme changes use a distinct upstream `layout` operation and are not yet
-  Theme changes use a distinct upstream `layout` operation and are not yet
   implemented.
 - `/experience/formData/seniority/value` updates only the overall seniority
   selection, using an independent 104 `experience.seniority` PUT. It never
