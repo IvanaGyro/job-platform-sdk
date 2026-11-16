@@ -10,6 +10,11 @@ from copy import deepcopy
 from typing import Any
 
 from job_platforms.core.errors import UnsupportedWrite
+from .job_condition import (
+    EDITABLE_PATHS as JOB_CONDITION_PATHS,
+    native_job_condition,
+    job_condition_request_body,
+)
 
 
 BIO_PATHS = frozenset((
@@ -25,6 +30,7 @@ WRITE_PATH_TO_SECTION = {
     **{path: "bio" for path in BIO_PATHS},
     **{path: "certificate" for path in CERTIFICATE_PATHS},
     **{path: "sidebar" for path in SIDEBAR_PATHS},
+    **{path: "jobCondition" for path in JOB_CONDITION_PATHS},
 }
 
 
@@ -100,11 +106,15 @@ def section_data(document: dict[str, Any], section: str) -> dict[str, Any]:
         return certificate_data(document)
     if section == "sidebar":
         return sidebar_data(document)
+    if section == "jobCondition":
+        return native_job_condition(document)
     raise UnsupportedWrite("No verified serializer for this 104 section")
 
 
 def section_request_body(document: dict[str, Any], section: str) -> dict:
     """Preserve unaffected sibling values inside the same section."""
+    if section == "jobCondition":
+        return job_condition_request_body(document)
     return {"blockValueList": {section: (
         {"bio": bio_data(document)} if section == "bio"
         else certificate_data(document) if section == "certificate"

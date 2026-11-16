@@ -137,9 +137,35 @@ official PUT does not write completion metadata). This mapping has **six
 synthetic regression tests**, but no real 104 write/read-back yet. Do not
 conflate it with enabling/disabling a section, which may use other operations.
 
+### JOB_CONDITION serialization (experimental; no live write verification)
+
+The official frontend uses `PUT /profile/ajax/resumeByBlock/jobCondition?vno=...`
+with a nested `blockValueList.jobCondition.jobCondition` object and a
+`blockValueList.jobCondition.themeChoose.selectedTheme` value. Unlike a raw
+GET, the outgoing payload converts:
+
+- `jobTimeType`, `jobWillType`, `jobTimePeriod`: arrays of objects to
+  arrays of their `value` members
+- `preferArea`, `preferJobType`, `preferJobIndustry`: arrays of objects to
+  arrays of their `no` members
+- `onBoardDate`, `salary`, `salaryPeriod`, `remoteWork`: selector
+  objects to scalar `value` values (with branch-specific defaults)
+- `preferJobTitle`: `text` member only
+- `workShift`: Boolean to 0/1
+- Conditional arrival-date and salary controls: inactive branches are
+  converted to empty strings, matching the current frontend `postData()`
+- `themeChoose.selectedTheme`: selector object to scalar `value`
+
+The current SDK allows replacement of known native job-condition fields, and
+selected nested field paths. No theme write is implied: section theme editing
+uses a different `LAYOUT` request. Unknown fields, malformed selectors and
+unexpected arrays fail before any remote write. The encoder preserves all
+known unaffected sibling fields. This has synthetic contract/read-back tests,
+**not a confirmed real 104 PUT**.
+
 ### Non-atomic multi-section edits
 
-One patch can target multiple supported sections (BIO, CERTIFICATE or SIDEBAR),
+One patch can target multiple supported sections (BIO, CERTIFICATE, SIDEBAR or JOB_CONDITION),
 but the server receives separate PUT requests. The SDK validates all mappings before the first write and
 verifies each section after saving it. A later error after earlier confirmed
 writes raises `PartialWriteError` containing only block names; the failed
