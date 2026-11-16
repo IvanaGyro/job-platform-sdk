@@ -19,6 +19,7 @@ from job_platforms.core.patch import (
 from .transport import BrowserTransport
 from .writers import (
     checked_write_paths, changed_sections, section_data, section_request_body,
+    validate_section_edit,
 )
 
 
@@ -26,7 +27,7 @@ class Resume104Client:
     SECTIONS = (
         "info", "education", "experience", "jobCondition", "skill",
         "certificate", "language", "project", "portfolio", "bio",
-        "referrer",
+        "referrer", "sidebar",
     )
 
     def __init__(self, page: Any):
@@ -70,7 +71,7 @@ class Resume104Client:
             raise ValueError("Unknown 104 editable section")
         document = await self.get_resume(resume_id)
         item = document.get(section)
-        if not isinstance(item, dict):
+        if not isinstance(item, (dict, list)):
             raise ResumeNotFound("Selected resume section is unavailable")
         return item
 
@@ -114,6 +115,8 @@ class Resume104Client:
             # Validate every serializer before submitting even the first PUT.
             desired = {name: section_data(updated, name) for name in sections}
             before = {name: section_data(current, name) for name in sections}
+            for name in sections:
+                validate_section_edit(current, updated, name)
             bodies = {name: section_request_body(updated, name) for name in sections}
             latest = current
             for name in sections:

@@ -13,7 +13,7 @@ An unofficial, extensible Python SDK, CLI and optional HTTP API for managing job
 | Read full resume | Live tested | Planned | Planned | Platform-dependent |
 | Create resume | Browser flow tested; SDK not yet live-tested | Planned | Planned | Platform-dependent |
 | Edit multiple fields locally | JSON Patch supported | Planned | Planned | Platform-dependent |
-| Persist edits to website | **BIO live-tested; certificate experimental** | Planned | Planned | Platform-dependent |
+| Persist edits to website | **BIO live-tested; certificate/sidebar experimental** | Planned | Planned | Platform-dependent |
 | HTTP wrapper | Mock-tested | Planned | Planned | Planned |
 
 The SDK does **not** claim successful persistence from local-only edits. Unsupported write operations return an explicit error.
@@ -67,6 +67,11 @@ copy** of the original response. `client.save_edit(plan)` supports:
   `/certificate/formData/certificate/certificates`. The CERTIFICATE PUT is
   frontend-source-mapped and unit-tested but **not yet live-tested**. It
   requires the native certificate section to be populated.
+- `/sidebar` can replace the complete native sidebar list **only to reorder
+  existing entries**. The writer sends the official source-observed
+  `{"blockValueList":{"sidebar":[{"id":"..."}]}}` shape, rejects additions,
+  removals and changes to entry metadata, then verifies the resulting ID order.
+  **Source-mapped and synthetic-tested; real 104 write not yet verified.**
 
 Each modified section is written once with sibling fields preserved, then
 verified by reading back. **Multiple sections are not atomic**: if a later
@@ -85,10 +90,10 @@ xvfb-run -a job-platform --provider tw104 get VERSION_NO
 xvfb-run -a job-platform --provider tw104 schema VERSION_NO
 xvfb-run -a job-platform --provider tw104 get-section VERSION_NO bio
 xvfb-run -a job-platform --provider tw104 plan VERSION_NO --patch-file changes.json
-# BIO has a verified writer; CERTIFICATE remains experimental. Require resumeTimestamp:
+# BIO has a verified writer; CERTIFICATE and SIDEBAR remain experimental. Require resumeTimestamp:
 xvfb-run -a job-platform --provider tw104 apply VERSION_NO --patch-file changes.json \
   --if-match TIMESTAMP --confirm experimental-bio-write
-# For certificate or multi-section updates, use:
+# For certificate, sidebar reorder or multi-section updates, use:
 # --confirm experimental-section-write
 # Explicitly creates a resume; no automatic retry after an uncertain outcome:
 xvfb-run -a job-platform --provider tw104 create --confirm create-one
@@ -114,7 +119,7 @@ Routes:
 - `GET /v1/{provider}/resumes/{resume_id}/sections/{section}`
 - `POST /v1/{provider}/resumes` (requires `Idempotency-Key`)
 - `POST /v1/{provider}/resumes/{resume_id}/plan` (dry run only)
-- `PATCH /v1/{provider}/resumes/{resume_id}` (**501 by default**; experimental BIO / CERTIFICATE write when explicitly enabled)
+- `PATCH /v1/{provider}/resumes/{resume_id}` (**501 by default**; experimental BIO / CERTIFICATE / SIDEBAR write when explicitly enabled)
 
 Except `/healthz`, routes require `Authorization: Bearer <token>`. The HTTP process maintains a browser session while running. In-process idempotency is not durable across server restarts. Keep it on localhost behind an authenticated TLS reverse proxy if remote access is needed.
 
@@ -172,8 +177,8 @@ requires `If-Match: <resumeTimestamp>` and a unique `Idempotency-Key` of at
 least 16 characters. The cache is in-process only; it does not survive server
 restarts. On an ambiguous error, inspect the resume before attempting another
 write. Neither this opt-in nor the presence of the API guarantees support for
-all editable sections. BIO updates are verified and CERTIFICATE updates are
-experimental; either may be combined in one plan, with non-atomic per-section
+all editable sections. BIO updates are verified and CERTIFICATE/SIDEBAR updates are
+experimental; supported sections may be combined in one plan, with non-atomic per-section
 PUT requests. Other fields return HTTP 501.
 
 Run the unit test suite with `python -m unittest discover -s tests -v`.

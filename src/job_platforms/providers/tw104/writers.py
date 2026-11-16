@@ -20,9 +20,11 @@ CERTIFICATE_PATHS = frozenset((
     "/certificate/formData/certificate/certificates",
     "/certificate/formData/certificate/others",
 ))
+SIDEBAR_PATHS = frozenset(("/sidebar",))
 WRITE_PATH_TO_SECTION = {
     **{path: "bio" for path in BIO_PATHS},
     **{path: "certificate" for path in CERTIFICATE_PATHS},
+    **{path: "sidebar" for path in SIDEBAR_PATHS},
 }
 
 
@@ -50,11 +52,54 @@ def certificate_data(document: dict[str, Any]) -> dict[str, Any]:
     return {"certificates": deepcopy(certificates), "others": others}
 
 
+def sidebar_records(document: dict[str, Any]) -> list[dict[str, Any]]:
+    """Source-observed sidebar array with unique, unambiguous entry identifiers."""
+    records = document.get("sidebar")
+    if not isinstance(records, list):
+        raise UnsupportedWrite("104 SIDEBAR is not an array")
+    ids = []
+    for record in records:
+        if not isinstance(record, dict):
+            raise UnsupportedWrite("104 SIDEBAR contains a non-object entry")
+        identifier = record.get("id")
+        if (not isinstance(identifier, (str, int)) or
+                isinstance(identifier, bool) or
+                isinstance(identifier, str) and not identifier):
+            raise UnsupportedWrite("104 SIDEBAR entry has no valid identifier")
+        ids.append(identifier)
+    # Keep number and string IDs distinct while disallowing duplicates.
+    if len(set((type(x).__name__, x) for x in ids)) != len(ids):
+        raise UnsupportedWrite("104 SIDEBAR contains duplicate identifiers")
+    return deepcopy(records)
+
+
+def sidebar_data(document: dict[str, Any]) -> dict[str, Any]:
+    return {"ids": [item["id"] for item in sidebar_records(document)]}
+
+
+def validate_section_edit(before: dict, after: dict, section: str) -> None:
+    """Prohibit unintended changes to metadata that the upstream PUT discards."""
+    if section != "sidebar":
+        return
+    old = sidebar_records(before)
+    new = sidebar_records(after)
+    if len(old) != len(new):
+        raise UnsupportedWrite("SIDEBAR reorder cannot add or remove records")
+    def by_id(records: list[dict]) -> dict[tuple[str, str | int], dict]:
+        return {(type(item["id"]).__name__, item["id"]): item for item in records}
+    if by_id(old) != by_id(new):
+        raise UnsupportedWrite(
+            "SIDEBAR only supports reordering existing records; no metadata edits"
+        )
+
+
 def section_data(document: dict[str, Any], section: str) -> dict[str, Any]:
     if section == "bio":
         return bio_data(document)
     if section == "certificate":
         return certificate_data(document)
+    if section == "sidebar":
+        return sidebar_data(document)
     raise UnsupportedWrite("No verified serializer for this 104 section")
 
 
@@ -63,6 +108,8 @@ def section_request_body(document: dict[str, Any], section: str) -> dict:
     return {"blockValueList": {section: (
         {"bio": bio_data(document)} if section == "bio"
         else certificate_data(document) if section == "certificate"
+        else [{"id": item["id"]} for item in sidebar_records(document)]
+             if section == "sidebar"
         else _unsupported()
     )}}
 

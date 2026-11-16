@@ -112,10 +112,35 @@ The target resume's certificate formData was empty, so the SDK refuses
 to guess a creation payload. Separate certification associations, array-item
 CRUD and record ordering are still pending.
 
+### SIDEBAR ordering (experimental; no live write verification)
+
+The current 104 frontend maps the sidebar drag-order action to:
+
+```http
+PUT /profile/ajax/resumeByBlock/sidebar?vno=VERSION_NO
+```
+
+```json
+{"blockValueList":{"sidebar":[{"id":"education"},{"id":"experience"}]}}
+```
+
+Those IDs are illustrative synthetic identifiers only. The actual payload must
+contain **every existing entry in the intended order**, with each entry reduced
+to `{"id": <original-id>}` by the frontend. The read response also contains
+`completed` and potentially other metadata. The writer preserves these in
+memory; it will **only reorder** the existing identical objects and reject
+adding/removing entries, changing IDs, or changing any other metadata.
+
+Expose this as a JSON Patch complete replacement of `/sidebar`, not arbitrary
+changes to `/sidebar/0/id`. Verification compares only the ordered IDs (the
+official PUT does not write completion metadata). This mapping has **six
+synthetic regression tests**, but no real 104 write/read-back yet. Do not
+conflate it with enabling/disabling a section, which may use other operations.
+
 ### Non-atomic multi-section edits
 
-One patch can target BIO and CERTIFICATE, but the server receives separate
-PUT requests. The SDK validates all mappings before the first write and
+One patch can target multiple supported sections (BIO, CERTIFICATE or SIDEBAR),
+but the server receives separate PUT requests. The SDK validates all mappings before the first write and
 verifies each section after saving it. A later error after earlier confirmed
 writes raises `PartialWriteError` containing only block names; the failed
 block's remote status may be ambiguous. Callers must inspect before retrying.

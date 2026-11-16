@@ -31,7 +31,7 @@ def _parser() -> argparse.ArgumentParser:
     plan = sub.add_parser("plan", help="Validate multi-field edits without saving")
     plan.add_argument("resume_id")
     plan.add_argument("--patch-file", required=True)
-    apply_cmd = sub.add_parser("apply", help="Explicitly write supported BIO fields (experimental)")
+    apply_cmd = sub.add_parser("apply", help="Explicitly write supported 104 sections (experimental)")
     apply_cmd.add_argument("resume_id")
     apply_cmd.add_argument("--patch-file", required=True)
     apply_cmd.add_argument("--if-match", required=True,
