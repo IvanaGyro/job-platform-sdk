@@ -83,8 +83,10 @@ def _source_empty(item: Any) -> bool:
 
 
 def _optional_value(item: Any, location: str) -> Any:
-    if _source_empty(item):
+    if item is None or item == "" or item == {}:
         return ""
+    # The GET view model uses selector objects. Reject a scalar accidentally
+    # written by a caller: lodash.isEmpty(5) would otherwise silently clear it.
     return _value(item, location)
 
 
@@ -133,6 +135,10 @@ def job_condition_request_body(document: dict[str, Any]) -> dict[str, Any]:
     for key in ("year", "month", "date"):
         if key not in date:
             raise UnsupportedWrite(f"104 JOB_CONDITION customOnBoardDate missing {key}")
+    if str(out["onBoardDate"]) not in ("1", "-1"):
+        raise UnsupportedWrite("104 JOB_CONDITION unknown onboarding mode")
+    if str(out["salary"]) not in ("1", "2", "3", "4"):
+        raise UnsupportedWrite("104 JOB_CONDITION unknown salary mode")
     if str(out["onBoardDate"]) == "1":  # frontend constant onBoardAfterGetOffer
         out["onBoardAfterGetOffer"] = _optional_value(
             value["onBoardAfterGetOffer"], "onBoardAfterGetOffer"
@@ -148,10 +154,14 @@ def job_condition_request_body(document: dict[str, Any]) -> dict[str, Any]:
 
     if not isinstance(value["workShift"], (bool, int)):
         raise UnsupportedWrite("104 JOB_CONDITION workShift must be bool/int")
+    if value["workShift"] not in (True, False, 0, 1):
+        raise UnsupportedWrite("104 JOB_CONDITION workShift must be 0 or 1")
     out["workShift"] = 1 if value["workShift"] else 0
     month = _require_object(value["salaryOfMonth"], "salaryOfMonth")
     if not all(key in month for key in ("unitOfTenThousand", "unitOfThousand")):
         raise UnsupportedWrite("104 JOB_CONDITION salaryOfMonth is incomplete")
+    if str(out["salary"]) == "2" and str(out["salaryPeriod"]) not in ("4", "5", "6"):
+        raise UnsupportedWrite("104 JOB_CONDITION unknown custom salary period")
     if str(out["salary"]) == "2":  # frontend constant customSalary
         out["salary"] = out["salaryPeriod"]
         out["salaryOfMonth"] = {
@@ -168,7 +178,7 @@ def job_condition_request_body(document: dict[str, Any]) -> dict[str, Any]:
         }
         out["salariesOfYear"] = ""
     out["remoteWork"] = (
-        0 if _source_empty(value["remoteWork"])
+        0 if value["remoteWork"] is None or value["remoteWork"] == "" or value["remoteWork"] == {}
         else _value(value["remoteWork"], "remoteWork")
     )
     title = _require_object(value["preferJobTitle"], "preferJobTitle")

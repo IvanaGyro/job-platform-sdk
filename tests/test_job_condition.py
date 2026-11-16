@@ -144,6 +144,22 @@ class JobConditionTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(UnsupportedWrite):
                     job_condition_request_body(doc)
 
+    def test_invalid_enum_and_scalar_coercions_are_rejected(self):
+        changes = (
+            ("onBoardDate", {"value": "not-a-mode"}),
+            ("salary", {"value": 999}),
+            ("salaryPeriod", {"value": 999}),
+            ("workShift", 99),
+            ("remoteWork", 5),
+            ("onBoardAfterGetOffer", 5),
+        )
+        for field, value in changes:
+            with self.subTest(field=field):
+                doc = deepcopy(BASE)
+                doc["jobCondition"]["formData"]["jobCondition"][field] = value
+                with self.assertRaises(UnsupportedWrite):
+                    job_condition_request_body(doc)
+
     def test_only_native_known_edit_paths_are_enabled(self):
         self.assertEqual(checked_write_paths([
             JsonPatchOperation(
