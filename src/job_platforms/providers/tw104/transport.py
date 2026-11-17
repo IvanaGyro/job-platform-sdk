@@ -6,6 +6,7 @@ The browser context, rather than external cookies, is the reference transport.
 from __future__ import annotations
 
 import asyncio
+import base64
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlencode, urlsplit
@@ -18,6 +19,55 @@ class BrowserResponse:
     status: int
     content_type: str
     data: Any
+
+
+MAX_BROWSER_UPLOAD_BYTES = 5 * 1024 * 1024
+
+
+@dataclass(frozen=True)
+class BrowserUpload:
+    """One bounded multipart file; browser sends it without local storage."""
+    field_name: str
+    filename: str
+    content_type: str
+    content: bytes
+
+    def validate(self) -> None:
+        if (
+            self.field_name != "attachment"
+            or not isinstance(self.filename, str)
+            or not self.filename
+            or len(self.filename) > 120
+            or any(ch in self.filename for ch in ("/", "\\", "\x00", "\r", "\n"))
+            or not isinstance(self.content_type, str)
+            or self.content_type not in {
+                "application/pdf", "image/png", "image/jpeg",
+            }
+            or not isinstance(self.content, bytes)
+            or not 8 <= len(self.content) <= MAX_BROWSER_UPLOAD_BYTES
+        ):
+            raise ValueError("Unsupported browser multipart file")
+        ext = self.filename.rsplit(".", 1)[-1].lower() if "." in self.filename else ""
+        match = {
+            "application/pdf": {"pdf"},
+            "image/png": {"png"},
+            "image/jpeg": {"jpg", "jpeg"},
+        }
+        if ext not in match[self.content_type]:
+            raise ValueError("Multipart file name and MIME type do not match")
+        if self.content_type == "application/pdf" and not (
+            self.content.startswith(b"%PDF-") and b"%%EOF" in self.content[-64:]
+        ):
+            raise ValueError("Invalid PDF file signature or trailer")
+        if self.content_type == "image/png" and not self.content.startswith(
+            b"\x89PNG\r\n\x1a\n"
+        ):
+            raise ValueError("Invalid PNG signature")
+        if self.content_type == "image/jpeg" and not (
+            self.content[:3] == b"\xff\xd8\xff"
+            and self.content.endswith(b"\xff\xd9")
+        ):
+            raise ValueError("Invalid JPEG file signature")
 
 
 class BrowserTransport:
@@ -48,6 +98,7 @@ class BrowserTransport:
         json_data: Any = None,
         form_data: dict | None = None,
         multipart_fields: dict[str, str] | None = None,
+        multipart_upload: BrowserUpload | None = None,
     ) -> BrowserResponse:
         method = method.upper()
         if method not in {"GET", "POST", "PUT", "PATCH", "DELETE"}:
@@ -64,6 +115,12 @@ class BrowserTransport:
                    for k, v in multipart_fields.items())
         ):
             raise ValueError("104 multipart fields require POST and text values")
+        if multipart_upload is not None:
+            if method != "POST" or multipart_fields is None or (
+                json_data is not None or form_data is not None
+            ) or not isinstance(multipart_upload, BrowserUpload):
+                raise ValueError("Binary attachment requires multipart POST")
+            multipart_upload.validate()
         path = self._path(path)
         if params:
             path += ("&" if "?" in path else "?") + urlencode(params, doseq=True)
@@ -102,6 +159,21 @@ class BrowserTransport:
                         for (const [key, value] of Object.entries(arg.multipart)) {
                             body.append(key, value);
                         }
+                        if (arg.file !== null) {
+                            // The browser builds the File and boundary in
+                            // memory. The attachment is never written to a
+                            // browser-visible disk file or logged.
+                            const decoded = atob(arg.file.base64);
+                            const bytes = new Uint8Array(decoded.length);
+                            for (let i = 0; i < decoded.length; i++) {
+                                bytes[i] = decoded.charCodeAt(i);
+                            }
+                            const file = new File(
+                                [bytes], arg.file.filename,
+                                {type: arg.file.content_type}
+                            );
+                            body.append(arg.file.field_name, file, file.name);
+                        }
                     }
                     const r = await fetch(url, {
                         method: arg.method, headers, body,
@@ -119,6 +191,12 @@ class BrowserTransport:
                 {"path": path, "method": method,
                  "json": json_data, "form": form_data,
                  "multipart": multipart_fields,
+                 "file": ({
+                     "field_name": multipart_upload.field_name,
+                     "filename": multipart_upload.filename,
+                     "content_type": multipart_upload.content_type,
+                     "base64": base64.b64encode(multipart_upload.content).decode("ascii"),
+                 } if multipart_upload is not None else None),
                  "profile_version": self._profile_version},
             )
             if response.get("profile_version"):

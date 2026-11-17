@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import mimetypes
 import asyncio
 import json
 import sys
@@ -114,6 +115,17 @@ def _parser() -> argparse.ArgumentParser:
     theme.add_argument("selected_theme", type=int)
     theme.add_argument("--if-match", required=True)
     theme.add_argument("--confirm", choices=["experimental-theme-write"], required=True)
+    portfolio_file = sub.add_parser(
+        "portfolio-file", help="104 PORTFOLIO binary file upload (EXPERIMENTAL)"
+    )
+    portfolio_file.add_argument("resume_id")
+    portfolio_file.add_argument("--file", required=True, help="Local PDF/JPEG/PNG, <=5 MiB")
+    portfolio_file.add_argument("--name", required=True, help="Portfolio item title")
+    portfolio_file.add_argument("--attach-name", default=None,
+                                help="Attachment display name; defaults to file name")
+    portfolio_file.add_argument("--if-match", required=True)
+    portfolio_file.add_argument("--confirm",
+                                choices=["experimental-file-upload"], required=True)
     ordering = sub.add_parser("sort", help="104 adjacent record move (experimental)")
     ordering.add_argument("resume_id")
     ordering.add_argument("section", choices=["education", "skill", "language", "project", "portfolio", "referrer"])
@@ -189,6 +201,19 @@ async def _run(args):
             "body": body,
         }, ensure_ascii=False, indent=2))
         return
+    upload_file = None
+    if args.command == "portfolio-file":
+        from job_platforms.providers.tw104.transport import (
+            BrowserUpload, MAX_BROWSER_UPLOAD_BYTES,
+        )
+        src = Path(args.file)
+        if not src.is_file() or not 8 <= src.stat().st_size <= MAX_BROWSER_UPLOAD_BYTES:
+            raise ValueError("Local portfolio file missing or exceeds the 5 MiB limit")
+        kind = mimetypes.guess_type(src.name)[0]
+        upload_file = BrowserUpload(
+            "attachment", src.name, kind or "", src.read_bytes(),
+        )
+        upload_file.validate()
     cfg = AuthConfig.from_env()
     cfg.headless = args.headless
     async with FreshBrowserSession(cfg) as session:
@@ -258,6 +283,14 @@ async def _run(args):
                 await operation(args.resume_id, args.kind, args.action, **params)
                 if args.section == "language"
                 else await operation(args.resume_id, args.action, **params)
+            )
+        elif args.command == "portfolio-file":
+            result = await client.upload_portfolio_file(
+                args.resume_id, expected_timestamp=args.if_match.strip('"'),
+                name=args.name, attach_name=args.attach_name or upload_file.filename,
+                filename=upload_file.filename,
+                content_type=upload_file.content_type,
+                content=upload_file.content,
             )
         elif args.command == "theme":
             result = await client.set_theme(

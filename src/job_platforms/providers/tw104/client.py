@@ -18,7 +18,7 @@ from job_platforms.core.errors import (
 from job_platforms.core.patch import (
     EditPlan, JsonPatchOperation, apply_json_patch, describe_schema,
 )
-from .transport import BrowserTransport
+from .transport import BrowserTransport, BrowserUpload
 from .skill_records import skill_list, skill_operation_body, verify_skill_operation
 from .record_sort import SORTABLE, sort_body, verify_sort
 from .layout_theme import (
@@ -38,6 +38,7 @@ from .project_records import (
 from .portfolio_records import (
     portfolio_records, portfolio_delete_body, verify_portfolio_delete,
     portfolio_link_fields, verify_portfolio_link_create,
+    portfolio_file_fields, verify_portfolio_file_create,
 )
 from .referrer_records import (
     referrer_records, referrer_operation_body, verify_referrer_operation,
@@ -688,6 +689,8 @@ class Resume104Client:
                                 if action == "create" else position
                             ),
                             "persisted": True, "verified": True, "atomic": True,
+                            "verification_scope": "display_identity",
+                            "existing_attachment_bytes_verified": False,
                         }
                 except Exception:
                     raise VerificationError(
@@ -697,6 +700,70 @@ class Resume104Client:
                     await asyncio.sleep(0.75)
             raise VerificationError(
                 "104 PORTFOLIO submitted but exact result not verified"
+            )
+
+    async def upload_portfolio_file(
+        self, resume_id: str | int, *,
+        expected_timestamp: int | str,
+        name: str, attach_name: str,
+        filename: str, content_type: str, content: bytes,
+    ) -> dict:
+        """Source-mapped experimental PORTFOLIO file POST.
+
+        Sends at most 5 MiB via authenticated in-browser FormData.
+        The site may require additional asynchronous conversion/preview
+        actions, which are not yet verified. Never retries an uncertain
+        remote upload and never deletes existing attachments to recover.
+        """
+        version = self._version(resume_id)
+        upload = BrowserUpload(
+            field_name="attachment", filename=filename,
+            content_type=content_type, content=content,
+        )
+        upload.validate()
+        async with self._write_lock:
+            before = await self.get_resume(version)
+            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+                raise ConflictError("104 resume changed before portfolio file upload")
+            form = before.get("portfolio", {}).get("formData")
+            if not isinstance(form, dict):
+                raise UnsupportedWrite("104 PORTFOLIO formData unavailable")
+            options = None
+            if not form:
+                options = self._data(await self.transport.get_json(
+                    "/profile/ajax/options"
+                ))
+            fields = portfolio_file_fields(
+                before, {"name": name, "attachName": attach_name},
+                options=options,
+            )
+            await self.transport.request(
+                "POST", "/profile/ajax/resumeByBlock/portfolio",
+                params={"vno": version},
+                multipart_fields=fields, multipart_upload=upload,
+            )
+            for attempt in range(4):
+                try:
+                    after = await self.get_resume(version)
+                    if verify_portfolio_file_create(
+                        before, after, fields=fields,
+                    ):
+                        return {
+                            "resume_id": version, "section": "portfolio",
+                            "action": "create-file", "persisted": True,
+                            "verified": True, "atomic": True,
+                            "preview_verified": False,
+                            "verification_scope": "addressable_file_record",
+                            "existing_attachment_bytes_verified": False,
+                        }
+                except Exception:
+                    raise VerificationError(
+                        "104 PORTFOLIO file submitted; read-back unavailable"
+                    ) from None
+                if attempt < 3:
+                    await asyncio.sleep(0.75)
+            raise VerificationError(
+                "104 PORTFOLIO uploaded file; stable record not verified"
             )
 
     async def mutate_language(

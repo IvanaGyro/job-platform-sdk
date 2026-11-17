@@ -17,7 +17,7 @@ and successful real 104 writes.** Each is a separate evidence level.
 | `certificate` | PUT, DELETE; certification connections | Existing text PUT plus first-empty PUT and guarded clear; global associations excluded | **SDK initialize + clear verified and restored live** |
 | `language` | POST, PUT, DELETE; local/foreign records | Native local/foreign record CRUD + adjacent local/foreign sorting (experimental); linked certificates blocked | **No** |
 | `project` | POST, PUT, DELETE; reorder; attachments | No-media CRUD and adjacent reorder; media pending | **SDK create, update and delete verified live and restored**; sorting synthetic |
-| `portfolio` | POST, DELETE; attachments/upload; reorder | Link-only multipart POST (LINK=2), one-record DELETE, adjacent reorder experimental; file uploads/previews pending | **No** |
+| `portfolio` | POST, DELETE; attachments/upload; reorder | LINK=2 POST, FILE=1 bounded binary POST, one-record DELETE, adjacent reorder; preview/conversion pending | **SDK LINK/FILE create-read-delete live verified**; sort/preview untested |
 | `bio` | POST, PUT, DELETE | HTML PUT live-verified; first-create POST and clear DELETE experimental | **PUT only** |
 | `referrer` | POST, PUT, DELETE; reorder | Native record CRUD, empty-form first-create, **exactly-two-record** hardcoded adjacent swap (experimental) | **No** |
 | `sidebar` | PUT | Complete-list reorder only; metadata edits rejected | **No** |
@@ -351,3 +351,58 @@ result. Final GET confirmed the two sections were empty and BIO
 remained unchanged. All three PROJECT mutation methods are now
 **live tested**, but PROJECT sorting and media editing are not.
 See tw104-live-smoke-report.md.
+
+
+### PORTFOLIO binary upload and stable identity checks (2026-11-17)
+
+The source-mapped FILE=1 branch now creates a browser FormData object
+with 5 nested text fields and an actual binary File appended as
+`attachment`, rather than URL-encoding or treating bytes as JSON.
+The in-memory upload transport validates:
+- Local file bytes <= 5 MiB and minimum plausible signature length;
+- PDF, PNG and JPEG magic headers/trailer and matching file extensions;
+- Valid simple attachment name, selected existing or live site theme;
+- Current resume timestamp and site-provided 104-profile-ver header;
+- Single remote POST with no blind retry on uncertain response;
+- GET read-back of exactly one addressable new file record, preserving
+  preexisting displayed attachment identities.
+
+CLI `portfolio-file` reads local files directly. The bearer-only
+experimental localhost HTTP endpoint `/portfolio-files` accepts
+JSON with base64 contents; it uses an in-memory idempotency key, and
+does not require python-multipart or a persistent database.
+
+The older FILE GET has fileId, url, thumbnailFileId and src values
+that may represent time-limited access information. An original
+attachment's stable displayed name, attachment filename and FILE=1
+type are compared without treating those opaque strings as immutable.
+Duplicate indistinguishable items fail closed before a mutation.
+
+This **does not yet implement** actual preview/thumbnail conversion,
+binary download, replacement, content-type negotiation for DOC/DOCX,
+or live upload/readback/delete-and-restore. These remain on the PR
+outstanding-work checklist. Existing real attachment data is not
+published in fixtures.
+
+
+### Live PORTFOLIO link and PDF verification (2026-11-17)
+
+The official LINK=2 native multipart POST successfully created a
+temporary URL item; the SDK independently verified it, and a
+subsequent targeted DELETE removed it from the test resume.
+The first cleanup guard rejected a valid operation because the
+preexisting FILE entry's opaque access/preview fields rotated.
+A separate diagnosis confirmed the stable displayed name,
+attachment filename and FILE type had not changed. A later
+targeted SDK DELETE removed the test link, and the original
+displayed item remained.
+
+A separate real session used the SDK binary FILE=1 multipart
+adapter to upload a generated 621-byte PDF with no personal
+content. GET showed an addressable uploaded record, the SDK
+verified it, and a targeted DELETE restored the original
+displayed one-item portfolio list.
+
+The SDK does not yet validate PDF preview/thumbnail generation,
+binary download or checksum equality, conversion lifecycle,
+replacing attachments or physical backend blob garbage collection.

@@ -518,3 +518,48 @@ and DELETE for a temporary no-media record. All three were
 independently verified, and the section was restored to
 empty formData. These are real SDK tests, not just source
 mapping or HTTP 200-only observations.
+
+
+### PORTFOLIO FILE=1 native multipart and in-browser File
+
+104 frontend module 44aa CREATE distinguishes LINK=2 and FILE=1.
+FILE=1 appends these multipart FormData parts:
+
+    blockValueList[portfolio][themeChoose][selectedTheme] = THEME
+    blockValueList[portfolio][name] = TITLE
+    blockValueList[portfolio][attachType] = 1
+    blockValueList[portfolio][attach][name] = DISPLAY_NAME
+    blockValueList[portfolio][attach][src] = ""
+    attachment = File object (binary bytes)
+
+The same-origin browser creates the Content-Type boundary and the
+File object using bytes supplied by the SDK (base64 in-process
+bridge). The private test resume's preexisting file record has long
+fileId, thumbnailFileId, url and src strings, which cannot be assumed
+permanent. The read-back comparator therefore distinguishes a
+stable displayed identity from volatile access/preview metadata.
+
+The editor also defines convertPreviewThumbnail POST and
+portfolioPreview GET. Their timing and URL contracts remain
+unverified: do not claim full file or preview lifecycle support.
+Only source-mapped/synthetic tests cover the FILE=1 POST; it has
+not yet been exercised against a live 104 test resume.
+
+
+### Real LINK=2 and PDF FILE=1 multipart acceptance
+
+The authenticated 104 test resume accepted both source-mapped
+LINK and binary PDF FILE multipart FormData POSTs. After each
+POST a native GET showed one additional unique record; the SDK
+then deleted that temporary entry by its current sort and verified
+the original displayed portfolio identity remained.
+
+The existing FILE item's fileId, thumbnailFileId, url and src
+values changed between independent GETs, despite consistent
+display name, attached file name and type. Do not use opaque
+access/preview fields as immutable record identifiers.
+
+The new PDF upload returned an addressable file record with no
+thumbnailFileId. This is **not** proof of conversion/preview,
+downloadability, physical remote blob removal or byte-for-byte
+identity of the original attachment. Those workflows remain TODO.

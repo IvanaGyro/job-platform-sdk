@@ -23,7 +23,9 @@ remote responses were held in a private Modal directory, not in Git.
 | PROJECT one-item DELETE | HTTP 200; GET returned empty formData | Yes |
 | PROJECT record update (native SDK) | Real PUT changed a temporary record; read-back verified | Yes, by subsequent DELETE |
 | PROJECT reorder | Not tested live | Not applicable |
-| PORTFOLIO link POST or DELETE | Aborted in preflight: existing attachment identity differed from first private snapshot | No write sent |
+| PORTFOLIO LINK=2 create and targeted DELETE | Live SDK POST, independent GET, native DELETE, GET | Original displayed item restored |
+| PORTFOLIO PDF FILE=1 create and targeted DELETE | Live SDK binary POST, GET addressable file, DELETE, GET | Original displayed item restored |
+| PORTFOLIO preview/conversion/download/sort | Not tested live | Not applicable |
 | CUSTOM and certificate associations | Offline source mapping only | No write sent |
 
 The initial CERTIFICATE write **succeeded**, but its pre-fix SDK
@@ -81,3 +83,29 @@ did not edit existing portfolio attachments, account-global
 certifications, or personal information. This is the first completed
 **real SDK-level create/update/delete** test for PROJECT, and the first
 completed **real corrected SDK-level** certificate lifecycle test.
+
+
+## Later PORTFOLIO live test cycles (2026-11-17)
+
+The LINK=2 create successfully persisted a uniquely titled synthetic
+test URL. A first cleanup guard blocked deletion because its
+comparison wrongly considered changes to the original file's
+opaque CDN/fileId/thumbnail access tokens to be evidence of a
+different attachment. Private record-level comparison showed
+that display name, attachment name and type were identical while
+the opaque access fields rotated. A subsequent isolated SDK DELETE
+identified only the synthetic link, removed it, and independently
+verified that the original one displayed item remained.
+
+A second session tested the new binary FILE=1 transport with a
+generated 621-byte single-page synthetic PDF, containing no
+personal information. The 104 service returned a persisted,
+addressable file entry. SDK DELETE removed that unique test item,
+and an independent GET confirmed the original single displayed
+portfolio attachment identity remained. BIO, PROJECT and
+CERTIFICATE were unchanged.
+
+No new PDF thumbnailFileId was observed. The result does not
+prove preview availability, downloaded file content, deletion of
+underlying server blobs, or original attachment byte checksum.
+Those items remain unverified.

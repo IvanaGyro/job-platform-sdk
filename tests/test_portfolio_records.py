@@ -8,6 +8,7 @@ from job_platforms.providers.tw104.client import Resume104Client
 from job_platforms.providers.tw104.portfolio_records import (
     portfolio_records, portfolio_delete_body, verify_portfolio_delete,
     portfolio_link_fields, verify_portfolio_link_create,
+    portfolio_stable_identity, portfolio_stable_identities,
 )
 from job_platforms.providers.tw104.record_sort import sort_body, verify_sort
 
@@ -272,8 +273,54 @@ class PortfolioTests(unittest.IsolatedAsyncioTestCase):
             {**deepcopy(SECOND),"sort":1},
         ]
         self.assertTrue(verify_portfolio_delete(old,after,position=1))
-        after["portfolio"]["formData"]["portfolios"][0]["attach"]["fileId"]="unexpected"
+        after["portfolio"]["formData"]["portfolios"][0]["attach"]["name"]="different.pdf"
         self.assertFalse(verify_portfolio_delete(old,after,position=1))
+
+    def test_portfolio_signed_file_ids_can_rotate_across_get(self):
+        old=deepcopy(POPULATED)
+        after=deepcopy(POPULATED)
+        after["portfolio"]["formData"]["portfolios"]=[
+            {**deepcopy(SECOND),"sort":1},
+        ]
+        item=after["portfolio"]["formData"]["portfolios"][0]["attach"]
+        for volatile in ("fileId","thumbnailFileId","url","src"):
+            item[volatile]="https://signed.example.invalid/rotating-access-token"
+        item["status"]=1
+        self.assertTrue(verify_portfolio_delete(old,after,position=1))
+        self.assertEqual(
+            portfolio_stable_identity(SECOND),
+            portfolio_stable_identity(after["portfolio"]["formData"]["portfolios"][0]),
+        )
+        self.assertEqual(len(portfolio_stable_identities(old)),2)
+
+    def test_link_create_allows_preexisting_file_token_rotation_only(self):
+        old=deepcopy(POPULATED)
+        current=deepcopy(POPULATED)
+        prev=current["portfolio"]["formData"]["portfolios"][0]["attach"]
+        for k in ("url","fileId","thumbnailFileId","src"):
+            prev[k]="https://signed.example.invalid/token"
+        current["portfolio"]["formData"]["portfolios"].append({
+            "name":LINK["name"],
+            "attach":{
+                "name":LINK["attachName"],"status":0,
+                "url":LINK["url"],"fileId":"","thumbnailFileId":"",
+                "src":"","crawler":False,
+            },
+            "attachType":{"text":"Link","value":2},
+            "sort":3,
+        })
+        fields=portfolio_link_fields(old,LINK)
+        self.assertTrue(verify_portfolio_link_create(old,current,fields=fields))
+        current["portfolio"]["formData"]["portfolios"][1]["name"]="tampered"
+        self.assertFalse(verify_portfolio_link_create(old,current,fields=fields))
+
+    def test_duplicate_file_titles_block_ambiguous_identity(self):
+        dup=deepcopy(POPULATED)
+        dup["portfolio"]["formData"]["portfolios"][1]["name"]=FIRST["name"]
+        dup["portfolio"]["formData"]["portfolios"][1]["attach"]["name"]=ATTACH["name"]
+        with self.assertRaises(UnsupportedWrite):
+            portfolio_stable_identities(dup)
+
 
 
 if __name__=="__main__":

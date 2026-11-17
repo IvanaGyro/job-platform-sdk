@@ -245,6 +245,83 @@ designated test resume, independently restoring the empty section.
 Account-wide certification CRUD, suggestion search and
 certificationConnect association/disassociation remain unimplemented.
 
+### Experimental 104 PORTFOLIO binary file upload
+
+The official editor module 44aa submits native PORTFOLIO FILE=1 items
+using FormData with **five text fields plus one browser File object**.
+The browser transport now handles this path in memory, including
+the 104-profile-ver request header and browser-created multipart boundary.
+
+The SDK entrypoint is
+`Resume104Client.upload_portfolio_file(resume_id, expected_timestamp=...,
+name=..., attach_name=..., filename=..., content_type=..., content=...)`.
+It creates one item and independently checks a newly addressable file
+handle while preserving the identities of preexisting portfolio items.
+
+Equivalent CLI and local HTTP entrypoints:
+
+    job-platform portfolio-file VERSION_NO --file /private/test.pdf --name "Test work" --if-match TIMESTAMP --confirm experimental-file-upload
+    POST /v1/tw104/resumes/{resume_id}/portfolio-files
+    Authorization: Bearer LOCAL_API_TOKEN
+    If-Match: TIMESTAMP
+    Idempotency-Key: UNIQUE_KEY_AT_LEAST_16_CHARS
+
+The local HTTP request uses application/json, not a public binary
+hosting endpoint, with exactly the following **generic synthetic**
+structure (base64 is the entire local file, not a file path):
+
+    {"name":"Test work","attachName":"test.pdf",
+     "filename":"test.pdf","contentType":"application/pdf",
+     "base64":"JVBERi0xLjQK..."}
+
+Current limits: **5 MiB**, PDF/PNG/JPEG only, filename and content
+signature checks. The body is decoded to memory, not persisted in
+SQLite, temporary local server files, or the public repository.
+Do not expose this localhost service to the internet.
+
+The native file branch sends `attachType=1`, an empty
+`attach.src` and the binary `attachment` part. Source mapping
+is confirmed from frontend module 44aa. **A PDF file upload/read-back/
+delete cycle has now been live tested**; asynchronous conversion,
+thumbnail, document preview and download remain TODO.
+A successful upload method response has `preview_verified:false`.
+An uncertain remote write must not be blindly retried.
+
+PORTFOLIO file GET returns long opaque fileId, signed URL and preview
+fields. These are not guaranteed to be stable across logins. The
+one-record delete and create verifiers now compare ordered stable
+display identity (portfolio title, attachment display name, FILE/LINK
+type; destination URL for LINK), refusing duplicates and preserving
+preexisting records. This guards against token churn being mistaken
+for a deleted attachment, but it is **not a globally unique
+immutable file identifier**. See the PR's remaining work table.
+
+### Live PORTFOLIO link and PDF file roundtrips (2026-11-17)
+
+In separate authenticated sessions on the designated disposable test
+resume, the SDK successfully created a synthetic external link
+(LINK=2), verified it with an independent GET, and removed precisely
+that temporary item. The original portfolio file's opaque fileId,
+thumbnailFileId, src and URL changed between independent GETs, while
+its stable displayed identity remained unchanged.
+
+The SDK then uploaded a generated **621-byte synthetic, one-page PDF**
+(FILE=1) through the new binary multipart transport. The GET
+contained an addressable file item. The SDK deleted only that uniquely
+titled temporary PDF and independently verified the original displayed
+one-item PORTFOLIO identity. BIO remained unchanged; PROJECT and
+CERTIFICATE remained empty.
+
+**Not yet verified:** physical deletion of detached server-side file
+blobs, file download/checksums, thumbnail generation, PDF preview,
+conversion, replacement, other media types and native sorting.
+The test PDF had no thumbnailFileId after its initial GET.
+The result has preview_verified=false and file-content-checksum
+verification remains outside the SDK.
+
+See docs/tw104-live-smoke-report.md. No credential, private
+resume ID or real attachment bytes are committed.
+
 ### Experimental 104 PROJECT and PORTFOLIO actions
 
 The 104 PROJECT section is initially empty on the designated test resume.

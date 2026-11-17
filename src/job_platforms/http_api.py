@@ -7,6 +7,8 @@ browser session for its lifetime and serializes non-idempotent operations.
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -28,8 +30,12 @@ from job_platforms.providers.tw104.referrer_records import referrer_operation_bo
 from job_platforms.providers.tw104.project_records import project_operation_body
 from job_platforms.providers.tw104.portfolio_records import (
     portfolio_delete_body, portfolio_link_fields,
+    portfolio_file_fields,
 )
 from job_platforms.providers.tw104.bio_actions import bio_action_body
+from job_platforms.providers.tw104.transport import (
+    BrowserUpload, MAX_BROWSER_UPLOAD_BYTES,
+)
 from job_platforms.providers.tw104.certificate_block_actions import (
     certificate_block_body,
 )
@@ -130,7 +136,7 @@ def create_app(
                     "experience": ["create", "update", "delete"],
                     "referrer": ["create", "update", "delete"],
                     "project": ["create", "update", "delete"],
-                    "portfolio": ["create-link", "delete"],
+                    "portfolio": ["create-link", "create-file", "delete"],
                     "language.local": ["create", "update", "delete"],
                     "language.foreign": ["create", "update", "delete"],
                 },
@@ -909,6 +915,95 @@ def create_app(
             changes=changes, if_match=if_match,
             idempotency_key=idempotency_key,
         )
+
+    @app.post(
+        "/v1/tw104/resumes/{resume_id}/portfolio-files",
+        dependencies=[Depends(authorize)],
+    )
+    async def upload_portfolio_file_http(
+        resume_id: str, request: Request, file: dict = Body(...),
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        """Local JSON/base64 upload; not a generic internet-facing file host."""
+        if not allow_experimental_writes:
+            raise HTTPException(501, "104 portfolio files require experimental opt-in")
+        if if_match is None:
+            raise HTTPException(428, "If-Match resumeTimestamp is required")
+        if not idempotency_key or len(idempotency_key) < 16:
+            raise HTTPException(400, "Idempotency-Key of at least 16 characters required")
+        if not isinstance(file, dict) or set(file) != {
+            "name", "attachName", "filename", "contentType", "base64",
+        }:
+            raise HTTPException(422, "Expected title, attachment name and binary file")
+        encoded = file["base64"]
+        if (
+            not isinstance(encoded, str)
+            or not 12 <= len(encoded) <= ((MAX_BROWSER_UPLOAD_BYTES + 2) // 3) * 4
+        ):
+            raise HTTPException(422, "Portfolio file base64 exceeds supported size")
+        try:
+            raw = base64.b64decode(encoded, validate=True)
+            upload = BrowserUpload(
+                field_name="attachment", filename=file["filename"],
+                content_type=file["contentType"], content=raw,
+            )
+            upload.validate()
+        except (binascii.Error, ValueError, TypeError):
+            raise HTTPException(422, "Invalid PORTFOLIO binary attachment") from None
+
+        expected = if_match.strip('"')
+        fingerprint = hashlib.sha256(json.dumps({
+            "name": file["name"], "attachName": file["attachName"],
+            "filename": upload.filename, "contentType": upload.content_type,
+            "sha256": hashlib.sha256(raw).hexdigest(), "timestamp": expected,
+        }, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+        key = ("PORTFOLIO_FILE", resume_id, idempotency_key)
+        async with request.app.state.action_lock:
+            cached = request.app.state.idempotency_results.get(key)
+            if cached is not None:
+                if cached["fingerprint"] != fingerprint:
+                    raise HTTPException(409, "Idempotency-Key reused for different file")
+                if cached["state"] != "succeeded":
+                    raise HTTPException(409, "File outcome indeterminate; inspect first")
+                return cached["result"]
+            try:
+                before = await request.app.state.client.get_resume(resume_id)
+                if str(before.get("resumeTimestamp")) != expected:
+                    raise HTTPException(412, "Resume changed since last read")
+                form = before.get("portfolio", {}).get("formData")
+                if not isinstance(form, dict):
+                    raise UnsupportedWrite("104 PORTFOLIO formData missing")
+                options = None
+                if not form:
+                    options = request.app.state.client._data(
+                        await request.app.state.client.transport.get_json(
+                            "/profile/ajax/options"
+                        )
+                    )
+                portfolio_file_fields(
+                    before, {"name": file["name"],
+                             "attachName": file["attachName"]},
+                    options=options,
+                )
+            except (KeyError, TypeError, ValueError, UnsupportedWrite):
+                raise HTTPException(422, "Invalid PORTFOLIO file metadata") from None
+            except JobPlatformError as exc:
+                translate_error(exc)
+            record = {"state": "indeterminate", "fingerprint": fingerprint}
+            request.app.state.idempotency_results[key] = record
+            try:
+                result = await request.app.state.client.upload_portfolio_file(
+                    resume_id, expected_timestamp=expected,
+                    name=file["name"], attach_name=file["attachName"],
+                    filename=upload.filename, content_type=upload.content_type,
+                    content=raw,
+                )
+            except JobPlatformError as exc:
+                translate_error(exc)
+            else:
+                record.update({"state": "succeeded", "result": result})
+                return result
 
     @app.delete(
         "/v1/tw104/resumes/{resume_id}/portfolios/{position}",
