@@ -32,10 +32,13 @@ and browser-only new-resume creation are unavailable until a new login session.
 The option is not the default, and HTTP writes remain separately opt-in.
 A private same-session trial found synchronous curl, asynchronous curl,
 and the SDK adapter all returned HTTP 200 JSON after Chromium closed.
-The opt-in detached mode also completed one **real, reversible 104 BIO PUT**
-with two independent HTTP Session reads and exact restoration of original
-BIO form values. This does **not** establish that browser resource contention
-caused the earlier connection failures, nor validate any other write section.
+In private authorized tests, detached mode completed **real, reversible 104
+BIO PUT, PORTFOLIO LINK POST/DELETE and synthetic PDF FILE POST/DELETE**,
+each with two independent HTTP Sessions and independent read-back.
+The exact original BIO values and the original PORTFOLIO display identities
+were restored. This does **not** establish that browser resource contention
+caused earlier connection failures, nor verify other editor sections or
+server-side physical file deletion.
 
 HTTP transport **writes are disabled** unless
 `JOB_PLATFORM_104_CFFI_ENABLE_WRITES=1` is explicitly set. For the localhost
@@ -52,8 +55,8 @@ unattended production resume without a private backup and independent GET.
 - JSON, URL-encoded form fields and bounded multipart files are supported.
   The `CurlMime` serializer is also covered by a real **localhost HTTP wire
   test** of form-only LINK and generated PDF FILE requests, confirming exact
-  field and file bytes; these are **not** live 104 write confirmations.
-  No automatic retry occurs;
+  field and file bytes. These loopback checks are separate from the live
+  authenticated 104 write/restore tests below. No automatic retry occurs;
   ambiguous network failures during writes raise `VerificationError`.
 - A 401, 403 or redirect is an authentication/network-risk failure, but a
   403 does **not** prove an expired cookie. A 2xx HTML response or malformed
@@ -61,8 +64,9 @@ unattended production resume without a private backup and independent GET.
 - An authenticated browser session is still needed to obtain cookies;
   reuse without the original proxy remains **unverified/blocked** by the
   previous A/B network tests.
-- Multipart profile version, real write headers, server-side conflict rules,
-  cookie rotation and write/restore must still be verified against 104.
+- The version header has been used in real successful BIO, LINK and FILE
+  writes. Server-side conflict behavior, session-cookie rotation, complete
+  resume lifecycle and other section write/restore remain unverified.
 - Signed media URLs, native response bodies and session secrets are never
   logged by the transport. Private integration test evidence remains outside
   this public repository.
@@ -86,12 +90,25 @@ unattended production resume without a private backup and independent GET.
   The requested resume version was confirmed, and a `104-profile-ver`
   header was observed by the HTTP transport after native GET requests.
   Signed media tokens and full-field equality were **not** checked.
-- **New transport writes:** **one authenticated BIO PUT** with a unique
-  synthetic marker passed a private preflight, independent second HTTP
-  Session read-back, and exact restoration/read-back after Chromium was
-  detached (2026-11-18). The private test backup was saved before writing.
-  This proves only that operation, not POST, DELETE, multipart, conditional
-  controls, or conflict recovery. Other HTTP write paths remain synthetic.
+- **Live BIO PUT (2026-11-18):** a uniquely marked synthetic field update
+  passed independent second-session GET, exact original BIO restoration and
+  independent verification. A private backup was saved before writing.
+- **Live PORTFOLIO LINK POST and DELETE (2026-11-18):** one temporary
+  uniquely identified `example.invalid` link was added via text-only
+  `CurlMime`, independently GET-verified and safely deleted by its current
+  sort position; independent GET confirmed the original ordered displayed
+  identities were restored.
+- **Live PORTFOLIO PDF FILE POST and DELETE (2026-11-18):** a generated
+  621-byte synthetic PDF was sent via `CurlMime`, independently GET-verified
+  as an addressable FILE record and safely deleted. Independent GET confirmed
+  the original displayed attachment identities were restored. PDF preview,
+  downloaded-byte checksum, and underlying backend blob garbage collection
+  were **not** verified; rotating signed URL/file IDs cannot prove identity.
+- The three live cycles used the **original login proxy**, disposed of
+  Chromium after cookie transfer, checked the baseline in two independent
+  HTTP sessions before mutation, and kept private original backups. Their
+  success does not validate remaining 104 fields, conflict recovery, file
+  conversion or session-cookie rotation.
 - **Intermittent transport issue:** with the same login Proxy #4 and valid
   Chromium session, curl code 7 (connection failure before any HTTP status)
   appeared at times for **both** synchronous and asynchronous curl variants,

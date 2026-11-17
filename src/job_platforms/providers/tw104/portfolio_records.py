@@ -3,8 +3,10 @@
 The editor module 44aa creates new attachments using multipart/form-data.
 The SDK now source-maps LINK=2 (text fields) and FILE=1
 (PDF/PNG/JPEG with an in-memory multipart File), while asynchronous
-conversion/preview handling remains unimplemented. FILE upload is
-synthetic-tested only, not live-validated. DELETE uses the current sort value with the
+conversion/preview handling remains unimplemented. Synthetic PDF upload
+has been tested on real 104 through both browser and proxy-bound curl_cffi;
+this does not establish preview rendering, downloaded-byte checksums or
+physical blob deletion. DELETE uses the current sort value with the
 native structure blockValueList.portfolio.sort=[N]. Sorting is handled
 separately using swapRecordBySort.
 

@@ -642,8 +642,9 @@ class Resume104Client:
     ) -> dict:
         """104 PORTFOLIO link-only POST or single-record DELETE.
 
-        Link creation uses browser FormData with no file payload. Other
-        attachments require unimplemented upload/conversion workflows.
+        LINK creation uses multipart/form-data without a file payload;
+        binary FILE upload is a separate operation, while media conversion
+        and preview completion remain unverified.
         """
         if action not in ("create", "delete"):
             raise UnsupportedWrite("104 PORTFOLIO only supports link create/delete")
@@ -718,7 +719,7 @@ class Resume104Client:
     ) -> dict:
         """Source-mapped experimental PORTFOLIO file POST.
 
-        Sends at most 5 MiB via authenticated in-browser FormData.
+        Sends at most 5 MiB via authenticated multipart/form-data.
         The site may require additional asynchronous conversion/preview
         actions, which are not yet verified. Never retries an uncertain
         remote upload and never deletes existing attachments to recover.
