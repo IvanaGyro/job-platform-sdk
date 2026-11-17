@@ -16,7 +16,6 @@ from contextlib import asynccontextmanager
 from fastapi import Body, Depends, FastAPI, Header, HTTPException, Request
 
 from job_platforms.core.capabilities import ProviderCapabilities
-from job_platforms.http_idempotency import DurableIdempotencyLedger
 from job_platforms.core.errors import (
     AuthenticationRequired, ConflictError, JobPlatformError, ResumeNotFound,
     UnsupportedWrite, UpstreamError, VerificationError, PartialWriteError,
@@ -41,7 +40,6 @@ TW104_CAPABILITIES = ProviderCapabilities(
 def create_app(
     config: AuthConfig | None = None, *, api_token: str | None = None,
     allow_experimental_writes: bool | None = None,
-    idempotency_db_path: str | None = None,
 ) -> FastAPI:
     token = api_token or os.getenv("JOB_PLATFORM_API_TOKEN")
     if not token or len(token) < 24:
@@ -52,24 +50,13 @@ def create_app(
             os.getenv("JOB_PLATFORM_104_ENABLE_EXPERIMENTAL_WRITES") == "1"
         )
 
-    if idempotency_db_path is None:
-        idempotency_db_path = os.getenv("JOB_PLATFORM_IDEMPOTENCY_DB")
-
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         async with FreshBrowserSession(config) as session:
             app.state.client = Resume104Client(session.page)
             app.state.action_lock = asyncio.Lock()
-            ledger = (
-                DurableIdempotencyLedger(idempotency_db_path)
-                if idempotency_db_path else {}
-            )
-            app.state.idempotency_results = ledger
-            try:
-                yield
-            finally:
-                if isinstance(ledger, DurableIdempotencyLedger):
-                    ledger.close()
+            app.state.idempotency_results = {}
+            yield
 
     app = FastAPI(
         title="Job Platform SDK (unofficial)",
@@ -139,7 +126,6 @@ def create_app(
                     "language.foreign": ["create", "update", "delete"],
                 },
                 "experimental_writes_enabled": allow_experimental_writes,
-                "persistent_duplicate_guard_enabled": bool(idempotency_db_path),
             },
             "cake": {"provider": "cake", "implemented": False},
             "yourator": {"provider": "yourator", "implemented": False},

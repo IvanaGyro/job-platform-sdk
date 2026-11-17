@@ -33,7 +33,6 @@ python -m patchright install --with-deps chromium
 - `JOB_PLATFORM_104_CREDENTIALS_FILE`: private UTF-8 key/value file containing `A`, `P`, `ISSUE_DATE`, `ISSUE_LOCATION`, and `ISSUE_METHOD`.
 - `JOB_PLATFORM_104_PROXY_FILE`: private proxy list (`host:port:username:password`, one per line).
 - `JOB_PLATFORM_API_TOKEN`: secret bearer token for the optional HTTP server (at least 24 characters).
-- JOB_PLATFORM_IDEMPOTENCY_DB: optional path to protected SQLite storage for durable duplicate-request prevention; use an existing non-world-writable directory outside the repository.
 
 All secrets are read at runtime. **Never commit actual credentials, proxy lists, session state, resumes, or raw browser logs.** The files in this repository contain no real user data.
 
@@ -318,36 +317,7 @@ Routes:
 - `POST /v1/{provider}/resumes/{resume_id}/plan` (dry run only)
 - `PATCH /v1/{provider}/resumes/{resume_id}` (**501 by default**; experimental BIO / CERTIFICATE / SIDEBAR / JOBCONDITION write when explicitly enabled)
 
-Except `/healthz`, routes require `Authorization: Bearer <token>`. The HTTP process maintains a browser session while running. Idempotency is in-process by default; optional SHA-256-only SQLite reservations prevent duplicate submissions across restarts when JOB_PLATFORM_IDEMPOTENCY_DB is configured. Keep it on localhost behind an authenticated TLS reverse proxy if remote access is needed.
-
-## Optional durable HTTP duplicate prevention
-
-The HTTP API normally keeps used Idempotency-Key records in memory,
-which are lost on restart. Configure JOB_PLATFORM_IDEMPOTENCY_DB before
-starting the local server to enable a persistent at-most-once guard:
-
-    export JOB_PLATFORM_IDEMPOTENCY_DB=/private/secure-state/job-platform-idempotency.sqlite3
-    xvfb-run -a job-platform-server --host 127.0.0.1 --port 8000
-
-The parent directory must exist and must not be world writable.
-SQLite uses a file with mode 0600. Only SHA-256 hashes of request
-identities and (optional) request fingerprints are persisted: no
-raw resume content, idempotency keys, login tokens or HTTP responses
-are written to the ledger. Repository ignore rules exclude SQLite
-files; keep the configured file private and on persistent storage.
-
-The server reserves the idempotency key *before* an upstream mutation
-using SQLite's atomic uniqueness constraint. Following a restart,
-any previously used key returns HTTP 409 (indeterminate), **even if
-the earlier request succeeded**. This prevents blindly sending the
-same non-idempotent mutation twice but does not replay completed
-responses across processes. Within one process, successful replies
-remain cached and can be replayed. Inspect the actual 104 state before
-deciding on a fresh key after any ambiguous outcome.
-
-If the database is lost or deleted, duplicate protection is lost too.
-The ledger is not a distributed transaction, does not reconcile remote
-commit uncertainty and does not change the CLI's one-shot semantics.
+Except `/healthz`, routes require `Authorization: Bearer <token>`. The HTTP process maintains a browser session while running. In-process idempotency is not durable across server restarts. Keep it on localhost behind an authenticated TLS reverse proxy if remote access is needed.
 
 ## GitHub Actions
 
