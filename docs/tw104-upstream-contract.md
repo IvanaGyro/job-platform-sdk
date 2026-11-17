@@ -577,3 +577,42 @@ original single item restored. Real GET also rotates file
 access metadata across requests, so the verifier normalizes
 the ordered identities rather than comparing signed URLs.
 No non-adjacent move behavior has been verified.
+
+
+### CUSTOM theme constants, real form normalization and gaps
+
+Frontend 5255 maps themes CLASSIC=1, BANNER=2, TEXT=3,
+IMAGE=4 and MAGAZINE=5. Vuex 4228 POST/PUT normalizes
+duration month selectors and media file types; IMAGE=4
+compresses multiple media to one content entry containing
+a file[] array. In the 2026-11-17 real GET after text
+creation, custom1.formData.custom.content[0] has duration,
+isInProgress, introduction, url and file fields. NONE media
+has empty fileId,url,thumbnailStatus,thumbnailUrl; empty
+month selectors are {}, progress is [].
+
+Native TEXT=3 and no-media CLASSIC=1/BANNER=2 create/update/
+delete requests were accepted. Native IMAGE=4 accepted a
+generated 69-byte PNG and returned file[] length 2 even
+though one image was submitted. MAGAZINE=5 with no media or
+one PNG was rejected. Do not pretend this covers the full
+five-theme editor; investigate required MAGAZINE schema and
+media management.
+
+### PORTFOLIO 3+ insertion semantics
+
+Real three-item 104 sorting from 1 to 3 produces [B,C,A],
+not an endpoint swap [C,B,A]. The SDK's native read-back
+validator now uses a list remove/insert operation for
+PORTFOLIO; all other unverified sortable sections retain
+adjacent-only handling.
+
+### Conversion status source path
+
+Frontend 44aa.GET_THUMBNAIL invokes
+GET /api/resumes/files/convert-status with query
+fileId=OPAQUE and tag=undefined (the default).
+The adapter projects convertStatus and the number of
+preview URLs, without returning signed URLs to the API/CLI.
+The 2026-11-17 real probe failed during authentication,
+so the response is not live-verified.

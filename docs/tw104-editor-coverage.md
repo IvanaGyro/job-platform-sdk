@@ -19,10 +19,10 @@ and successful real 104 writes.** Each is a separate evidence level.
 | `project` | POST, PUT, DELETE; reorder; attachments | No-media CRUD and adjacent reorder; media pending | **SDK create, update and delete verified live and restored**; sorting synthetic |
 | `portfolio` | POST, DELETE; attachments/upload; reorder | LINK=2 POST, FILE=1 bounded binary POST, one-record DELETE, adjacent reorder; preview/conversion pending | **SDK LINK/FILE create-read-delete and two-entry adjacent swap/reverse live verified**; preview/non-adjacent sort untested |
 | `bio` | POST, PUT, DELETE | HTML PUT live-verified; first-create POST and clear DELETE experimental | **PUT only** |
-| `referrer` | POST, PUT, DELETE; reorder | Native record CRUD, empty-form first-create, **exactly-two-record** hardcoded adjacent swap (experimental) | **No** |
+| `referrer` | POST, PUT, DELETE; reorder | Native record CRUD, empty-form first-create, exactly-two-record hardcoded adjacent swap | **SDK create/update/delete live tested and restored**; sort pending |
 | `sidebar` | PUT | Complete-list reorder only; metadata edits rejected | **No** |
 | `layout` | PUT | Theme selection for 11 native sections using current 104 option values (experimental) | **No** |
-| `custom` | POST, PUT, DELETE | **Read-only** custom1..custom6 section/schema discovery plus offline TEXT=3 payload planner; no remote mutation | No |
+| `custom` | POST, PUT, DELETE | **SDK TEXT=3 CRUD live**; CLASSIC/BANNER raw native CRUD live; IMAGE=4 synthetic PNG native create/delete live; MAGAZINE incomplete | TEXT real; others partial |
 | `under18` | POST, PUT | Optional native section/schema **read-only**; no remote writer | No |
 
 For source details see [104 upstream contract](tw104-upstream-contract.md).
@@ -422,3 +422,32 @@ This is an authenticated live test of **one two-entry adjacent
 swap and its reverse**, not a proof of non-adjacent or arbitrary
 multi-record ordering. Signed file tokens and previews are not
 part of the stable displayed identity comparison.
+
+
+### Latest CUSTOM, REFERRER, SKILL, and PORTFOLIO 3+ sorting
+
+An authenticated CUSTOM TEXT=3 SDK POST/PUT/DELETE roundtrip
+was completed and restored. Its native GET is now modeled in
+custom_text_contract.py and exposed through SDK, CLI and local
+bearer-only HTTP. CLASSIC=1 and BANNER=2 native POST/PUT/DELETE
+succeeded with no-media content; IMAGE=4 accepted a synthetic
+69-byte PNG and was deleted. IMAGE GET has a two-entry file
+array even for one submitted image. MAGAZINE=5 POST failed
+both with no media and with one PNG; not yet supported.
+
+The official PORTFOLIO 3-item 1→3 operation is insertion
+([A,B,C] becomes [B,C,A]), not swapping endpoints. An actual
+SDK sort_records test verified this operation with independent
+GET, then safely deleted two synthetic links and preserved
+the existing original portfolio entry. Other sections still
+restrict sorting to adjacent positions unless separately tested.
+
+REFERRER create/update/delete and SKILL create/update/delete
+also passed real SDK tests and exact logical restore. This
+does not establish their advanced theme/sort behavior or
+other conditional editor options.
+
+The official read-only convert-status BFF route is now
+source-mapped through SDK, CLI and HTTP; a live probe
+failed authentication before the request, so conversion
+status/preview is **not** real verified.

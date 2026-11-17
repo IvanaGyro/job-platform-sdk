@@ -40,6 +40,12 @@ from .portfolio_records import (
     portfolio_link_fields, verify_portfolio_link_create,
     portfolio_file_fields, verify_portfolio_file_create,
 )
+from .custom_text_contract import (
+    custom_text_form, custom_text_create_body,
+    custom_text_update_body, custom_delete_body,
+    verify_custom_text_mutation,
+)
+from .portfolio_preview import conversion_file_id,convert_status_summary
 from .referrer_records import (
     referrer_records, referrer_operation_body, verify_referrer_operation,
 )
@@ -764,6 +770,103 @@ class Resume104Client:
                     await asyncio.sleep(0.75)
             raise VerificationError(
                 "104 PORTFOLIO uploaded file; stable record not verified"
+            )
+
+    async def get_portfolio_conversion_status(
+        self, resume_id: str | int, *, position: int,
+        tag: str = "undefined",
+    ) -> dict:
+        """Read the official 104 conversion status for a resume's FILE.
+
+        The source frontend 44aa does not set tag for portfolio GET,
+        producing tag=undefined. Never starts a conversion, downloads
+        protected files, or exposes rotating access URLs.
+        """
+        if not isinstance(tag,str) or not tag or len(tag)>64 or not all(
+            x.isalnum() or x in "_-" for x in tag
+        ):
+            raise UnsupportedWrite("Invalid 104 conversion-status tag")
+        version=self._version(resume_id)
+        before=await self.get_resume(version)
+        file_id=conversion_file_id(before,position=position)
+        raw=await self.transport.get_json(
+            "/api/resumes/files/convert-status",
+            params={"fileId":file_id,"tag":tag},
+        )
+        return {
+            "resume_id":version,"section":"portfolio","position":position,
+            **convert_status_summary(raw),
+        }
+
+    async def mutate_custom_text(
+        self, resume_id: str | int, action: str, *, slot: int,
+        expected_timestamp: int | str,
+        name: str | None = None,
+        introduction_html: str | None = None,
+    ) -> dict:
+        """104 TEXT=3 CUSTOM native POST/PUT/DELETE, verified by fresh GET.
+
+        A real custom1 single-text record lifecycle was confirmed on
+        2026-11-17 with a private empty-slot test and exact restore.
+        Other custom theme/media variants remain unsupported.
+        """
+        if action not in ("create", "update", "delete"):
+            raise UnsupportedWrite("104 CUSTOM TEXT unsupported action")
+        # Every operation uses source-validated 1..6 dynamic slots.
+        if type(slot) is not int or not 1 <= slot <= 6:
+            raise UnsupportedWrite("104 CUSTOM slot must be custom1..custom6")
+        version=self._version(resume_id)
+        async with self._write_lock:
+            before=await self.get_resume(version)
+            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+                raise ConflictError("104 CUSTOM changed before operation")
+            existing=custom_text_form(before,slot=slot)
+            if action=="create":
+                if existing is not None or name is None or introduction_html is None:
+                    raise UnsupportedWrite(
+                        "104 CUSTOM first-create requires an empty slot, name and HTML"
+                    )
+                opts=self._data(await self.transport.get_json("/profile/ajax/options"))
+                body=custom_text_create_body(
+                    slot=slot,name=name,introduction_html=introduction_html,
+                    theme_options=opts,
+                )
+            elif action=="update":
+                if existing is None:
+                    raise UnsupportedWrite("104 CUSTOM update requires a native TEXT form")
+                body=custom_text_update_body(
+                    existing,name=name,introduction_html=introduction_html,
+                )
+            else:
+                if existing is None or name is not None or introduction_html is not None:
+                    raise UnsupportedWrite(
+                        "104 CUSTOM delete requires an existing TEXT slot, no fields"
+                    )
+                body=custom_delete_body(slot=slot)
+            method={"create":"POST","update":"PUT","delete":"DELETE"}[action]
+            await self.transport.request(
+                method,"/profile/ajax/resumeByBlock/custom",
+                params={"vno":version},json_data=body,
+            )
+            for attempt in range(4):
+                try:
+                    after=await self.get_resume(version)
+                    if verify_custom_text_mutation(
+                        before,after,action,slot=slot,body=body
+                    ):
+                        return {
+                            "resume_id":version,"section":f"custom{slot}",
+                            "action":action,"persisted":True,"verified":True,
+                            "atomic":True,"theme":"TEXT",
+                        }
+                except Exception:
+                    raise VerificationError(
+                        "104 CUSTOM submitted, read-back unavailable; inspect first"
+                    ) from None
+                if attempt<3:
+                    await asyncio.sleep(0.75)
+            raise VerificationError(
+                "104 CUSTOM request submitted but target was not verified"
             )
 
     async def mutate_language(

@@ -126,3 +126,58 @@ CERTIFICATE and PROJECT were unchanged.
 The test proves the adjacent two-item swap/reverse behavior
 only. It does not establish non-adjacent moves for three
 or more entries, file checksums, or preview generation.
+
+
+## Subsequent CUSTOM, PORTFOLIO 3-item sort, REFERRER and SKILL tests
+
+A private authenticated test-resume run established:
+- CUSTOM TEXT=3 native POST→GET→PUT→GET→DELETE→GET with
+  a synthetic short title; the native GET under custom1 contains
+  formData.custom.{name,sort,content} and
+  formData.themeChoose.selectedTheme. The NONE-media field in
+  content includes empty fileId, url, thumbnailStatus and
+  thumbnailUrl; duration months are empty objects and
+  isInProgress is an empty array. The client adapter now
+  recognizes and validates this exact native representation.
+  A second live run of the actual Python SDK's text-only
+  create/update/delete confirmed the same behavior and restored
+  the original empty CUSTOM section.
+- CUSTOM CLASSIC=1 and BANNER=2 source-defined native POST,
+  PUT and DELETE completed successfully with a single synthetic
+  no-media content item and exact restore. These themes are
+  **not yet** enabled through the verified SDK writer.
+- CUSTOM IMAGE=4 native POST accepted a generated 69-byte
+  synthetic PNG with no personal content. The returned
+  custom1 image theme used a single content entry whose file
+  array contained two elements, not one (the site adds a
+  placeholder). Native DELETE removed the temporary CUSTOM
+  block; original empty state was independently confirmed.
+- CUSTOM MAGAZINE=5 did **not** accept a no-media content
+  POST, nor a POST with one synthetic PNG image. Both
+  returned an upstream failure; no item was created and the
+  original empty state was confirmed. Its missing mandatory
+  content/media rule still needs discovery.
+- PORTFOLIO native source action 1→3 on a three-item list
+  produced [B,C,A], proving **insertion**, not endpoint swap.
+  A second run using the actual SDK sort_records call
+  returned verified=true, and both temporary links were
+  subsequently deleted, restoring the original single
+  displayed attachment.
+- REFERRER SDK create/update/delete completed using a
+  synthetic reference at example.invalid; independent GET
+  confirmed each change and the original empty REFERRER form
+  was restored. No real person or address was used.
+- SKILL SDK create/update/delete completed using one
+  temporary synthetic skill. The original two real skill
+  records were preserved through read-back and final restore.
+
+A separate read-only conversion-status probe used the exact
+frontend BFF route but its authentication failed before any
+request, so this route is **not** live validated. Conversion,
+preview bytes, thumbnail generation and signed URL contents
+remain outside the completed set.
+
+All full native responses and test scripts remain in private
+Modal files, outside the public repository. No actual
+personal contact, skill content, private resume version or
+credentials are committed.

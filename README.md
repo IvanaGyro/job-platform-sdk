@@ -131,6 +131,46 @@ tests passed; the writer is not yet live write-verified.** This is not a
 generic cross-platform education model. Adjacent ordering is available as
 a separate experimental native swap operation.
 
+### Latest 104 test-resume coverage checkpoint (2026-11-17)
+
+The authorized 104 test resume has now passed additional real
+write/read-back/restore cycles:
+
+- CUSTOM TEXT=3: SDK POST create, PUT update, DELETE clear; exact
+  empty CUSTOM slot restored.
+- CUSTOM CLASSIC=1 and BANNER=2: source-mapped raw native
+  POST/PUT/DELETE succeeded; generic SDK mutation of these themes
+  has **not** yet been enabled.
+- CUSTOM IMAGE=4: a generated blank 69-byte PNG was accepted
+  by the real 104 POST and removed from the empty CUSTOM slot.
+  This does **not** verify media replacement, preview or physical
+  backend file garbage collection.
+- CUSTOM MAGAZINE=5: both a NONE-media and synthetic-image POST
+  were rejected upstream. Remains unsupported until the missing
+  payload/validation requirement is identified.
+- PORTFOLIO: the native three-entry 1→3 action uses **insertion**,
+  not an endpoint swap. The SDK independently verified this move
+  with two synthetic links, then deleted both and confirmed the
+  original displayed file remained.
+- REFERRER: SDK create, update and delete verified with an
+  example.invalid synthetic contact; original empty block restored.
+- SKILL: SDK create, update and delete verified with a temporary
+  synthetic skill; the original two records were preserved.
+
+Read-only PORTFOLIO conversion status now uses the exact official
+BFF route /api/resumes/files/convert-status. It reports only status
+and preview count, **never signed preview URLs**, and does not
+request conversion. A real conversion-status GET attempt hit
+an authentication error, so the feature is source-mapped and
+synthetic-tested but not real status-verified.
+
+**Still incomplete:** CUSTOM MAGAZINE and complex media update
+flows, account-level certification CRUD/links, binary previews/
+thumbnail/conversion, remaining INFO/UNDER18/SIDEBAR fields and
+live tests for EDUCATION/EXPERIENCE/LANGUAGE/JOB_CONDITION.
+See the PR body's completed/unfinished checklist and the
+[redacted integration report](docs/tw104-live-smoke-report.md).
+
 ### Read-only dynamic CUSTOM slots and UNDER18
 
 Full 104 resume GET responses can include dynamically numbered

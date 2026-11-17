@@ -5,9 +5,10 @@ Frontend actions a41b (SKILL), 8ea9 (EDUCATION), 96e2 (LANGUAGE),
 exactly 2 entries only; editor hardcodes from=2,to=1).
 For LANGUAGE, its sortable groups are independent and the UI supplies
 both foreign and local sort branches (the inactive branch contains []).
-Only *adjacent* moves are implemented. A two-entry PORTFOLIO
-adjacent swap and reverse were verified live on 2026-11-17;
-non-adjacent swap-vs-insertion semantics remain unverified.
+All sections except PORTFOLIO still support adjacent moves only.
+PORTFOLIO 1-to-3 non-adjacent ordering was verified live on
+2026-11-17 and follows insertion semantics: remove the source row
+and insert at the destination, rather than exchanging endpoints.
 """
 from __future__ import annotations
 
@@ -68,9 +69,12 @@ def sort_body(
         or isinstance(to_position, bool) or not isinstance(to_position, int)
         or not 1 <= from_position <= len(records)
         or not 1 <= to_position <= len(records)
-        or abs(from_position - to_position) != 1
+        or from_position == to_position
+        or (section != "portfolio" and abs(from_position - to_position) != 1)
     ):
-        raise UnsupportedWrite("104 sort supports only adjacent 1-based positions")
+        raise UnsupportedWrite(
+            "104 sort supports only adjacent moves except PORTFOLIO insertion"
+        )
     # Independent read-back cannot distinguish two otherwise identical rows.
     if section == "portfolio":
         # Signed fileId/url/preview tokens can rotate between native GETs.
@@ -114,9 +118,15 @@ def verify_sort(
     else:
         expected = [_without_sort(row) for row in old]
         actual = [_without_sort(row) for row in new]
-    expected[from_position - 1], expected[to_position - 1] = (
-        expected[to_position - 1], expected[from_position - 1]
-    )
+    if section == "portfolio":
+        # A real 104 GET after 1->3 in a 3-item portfolio displayed
+        # [B,C,A], not [C,B,A]. This is an insertion move.
+        moved=expected.pop(from_position-1)
+        expected.insert(to_position-1,moved)
+    else:
+        expected[from_position - 1], expected[to_position - 1] = (
+            expected[to_position - 1], expected[from_position - 1]
+        )
     if actual != expected:
         return False
 

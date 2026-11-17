@@ -114,7 +114,8 @@ class Transport:
         move=body["blockValueList"]["portfolio"]["portfolios"]["sort"]
         rows=self.owner.doc["portfolio"]["formData"]["portfolios"]
         i,j=move["from"]-1,move["to"]-1
-        rows[i],rows[j]=rows[j],rows[i]
+        moved=rows.pop(i)
+        rows.insert(j,moved)
         for pos,row in enumerate(rows,1):
             row["sort"]=pos
         self.owner.doc["resumeTimestamp"]+=1
@@ -289,6 +290,54 @@ class PortfolioTests(unittest.IsolatedAsyncioTestCase):
         rows[1]["attach"]["name"]=rows[0]["attach"]["name"]
         with self.assertRaises(UnsupportedWrite):
             sort_body(before,"portfolio",1,2)
+
+    async def test_real_three_item_nonadjacent_insert_reposition(self):
+        triple=deepcopy(POPULATED)
+        third=deepcopy(SECOND)
+        third["name"]="Synthetic unique third attachment"
+        third["attach"]["name"]="synthetic-third.pdf"
+        third["sort"]=3
+        triple["portfolio"]["formData"]["portfolios"].append(third)
+        body=sort_body(triple,"portfolio",1,3)
+        self.assertEqual(
+            body["blockValueList"]["portfolio"]["portfolios"]["sort"],
+            {"from":1,"to":3},
+        )
+        client=Client(triple)
+        before=await client.get_resume("synthetic")
+        result=await client.sort_records(
+            "synthetic","portfolio",1,3,expected_timestamp=100,
+        )
+        self.assertTrue(result["verified"])
+        after=await client.get_resume("synthetic")
+        self.assertTrue(verify_sort(before,after,"portfolio",1,3))
+        self.assertEqual(
+            [x["name"] for x in portfolio_records(after)],
+            [SECOND["name"],third["name"],FIRST["name"]],
+        )
+        back=await client.sort_records(
+            "synthetic","portfolio",3,1,expected_timestamp=101,
+        )
+        self.assertTrue(back["verified"])
+        final=await client.get_resume("synthetic")
+        self.assertEqual(
+            [x["name"] for x in portfolio_records(final)],
+            [FIRST["name"],SECOND["name"],third["name"]],
+        )
+
+    def test_nonadjacent_order_is_insert_not_endpoint_swap(self):
+        doc=deepcopy(POPULATED)
+        third=deepcopy(SECOND)
+        third["name"]="Third"
+        third["attach"]["name"]="third.pdf"
+        third["sort"]=3
+        doc["portfolio"]["formData"]["portfolios"].append(third)
+        wrong=deepcopy(doc)
+        rows=wrong["portfolio"]["formData"]["portfolios"]
+        rows[0],rows[2]=rows[2],rows[0]
+        for i,row in enumerate(rows,1):
+            row["sort"]=i
+        self.assertFalse(verify_sort(doc,wrong,"portfolio",1,3))
 
     def test_rejects_changes_to_other_attachments(self):
         old=deepcopy(POPULATED)

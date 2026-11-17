@@ -34,6 +34,19 @@ def _parser() -> argparse.ArgumentParser:
     )
     cert_plan.add_argument("--ids-file", default=None)
     cert_plan.add_argument("--record-id", type=int, default=None)
+    custom_write = sub.add_parser(
+        "custom-text",
+        help="104 native CUSTOM TEXT=3 create/update/delete with read-back",
+    )
+    custom_write.add_argument("resume_id")
+    custom_write.add_argument("action", choices=["create","update","delete"])
+    custom_write.add_argument("--slot",type=int,required=True)
+    custom_write.add_argument("--name",default=None)
+    custom_write.add_argument("--html-file",default=None)
+    custom_write.add_argument("--if-match",required=True)
+    custom_write.add_argument(
+        "--confirm",choices=["experimental-custom-write"],required=True,
+    )
     custom_plan = sub.add_parser(
         "custom-text-plan",
         help="Offline source-mapped CUSTOM TEXT=3 request planning; never sends a write",
@@ -115,6 +128,12 @@ def _parser() -> argparse.ArgumentParser:
     theme.add_argument("selected_theme", type=int)
     theme.add_argument("--if-match", required=True)
     theme.add_argument("--confirm", choices=["experimental-theme-write"], required=True)
+    portfolio_status = sub.add_parser(
+        "portfolio-conversion",
+        help="Read a PORTFOLIO file conversion status; no write or signed URLs",
+    )
+    portfolio_status.add_argument("resume_id")
+    portfolio_status.add_argument("--position",type=int,required=True)
     portfolio_file = sub.add_parser(
         "portfolio-file", help="104 PORTFOLIO binary file upload (EXPERIMENTAL)"
     )
@@ -233,6 +252,28 @@ async def _run(args):
             result = await client.get_section(args.resume_id, args.section)
         elif args.command == "create":
             result = await client.create_resume()
+        elif args.command == "custom-text":
+            if args.action == "create" and (
+                not args.name or not args.html_file
+            ):
+                raise ValueError("CUSTOM create requires --name and --html-file")
+            if args.action == "update" and (
+                args.name is None and args.html_file is None
+            ):
+                raise ValueError("CUSTOM update needs name or HTML")
+            if args.action == "delete" and (
+                args.name is not None or args.html_file is not None
+            ):
+                raise ValueError("CUSTOM delete accepts no changed fields")
+            result = await client.mutate_custom_text(
+                args.resume_id,args.action,slot=args.slot,
+                expected_timestamp=args.if_match.strip('"'),
+                name=args.name,
+                introduction_html=(
+                    Path(args.html_file).read_text(encoding="utf-8")
+                    if args.html_file is not None else None
+                ),
+            )
         elif args.command == "certificate-block":
             if (args.action == "initialize") != (args.others_file is not None):
                 raise ValueError("--others-file required only for initialize")
@@ -283,6 +324,10 @@ async def _run(args):
                 await operation(args.resume_id, args.kind, args.action, **params)
                 if args.section == "language"
                 else await operation(args.resume_id, args.action, **params)
+            )
+        elif args.command == "portfolio-conversion":
+            result = await client.get_portfolio_conversion_status(
+                args.resume_id,position=args.position,
             )
         elif args.command == "portfolio-file":
             result = await client.upload_portfolio_file(

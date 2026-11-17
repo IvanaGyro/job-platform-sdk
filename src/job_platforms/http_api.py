@@ -39,6 +39,10 @@ from job_platforms.providers.tw104.transport import (
 from job_platforms.providers.tw104.certificate_block_actions import (
     certificate_block_body,
 )
+from job_platforms.providers.tw104.custom_text_contract import (
+    custom_text_form, custom_text_create_body, custom_text_update_body,
+    custom_delete_body,
+)
 from job_platforms.providers.tw104.language_records import language_operation_body, KINDS as LANGUAGE_KINDS
 from job_platforms.providers.tw104.layout_theme import THEME_OPTION_KEYS, theme_body
 from job_platforms.providers.tw104.record_sort import SORTABLE, sort_body
@@ -129,6 +133,7 @@ def create_app(
                 ],
                 "experimental_theme_sections": list(THEME_OPTION_KEYS),
                 "experimental_sort_sections": list(SORTABLE),
+                "experimental_custom_text_actions": ["create","update","delete"],
                 "experimental_bio_actions": ["create", "clear"],
                 "experimental_record_operations": {
                     "skill": ["create", "update", "delete"],
@@ -176,6 +181,137 @@ def create_app(
                 return await request.app.state.client.get_schema(resume_id)
         except JobPlatformError as exc:
             translate_error(exc)
+
+    async def custom_text_http(
+        resume_id: str,request: Request,action: str,slot: int,
+        changes: dict | None,if_match: str | None,
+        idempotency_key: str | None,
+    ):
+        if not allow_experimental_writes:
+            raise HTTPException(501,"104 CUSTOM requires experimental opt-in")
+        if if_match is None:
+            raise HTTPException(428,"If-Match resumeTimestamp required")
+        if not idempotency_key or len(idempotency_key)<16:
+            raise HTTPException(400,"Idempotency-Key needs at least 16 characters")
+        if type(slot) is not int or not 1<=slot<=6:
+            raise HTTPException(422,"CUSTOM slot must be 1 through 6")
+        if not isinstance(changes,dict) or set(changes)-{
+            "name","introduction_html"
+        }:
+            raise HTTPException(422,"Unknown CUSTOM text field")
+        name=changes.get("name")
+        html=changes.get("introduction_html")
+        if action=="create" and (
+            set(changes)!={"name","introduction_html"}
+        ):
+            raise HTTPException(422,"CUSTOM create needs name and introduction_html")
+        if action=="update" and not changes:
+            raise HTTPException(422,"CUSTOM update needs changed fields")
+        if action=="delete" and changes:
+            raise HTTPException(422,"CUSTOM delete takes no fields")
+        expected=if_match.strip('"')
+        fingerprint=hashlib.sha256(json.dumps({
+            "action":action,"slot":slot,"changes":changes,
+            "timestamp":expected,
+        },sort_keys=True,ensure_ascii=False).encode("utf-8")).hexdigest()
+        key=("CUSTOM_TEXT",resume_id,idempotency_key)
+        async with request.app.state.action_lock:
+            record=request.app.state.idempotency_results.get(key)
+            if record is not None:
+                if record["fingerprint"]!=fingerprint:
+                    raise HTTPException(409,"Idempotency-Key reused for different operation")
+                if record["state"]!="succeeded":
+                    raise HTTPException(409,"CUSTOM write outcome uncertain; inspect first")
+                return record["result"]
+            try:
+                before=await request.app.state.client.get_resume(resume_id)
+                if str(before.get("resumeTimestamp"))!=expected:
+                    raise HTTPException(412,"Resume changed since prior GET")
+                existing=custom_text_form(before,slot=slot)
+                if action=="create":
+                    if existing is not None:
+                        raise UnsupportedWrite("CUSTOM slot already exists")
+                    opts=request.app.state.client._data(
+                        await request.app.state.client.transport.get_json(
+                            "/profile/ajax/options"
+                        )
+                    )
+                    custom_text_create_body(
+                        slot=slot,name=name,introduction_html=html,
+                        theme_options=opts,
+                    )
+                elif action=="update":
+                    if existing is None:
+                        raise UnsupportedWrite("CUSTOM slot absent")
+                    custom_text_update_body(
+                        existing,name=name,introduction_html=html,
+                    )
+                else:
+                    if existing is None:
+                        raise UnsupportedWrite("CUSTOM slot absent")
+                    custom_delete_body(slot=slot)
+            except (UnsupportedWrite,ValueError,KeyError,TypeError):
+                raise HTTPException(422,"Invalid or unsupported CUSTOM TEXT fields") from None
+            except JobPlatformError as exc:
+                translate_error(exc)
+            entry={"fingerprint":fingerprint,"state":"indeterminate"}
+            request.app.state.idempotency_results[key]=entry
+            try:
+                result=await request.app.state.client.mutate_custom_text(
+                    resume_id,action,slot=slot,expected_timestamp=expected,
+                    name=name,introduction_html=html,
+                )
+            except JobPlatformError as exc:
+                translate_error(exc)
+            else:
+                entry.update({"state":"succeeded","result":result})
+                return result
+
+    @app.post(
+        "/v1/tw104/resumes/{resume_id}/custom-text",
+        dependencies=[Depends(authorize)],
+    )
+    async def create_custom_text(
+        resume_id: str,request: Request,changes: dict = Body(...),
+        if_match: str | None = Header(default=None,alias="If-Match"),
+        idempotency_key: str | None = Header(default=None,alias="Idempotency-Key"),
+    ):
+        slot=changes.get("slot")
+        if type(slot) is not int:
+            raise HTTPException(422,"CUSTOM slot is required")
+        payload={k:v for k,v in changes.items() if k!="slot"}
+        return await custom_text_http(
+            resume_id,request,"create",slot,payload,
+            if_match,idempotency_key,
+        )
+
+    @app.put(
+        "/v1/tw104/resumes/{resume_id}/custom-text/{slot}",
+        dependencies=[Depends(authorize)],
+    )
+    async def update_custom_text(
+        resume_id: str,slot: int,request: Request,changes: dict=Body(...),
+        if_match: str | None = Header(default=None,alias="If-Match"),
+        idempotency_key: str | None = Header(default=None,alias="Idempotency-Key"),
+    ):
+        return await custom_text_http(
+            resume_id,request,"update",slot,changes,
+            if_match,idempotency_key,
+        )
+
+    @app.delete(
+        "/v1/tw104/resumes/{resume_id}/custom-text/{slot}",
+        dependencies=[Depends(authorize)],
+    )
+    async def delete_custom_text(
+        resume_id: str,slot: int,request: Request,
+        if_match: str | None = Header(default=None,alias="If-Match"),
+        idempotency_key: str | None = Header(default=None,alias="Idempotency-Key"),
+    ):
+        return await custom_text_http(
+            resume_id,request,"delete",slot,{},
+            if_match,idempotency_key,
+        )
 
     @app.get(
         "/v1/tw104/resumes/{resume_id}/custom-slots",
@@ -915,6 +1051,22 @@ def create_app(
             changes=changes, if_match=if_match,
             idempotency_key=idempotency_key,
         )
+
+    @app.get(
+        "/v1/tw104/resumes/{resume_id}/portfolios/{position}/conversion",
+        dependencies=[Depends(authorize)],
+    )
+    async def portfolio_conversion_status_http(
+        resume_id: str,position: int,request: Request,
+    ):
+        """Read-only current FILE conversion, no signed preview URLs."""
+        try:
+            async with request.app.state.action_lock:
+                return await request.app.state.client.get_portfolio_conversion_status(
+                    resume_id,position=position,
+                )
+        except JobPlatformError as exc:
+            translate_error(exc)
 
     @app.post(
         "/v1/tw104/resumes/{resume_id}/portfolio-files",

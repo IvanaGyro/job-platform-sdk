@@ -3,9 +3,11 @@
 104 front-end Vuex custom module 4228 postData() and theme constants
 5255 (TEXT=3) define the payload below. Unlike the other native
 writers, CUSTOM uses dynamically numbered slots custom1..custom6 and
-the actual populated GET/read-back contract has not been observed.
-Consequently this module deliberately only serializes/validates
-requests. No SDK mutation, HTTP write, or CLI write is enabled.
+a real populated GET was observed on an authorized test resume
+2026-11-17. The TEXT=3 one-record POST/PUT/DELETE lifecycle was
+independently verified and restored, including a second
+live Python SDK wrapper create/update/delete test. Other themes and media remain
+unimplemented.
 
 The official UI creates a content item with duration, isInProgress,
 introduction, url, and file. For TEXT theme postData() normalizes
@@ -74,10 +76,8 @@ def custom_text_create_body(
 ) -> dict:
     """Exact text-only outgoing POST shape from 4228.postData().
 
-    No account/remote state is read here, so callers MUST NOT send
-    this body before separately verifying that the custom slot is
-    available, the session version is current, and a fresh GET has
-    a known read-back schema.
+    Caller must verify that the target slot is currently absent
+    and that the native version has not changed before network POST.
     """
     number = _slot(slot)
     label = _safe_text(name, "name", 30, required=True)
@@ -110,7 +110,7 @@ def custom_text_create_body(
 
 
 def custom_delete_body(*, slot: int) -> dict:
-    """Source-observed one-slot DELETE, no network call."""
+    """Source-observed one-slot DELETE, live-verified for only custom1."""
     number = _slot(slot)
     return {"blockValueList": {
         "custom": {"custom": {"sort": [number]}},
@@ -123,8 +123,8 @@ def custom_text_update_body(
 ) -> dict:
     """Plan text-only PUT from an exact, caller-owned GET form.
 
-    This rejects any unknown media or additional content instead of
-    overwriting it with NONE. It is a serializer, not a remote write.
+    Reject unknown media/additional content before reconstructing the
+    site-native text-only payload. This path passed a real live PUT.
     """
     if name is None and introduction_html is None:
         raise UnsupportedWrite("104 CUSTOM update needs at least one change")
@@ -173,7 +173,7 @@ def custom_text_update_body(
         if key == "type":
             continue
         if key not in {
-            "url", "src", "fileId", "thumbnailUrl", "content", "ext",
+            "url", "src", "fileId", "thumbnailStatus", "thumbnailUrl", "content", "ext",
         } or value not in (None, ""):
             raise UnsupportedWrite("104 CUSTOM text has unexpected media metadata")
     if row["isInProgress"] not in (False, 0, []):
@@ -192,3 +192,67 @@ def custom_text_update_body(
         slot=number, name=name, introduction_html=introduction_html,
         theme_options={"optionsCustomTheme": [{"value": TEXT_THEME}]},
     )
+
+def custom_text_form(doc: dict, *, slot: int) -> dict | None:
+    """Extract the real populated TEXT=3 native GET and fail closed.
+
+    Native GET materializes new CUSTOM as customN rather than a
+    top-level custom section. Tested formData contains:
+    custom:{name,sort,content:[...]}, themeChoose.selectedTheme object.
+    """
+    number=_slot(slot)
+    try:
+        section=doc.get(f"custom{number}")
+        if section is None:
+            return None
+        if not isinstance(section,dict):
+            raise UnsupportedWrite("104 CUSTOM section type changed")
+        form=section["formData"]
+        # No-op title patch validates native media, dates and text.
+        custom_text_update_body(form,name=form["custom"]["name"])
+        if form["custom"]["sort"]!=number:
+            raise UnsupportedWrite("104 CUSTOM native slot mismatch")
+        return deepcopy(form)
+    except (KeyError,TypeError,IndexError):
+        raise UnsupportedWrite("104 CUSTOM populated form shape changed") from None
+
+
+def verify_custom_text_mutation(
+    before: dict, after: dict, action: str, *, slot: int,
+    body: dict,
+) -> bool:
+    """Verify TEXT fields and preservation of all other CUSTOM slots."""
+    number=_slot(slot)
+    target=f"custom{number}"
+    slots={f"custom{n}" for n in range(1,7)}
+    old_set={k for k in before if k in slots}
+    new_set={k for k in after if k in slots}
+    for k in old_set | new_set:
+        if k != target and before.get(k) != after.get(k):
+            return False
+    if action=="delete":
+        return target in old_set and target not in new_set
+    if action=="create" and (
+        target in old_set or new_set != old_set | {target}
+    ):
+        return False
+    if action=="update" and (target not in old_set or target not in new_set):
+        return False
+    try:
+        current=custom_text_form(after,slot=number)
+    except UnsupportedWrite:
+        return False
+    if current is None:
+        return False
+    expected=body["blockValueList"]["custom"]
+    item=current["custom"]
+    desired=expected["custom"]
+    if (
+        item["name"]!=desired["name"]
+        or item["sort"]!=desired["sort"]
+        or current["themeChoose"]["selectedTheme"]["value"]!=TEXT_THEME
+        or len(item["content"])!=1
+    ):
+        return False
+    row=item["content"][0]
+    return row["introduction"]==desired["content"][0]["introduction"]
