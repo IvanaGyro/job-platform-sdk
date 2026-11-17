@@ -494,3 +494,27 @@ and supplies img fields type, fileId, url, thumbnailStatus,
 thumbnailUrl, the latter four empty for NONE type 0.
 PROJECT one-item DELETE returned the original empty formData.
 See tw104-live-smoke-report.md.
+
+
+### Optional dynamic section GET exposure
+
+The native editor registers up to six CUSTOM slots (custom1..custom6).
+The current client exposes these section names and optional under18
+in full-resume schema/get-section results, without implementing a
+write serializer for either group. list_custom_slots enumerates
+only actual object keys returned by the current GET; missing slots
+stay absent. The designated authenticated test resume included
+no custom1..custom6 or under18 top-level entries.
+
+
+### Real corrected SDK wrapper lifecycle
+
+A second authenticated same-origin test used
+Resume104Client.mutate_certificate_block for initialization and
+clear; both methods returned persisted/verified and restored
+the exact original empty certificate form. In the same session,
+Resume104Client.mutate_project executed POST create, PUT update
+and DELETE for a temporary no-media record. All three were
+independently verified, and the section was restored to
+empty formData. These are real SDK tests, not just source
+mapping or HTTP 200-only observations.

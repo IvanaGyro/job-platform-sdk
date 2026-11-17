@@ -172,6 +172,17 @@ def create_app(
             translate_error(exc)
 
     @app.get(
+        "/v1/tw104/resumes/{resume_id}/custom-slots",
+        dependencies=[Depends(authorize)],
+    )
+    async def list_native_custom_slots(resume_id: str, request: Request):
+        try:
+            async with request.app.state.action_lock:
+                return await request.app.state.client.list_custom_slots(resume_id)
+        except JobPlatformError as exc:
+            translate_error(exc)
+
+    @app.get(
         "/v1/{provider}/resumes/{resume_id}/sections/{section}",
         dependencies=[Depends(authorize)],
     )

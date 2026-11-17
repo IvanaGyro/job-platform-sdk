@@ -131,20 +131,40 @@ tests passed; the writer is not yet live write-verified.** This is not a
 generic cross-platform education model. Adjacent ordering is available as
 a separate experimental native swap operation.
 
+### Read-only dynamic CUSTOM slots and UNDER18
+
+Full 104 resume GET responses can include dynamically numbered
+CUSTOM sections from custom1 through custom6, as well as an optional
+UNDER18 section on relevant profiles. The SDK now exposes these
+native keys for read-only field/schema introspection without guessing
+which fields are editable.
+
+- CLI: job-platform custom-slots VERSION_NO
+- CLI: job-platform get-section VERSION_NO custom1
+- CLI: job-platform get-section VERSION_NO under18
+- HTTP: GET /v1/tw104/resumes/{resume_id}/custom-slots
+- HTTP: GET /v1/tw104/resumes/{resume_id}/sections/custom1
+- SDK: client.list_custom_slots(version_no), client.get_section(...)
+
+The custom-slots response includes detected names and field
+schemas only, not full personal values; get-section returns the
+actual private section contents and is bearer-protected in HTTP.
+If the full GET does not include a dynamic slot, it is not invented.
+No dynamic CUSTOM or UNDER18 mutation route has been enabled.
+
 ### Live 104 test-resume verification (2026-11-17)
 
 A user-authorized test resume has now independently verified and
 restored CERTIFICATE first PUT + text-only DELETE and PROJECT no-media
-POST + record DELETE. The true CERTIFICATE GET has
+POST + record PUT update + record DELETE, **using the actual SDK wrappers**. The true CERTIFICATE GET has
 certifications:[] and can omit certificates even though the PUT sends
 certificates:[]. The decoder and source-mapped projection now handle
 this link-free form, while rejecting unverified attached records.
 Real PROJECT GET returns month selectors, an array-valued progress
 state and an object-valued NONE cover.
 
-PROJECT updates, sorting, PORTFOLIO link/media changes, all CUSTOM
-writes, global certificate CRUD and resume associations are not yet
-verified live. A PORTFOLIO link test aborted before network mutation
+PROJECT sorting, PORTFOLIO link/media changes, all CUSTOM writers,
+global certificate CRUD and resume associations are not yet verified live. A PORTFOLIO link test aborted before network mutation
 because an existing attachment did not match the initial private
 snapshot. See docs/tw104-live-smoke-report.md for a redacted report.
 
@@ -219,10 +239,11 @@ entries**, to prevent breaking other certification associations. All
 actions use the normal optimistic timestamp and independent read-back;
 HTTP also uses opt-in bearer authorization and in-memory idempotency.
 
-**Synthetic-only:** 104 has not accepted or restored these native
-operations in a real write test. Account-wide certification creation,
-edits, deletion, suggestion search and certificationConnect
-association/disassociation remain unimplemented.
+**Live-verified:** the corrected native SDK certificate-block
+initialize and clear completed a real PUT/GET/DELETE/GET cycle on the
+designated test resume, independently restoring the empty section.
+Account-wide certification CRUD, suggestion search and
+certificationConnect association/disassociation remain unimplemented.
 
 ### Experimental 104 PROJECT and PORTFOLIO actions
 

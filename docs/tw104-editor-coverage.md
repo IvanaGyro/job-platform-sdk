@@ -14,16 +14,16 @@ and successful real 104 writes.** Each is a separate evidence level.
 | `experience` | POST, PUT, DELETE; ordering, seniority | Seniority-only PUT + native record CRUD (experimental); record ordering pending | **No** |
 | `jobCondition` | PUT; separate layout/theme PUT | Source-mapped full native form serializer, experimental | **No** |
 | `skill` | POST, PUT, DELETE; ordering | Source-mapped record CRUD + adjacent swap sorting (experimental) | **No** |
-| `certificate` | PUT, DELETE; certification connections | Existing text PUT plus first-empty PUT and guarded clear; global associations excluded | **Initialize PUT + clear DELETE verified and restored**; corrected SDK wrapper synthetic |
+| `certificate` | PUT, DELETE; certification connections | Existing text PUT plus first-empty PUT and guarded clear; global associations excluded | **SDK initialize + clear verified and restored live** |
 | `language` | POST, PUT, DELETE; local/foreign records | Native local/foreign record CRUD + adjacent local/foreign sorting (experimental); linked certificates blocked | **No** |
-| `project` | POST, PUT, DELETE; reorder; attachments | No-media CRUD and adjacent reorder; media pending | **First-create POST and DELETE verified and restored**; update/sort synthetic |
+| `project` | POST, PUT, DELETE; reorder; attachments | No-media CRUD and adjacent reorder; media pending | **SDK create, update and delete verified live and restored**; sorting synthetic |
 | `portfolio` | POST, DELETE; attachments/upload; reorder | Link-only multipart POST (LINK=2), one-record DELETE, adjacent reorder experimental; file uploads/previews pending | **No** |
 | `bio` | POST, PUT, DELETE | HTML PUT live-verified; first-create POST and clear DELETE experimental | **PUT only** |
 | `referrer` | POST, PUT, DELETE; reorder | Native record CRUD, empty-form first-create, **exactly-two-record** hardcoded adjacent swap (experimental) | **No** |
 | `sidebar` | PUT | Complete-list reorder only; metadata edits rejected | **No** |
 | `layout` | PUT | Theme selection for 11 native sections using current 104 option values (experimental) | **No** |
-| `custom` | POST, PUT, DELETE | Offline TEXT=3 create/update/delete request serializer and CLI; **no remote write** | No |
-| `under18` | POST, PUT | Not implemented | No |
+| `custom` | POST, PUT, DELETE | **Read-only** custom1..custom6 section/schema discovery plus offline TEXT=3 payload planner; no remote mutation | No |
+| `under18` | POST, PUT | Optional native section/schema **read-only**; no remote writer | No |
 
 For source details see [104 upstream contract](tw104-upstream-contract.md).
 Some frontend functions call additional endpoints not in `resumeByBlock`, such
@@ -102,8 +102,9 @@ designed for other job platforms.
   and CLI. All mutations use version checks and independent read-back; HTTP
   additionally requires a bearer token, experimental opt-in and a unique
   idempotency key. No durability beyond a single HTTP process is claimed.
-- This revision uses **synthetic tests only** for all new operations.
-  **BIO remains the only real 104 edit/write/restore-verified operation.**
+- This initial checkpoint used synthetic tests only for the new
+  record writers. Later 2026-11-17 integration additionally verified
+  PROJECT CRUD and the CERTIFICATE block lifecycle on a real test resume.
 
 
 ## 2026-11-17 incremental coverage
@@ -126,8 +127,9 @@ designed for other job platforms.
   and CLI. All mutations use version checks and independent read-back; HTTP
   additionally requires a bearer token, experimental opt-in and a unique
   idempotency key. No durability beyond a single HTTP process is claimed.
-- This revision uses **synthetic tests only** for all new operations.
-  **BIO remains the only real 104 edit/write/restore-verified operation.**
+- This initial checkpoint used synthetic tests only for the new
+  record writers. Later 2026-11-17 integration additionally verified
+  PROJECT CRUD and the CERTIFICATE block lifecycle on a real test resume.
 
 
 ### INFO scope (2026-11-17)
@@ -216,7 +218,7 @@ PROJECT no-media create/update/delete is mapped to frontend module
 1d22. Native wire JSON uses projects[] and a theme selection; the
 first POST initializes an empty form with the site-provided theme.
 The encoder intentionally disallows uploading or overwriting media,
-and cannot yet guarantee real populated GET compatibility. One-record
+and now normalizes the real observed populated GET shape. One-record
 PORTFOLIO delete follows module 44aa; its payload contains
 blockValueList.portfolio.sort as a list. The link-only multipart POST now constructs FormData in the same-origin
 authenticated browser. Binary file upload, conversion and asynchronous
@@ -224,9 +226,10 @@ thumbnail generation remain missing.
 
 PROJECT and PORTFOLIO adjacent sorting use swapRecordBySort and
 independent sibling-preserving read-back. Non-adjacent sorting remains
-unsupported until its move-vs-swap semantics are verified. All new
-write/sort operations are **synthetic-only**; no remote mutations
-were made to the real resume or attachment.
+unsupported until its move-vs-swap semantics are verified. PROJECT
+create/update/delete have since passed real SDK-level write/readback/
+restore, while PROJECT/PORTFOLIO sorting and PORTFOLIO writes
+remain synthetic-only. No existing attachment was mutated.
 
 
 ### PORTFOLIO link-only multipart POST (2026-11-17)
@@ -322,3 +325,29 @@ metadata are now covered by synthetic regression tests.
 PORTFOLIO link testing aborted before writing because the previous
 private snapshot's attachment identity did not match a fresh read.
 See the separate redacted report tw104-live-smoke-report.md.
+
+
+### Dynamic CUSTOM and UNDER18 read-only introspection
+
+The SDK section allowlist includes the optional under18 section
+and numbered custom1 to custom6 keys. It returns only sections
+actually present in the full native resume GET, and the new
+list_custom_slots method supplies schemas for discovered CUSTOM
+blocks without returning personal content.
+
+HTTP /custom-slots and CLI custom-slots expose this read-only
+discovery. Missing dynamic sections are not synthesized and all
+custom/under18 write paths remain unsupported. The user's test
+resume has no CUSTOM or UNDER18 keys in its authenticated GET;
+populated dynamic response shapes are not yet real-verified.
+
+
+### Second completed SDK write/read-back/restore cycle
+
+After adjusting the CERTIFICATE GET model, the authenticated SDK
+successfully ran certificate initialize and clear, plus PROJECT
+create, update and delete, all independently verifying their native
+result. Final GET confirmed the two sections were empty and BIO
+remained unchanged. All three PROJECT mutation methods are now
+**live tested**, but PROJECT sorting and media editing are not.
+See tw104-live-smoke-report.md.

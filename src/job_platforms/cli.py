@@ -49,6 +49,11 @@ def _parser() -> argparse.ArgumentParser:
     get.add_argument("resume_id")
     schema = sub.add_parser("schema", help="Print the nested field schema")
     schema.add_argument("resume_id")
+    custom_slots = sub.add_parser(
+        "custom-slots",
+        help="Inspect discovered native custom1..custom6 schema without writing",
+    )
+    custom_slots.add_argument("resume_id")
     section = sub.add_parser("get-section", help="Read one native resume section")
     section.add_argument("resume_id")
     section.add_argument("section", choices=Resume104Client.SECTIONS)
@@ -197,6 +202,8 @@ async def _run(args):
             result = await client.get_resume(args.resume_id)
         elif args.command == "schema":
             result = await client.get_schema(args.resume_id)
+        elif args.command == "custom-slots":
+            result = await client.list_custom_slots(args.resume_id)
         elif args.command == "get-section":
             result = await client.get_section(args.resume_id, args.section)
         elif args.command == "create":

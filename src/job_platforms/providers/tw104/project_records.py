@@ -6,8 +6,10 @@ outside this adapter. Creation accepts only no-asset PROJECT entries.
 Updates are allowed only when the existing entry has no media, so they
 cannot silently discard a previously uploaded cover/video.
 
-The user's test resume's PROJECT formData was empty in a live read-only
-GET; POST/PUT/DELETE have not been live-verified or restored.
+The user's test resume started with empty PROJECT formData. On
+2026-11-17, an authenticated SDK create/update/delete cycle completed
+and the original empty formData was independently restored. Sorting
+and project media workflows remain synthetic-only.
 """
 from __future__ import annotations
 

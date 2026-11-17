@@ -8,9 +8,9 @@ These actions affect the resume's certificate block only. They DO NOT
 create, delete, connect or disconnect account-level certifications.
 Clearing is deliberately supported only when no certificate IDs are
 linked, preventing accidental loss of associations.
-Initial PUT succeeded in a private real 104 test on 2026-11-17;
-the first live read-back showed certifications[], not certificates[].
-Clear and round-trip restoration must be evaluated separately.
+The first private real 104 GET showed certifications[], not
+certificates[]. A second authenticated test completed the corrected
+SDK initialize+clear cycle with independent read-back and restoration.
 """
 from __future__ import annotations
 

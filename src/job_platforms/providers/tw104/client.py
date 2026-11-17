@@ -1,7 +1,9 @@
 """104 resume read, create and local multi-field editing.
 
-Persisted edits to existing resumes deliberately remain unsupported until
-each upstream section writer has been verified against website read-back.
+Native 104 section writers are strict, versioned and verified by readback.
+BIO PUT, PROJECT no-media CRUD and CERTIFICATE block lifecycle have
+passed authenticated test-resume round trips. Other native operations
+remain experimental or read-only, as documented by section.
 """
 from __future__ import annotations
 
@@ -53,11 +55,15 @@ from .writers import (
 
 
 class Resume104Client:
+    # The editor dynamically registers up to six numbered custom slots.
+    # This list is for reading and schema introspection only: unknown custom
+    # fields remain explicitly blocked by native write path validation.
+    CUSTOM_SLOTS = tuple(f"custom{n}" for n in range(1, 7))
     SECTIONS = (
         "info", "education", "experience", "jobCondition", "skill",
         "certificate", "language", "project", "portfolio", "bio",
-        "referrer", "sidebar",
-    )
+        "referrer", "sidebar", "under18",
+    ) + CUSTOM_SLOTS
 
     def __init__(self, page: Any):
         self.page = page
@@ -108,6 +114,25 @@ class Resume104Client:
         document = await self.get_resume(resume_id)
         return {name: describe_schema(document[name])
                 for name in self.SECTIONS if name in document}
+
+    async def list_custom_slots(self, resume_id: str | int) -> list[dict]:
+        """Read discovered numbered CUSTOM blocks without inferring their
+        editable fields. The full GET can omit custom slots entirely.
+        """
+        document = await self.get_resume(resume_id)
+        found = []
+        for slot in self.CUSTOM_SLOTS:
+            item = document.get(slot)
+            if item is None:
+                continue
+            if not isinstance(item, dict):
+                raise VerificationError(
+                    "104 native CUSTOM block has an unexpected type"
+                )
+            found.append({
+                "section": slot, "schema": describe_schema(item),
+            })
+        return found
 
     async def plan_edit(
         self, resume_id: str | int, changes: list[dict]
