@@ -879,7 +879,11 @@ class Resume104Client:
         to_position: int, *, expected_timestamp: int | str,
         kind: str | None = None,
     ) -> dict:
-        """Adjacent 104 SKILL/EDUCATION or local/foreign LANGUAGE sort."""
+        """Adjacent native 104 sort for supported sections.
+
+        A two-item PORTFOLIO swap/reverse was verified on real 104;
+        other section sorts remain source-mapped/synthetic-tested.
+        """
         version = self._version(resume_id)
         async with self._write_lock:
             before = await self.get_resume(version)
@@ -904,6 +908,9 @@ class Resume104Client:
                             "from": from_position, "to": to_position,
                             **({"kind": kind} if kind is not None else {}),
                             "persisted": True, "verified": True, "atomic": True,
+                            **({"verification_scope": "display_identity",
+                                "existing_attachment_bytes_verified": False}
+                               if section == "portfolio" else {}),
                         }
                 except Exception:
                     raise VerificationError(

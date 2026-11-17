@@ -322,6 +322,23 @@ verification remains outside the SDK.
 See docs/tw104-live-smoke-report.md. No credential, private
 resume ID or real attachment bytes are committed.
 
+### PORTFOLIO adjacent sorting: authenticated 104 verification
+
+The source-mapped 104 swapRecordBySort/portfolio API now has a
+verified **two-item adjacent swap and reverse-swap** roundtrip.
+We inserted a uniquely titled synthetic link next to the existing
+portfolio file, swapped their positions, verified the order,
+swapped back, and deleted the synthetic link. The original
+one-item displayed portfolio identity was independently restored.
+
+Opaque fileId, signed download URLs and thumbnail access tokens
+are **not compared** during PORTFOLIO sort read-back because they
+rotated in real native GETs. Uniqueness checks still reject
+duplicate indistinguishable titles/filenames. This verifies
+displayed record ordering, not original file bytes or physical
+backend storage. Non-adjacent ordering and 3+ entries remain
+unverified. See docs/tw104-live-smoke-report.md.
+
 ### Experimental 104 PROJECT and PORTFOLIO actions
 
 The 104 PROJECT section is initially empty on the designated test resume.

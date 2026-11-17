@@ -563,3 +563,17 @@ The new PDF upload returned an addressable file record with no
 thumbnailFileId. This is **not** proof of conversion/preview,
 downloadability, physical remote blob removal or byte-for-byte
 identity of the original attachment. Those workflows remain TODO.
+
+
+### Authenticated PORTFOLIO swapRecordBySort/portfolio
+
+The native adapter submits:
+  PUT /profile/ajax/swapRecordBySort/portfolio
+  blockValueList.portfolio.portfolios.sort={from:1,to:2}
+
+A live two-item test confirmed an adjacent swap, a verified
+reverse swap, and deletion of the synthetic link with the
+original single item restored. Real GET also rotates file
+access metadata across requests, so the verifier normalizes
+the ordered identities rather than comparing signed URLs.
+No non-adjacent move behavior has been verified.

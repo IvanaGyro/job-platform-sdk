@@ -9,7 +9,10 @@ native structure blockValueList.portfolio.sort=[N]. Sorting is handled
 separately using swapRecordBySort.
 
 GET shape for populated PORTFOLIO was checked against a real *read-only*
-104 response. FILE/LINK writes have NOT been tested on a real resume.
+104 response. FILE=1 (synthetic PDF) and LINK=2 create/delete plus a
+two-item adjacent sort/reverse have been tested and restored
+on the authorized real test resume. Preview and non-adjacent
+sorting remain unverified.
 """
 from __future__ import annotations
 

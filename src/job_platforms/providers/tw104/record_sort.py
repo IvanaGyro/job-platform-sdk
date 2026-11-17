@@ -5,8 +5,9 @@ Frontend actions a41b (SKILL), 8ea9 (EDUCATION), 96e2 (LANGUAGE),
 exactly 2 entries only; editor hardcodes from=2,to=1).
 For LANGUAGE, its sortable groups are independent and the UI supplies
 both foreign and local sort branches (the inactive branch contains []).
-Only *adjacent* moves are implemented until non-adjacent swap-vs-insertion
-semantics have been verified against a real restoreable record.
+Only *adjacent* moves are implemented. A two-entry PORTFOLIO
+adjacent swap and reverse were verified live on 2026-11-17;
+non-adjacent swap-vs-insertion semantics remain unverified.
 """
 from __future__ import annotations
 
@@ -17,7 +18,7 @@ from job_platforms.core.errors import UnsupportedWrite
 from .education_records import education_list
 from .language_records import KINDS, language_lists
 from .project_records import project_records
-from .portfolio_records import portfolio_records
+from .portfolio_records import portfolio_records, portfolio_stable_identities
 from .skill_records import skill_list
 from .referrer_records import referrer_records
 
@@ -71,7 +72,13 @@ def sort_body(
     ):
         raise UnsupportedWrite("104 sort supports only adjacent 1-based positions")
     # Independent read-back cannot distinguish two otherwise identical rows.
-    if _without_sort(records[from_position - 1]) == _without_sort(records[to_position - 1]):
+    if section == "portfolio":
+        # Signed fileId/url/preview tokens can rotate between native GETs.
+        # Verify source-defined adjacent order by unique stable display ID.
+        identities = portfolio_stable_identities(doc)
+        if identities[from_position - 1] == identities[to_position - 1]:
+            raise UnsupportedWrite("104 PORTFOLIO sort is ambiguous")
+    elif _without_sort(records[from_position - 1]) == _without_sort(records[to_position - 1]):
         raise UnsupportedWrite("104 sort cannot verify indistinguishable records")
     move = (
         {"from": 2, "to": 1} if section == "referrer"
@@ -98,11 +105,19 @@ def verify_sort(
     new = _records(after, section, kind)
     if len(old) != len(new):
         return False
-    expected = [_without_sort(row) for row in old]
+    if section == "portfolio":
+        try:
+            expected = portfolio_stable_identities(before)
+            actual = portfolio_stable_identities(after)
+        except (UnsupportedWrite, ValueError):
+            return False
+    else:
+        expected = [_without_sort(row) for row in old]
+        actual = [_without_sort(row) for row in new]
     expected[from_position - 1], expected[to_position - 1] = (
         expected[to_position - 1], expected[from_position - 1]
     )
-    if [_without_sort(row) for row in new] != expected:
+    if actual != expected:
         return False
 
     old_form = before[section]["formData"]

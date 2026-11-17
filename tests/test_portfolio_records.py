@@ -265,6 +265,30 @@ class PortfolioTests(unittest.IsolatedAsyncioTestCase):
             before,client.doc,"portfolio",1,2,
         ))
         self.assertEqual(client.transport.calls[0][0],"SORT")
+        self.assertEqual(result["verification_scope"],"display_identity")
+        self.assertFalse(result["existing_attachment_bytes_verified"])
+
+    def test_portfolio_sort_accepts_rotating_file_access_tokens(self):
+        before=deepcopy(POPULATED)
+        after=deepcopy(POPULATED)
+        rows=after["portfolio"]["formData"]["portfolios"]
+        rows[0],rows[1]=rows[1],rows[0]
+        rows[0]["sort"]=1
+        rows[1]["sort"]=2
+        for row in rows:
+            for key in ("fileId","thumbnailFileId","url","src"):
+                row["attach"][key]="rotating-token-"+key
+        self.assertTrue(verify_sort(before,after,"portfolio",1,2))
+        rows[0]["attach"]["name"]="Unexpected change"
+        self.assertFalse(verify_sort(before,after,"portfolio",1,2))
+
+    def test_portfolio_sort_rejects_ambiguous_duplicate_display_ids(self):
+        before=deepcopy(POPULATED)
+        rows=before["portfolio"]["formData"]["portfolios"]
+        rows[1]["name"]=rows[0]["name"]
+        rows[1]["attach"]["name"]=rows[0]["attach"]["name"]
+        with self.assertRaises(UnsupportedWrite):
+            sort_body(before,"portfolio",1,2)
 
     def test_rejects_changes_to_other_attachments(self):
         old=deepcopy(POPULATED)

@@ -17,7 +17,7 @@ and successful real 104 writes.** Each is a separate evidence level.
 | `certificate` | PUT, DELETE; certification connections | Existing text PUT plus first-empty PUT and guarded clear; global associations excluded | **SDK initialize + clear verified and restored live** |
 | `language` | POST, PUT, DELETE; local/foreign records | Native local/foreign record CRUD + adjacent local/foreign sorting (experimental); linked certificates blocked | **No** |
 | `project` | POST, PUT, DELETE; reorder; attachments | No-media CRUD and adjacent reorder; media pending | **SDK create, update and delete verified live and restored**; sorting synthetic |
-| `portfolio` | POST, DELETE; attachments/upload; reorder | LINK=2 POST, FILE=1 bounded binary POST, one-record DELETE, adjacent reorder; preview/conversion pending | **SDK LINK/FILE create-read-delete live verified**; sort/preview untested |
+| `portfolio` | POST, DELETE; attachments/upload; reorder | LINK=2 POST, FILE=1 bounded binary POST, one-record DELETE, adjacent reorder; preview/conversion pending | **SDK LINK/FILE create-read-delete and two-entry adjacent swap/reverse live verified**; preview/non-adjacent sort untested |
 | `bio` | POST, PUT, DELETE | HTML PUT live-verified; first-create POST and clear DELETE experimental | **PUT only** |
 | `referrer` | POST, PUT, DELETE; reorder | Native record CRUD, empty-form first-create, **exactly-two-record** hardcoded adjacent swap (experimental) | **No** |
 | `sidebar` | PUT | Complete-list reorder only; metadata edits rejected | **No** |
@@ -406,3 +406,19 @@ displayed one-item portfolio list.
 The SDK does not yet validate PDF preview/thumbnail generation,
 binary download or checksum equality, conversion lifecycle,
 replacing attachments or physical backend blob garbage collection.
+
+
+### PORTFOLIO two-entry sort live test (2026-11-17)
+
+With one original file and one temporary synthetic LINK item,
+Resume104Client.sort_records(..., portfolio, 1, 2) executed
+the official swapRecordBySort/portfolio PUT. Its native GET
+showed the expected exact reversal of displayed identities,
+and the SDK returned verified=true. A second adjacent
+swap reversed the order again; then the unique synthetic LINK
+was deleted, restoring the original single displayed file.
+
+This is an authenticated live test of **one two-entry adjacent
+swap and its reverse**, not a proof of non-adjacent or arbitrary
+multi-record ordering. Signed file tokens and previews are not
+part of the stable displayed identity comparison.

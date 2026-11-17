@@ -109,3 +109,20 @@ No new PDF thumbnailFileId was observed. The result does not
 prove preview availability, downloaded file content, deletion of
 underlying server blobs, or original attachment byte checksum.
 Those items remain unverified.
+
+
+## Authenticated PORTFOLIO adjacent sort verification
+
+A subsequent live integration cycle inserted a temporary
+synthetic link alongside the original file entry. The
+source-mapped adjacent native PUT swapped their displayed
+order; the independent GET and SDK verification succeeded.
+The same two positions were swapped back, and a separate
+GET confirmed the original order. Finally the synthetic
+link was deleted by its current sort ID; exactly the
+original single displayed file remained, while BIO,
+CERTIFICATE and PROJECT were unchanged.
+
+The test proves the adjacent two-item swap/reverse behavior
+only. It does not establish non-adjacent moves for three
+or more entries, file checksums, or preview generation.
