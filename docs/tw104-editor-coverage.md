@@ -198,3 +198,15 @@ in blockValueList.bio. Both additional operations are exposed in SDK,
 CLI and HTTP with strict state preconditions. The original BIO PUT has
 passed a live read/modify/read/restore test; POST and DELETE have
 synthetic tests only. No actual BIO deletion was attempted.
+
+
+### Optional durable at-most-once HTTP ledger (2026-11-17)
+
+An opt-in SQLite file reserves SHA-256 hashed request identities and
+fingerprints before the FastAPI server sends 104 mutations. It stores
+neither raw resume content, contact values, credentials nor responses.
+Atomic uniqueness prevents duplicate reservations, including across
+service workers. After restart a known key returns 409 rather than a
+replayed 200, whether the earlier write succeeded or not. This is
+duplicate-prevention, not remote state reconciliation.
+The private database and its directory must be retained securely.

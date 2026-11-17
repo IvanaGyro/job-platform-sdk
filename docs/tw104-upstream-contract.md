@@ -357,3 +357,15 @@ These operations differ from the previously live-tested BIO PUT.
 The SDK requires an empty form for POST, existing nonempty content
 for DELETE, and exact independent read-back. Real POST/DELETE/restore
 validation has not yet been performed.
+
+
+### Optional durable duplicate-write guard
+
+JOB_PLATFORM_IDEMPOTENCY_DB enables SQLite reservations keyed by hashed
+request identities and fingerprints. Reservations persist through restart
+and must be made before a browser-backed write. There is deliberately no
+persisted response body or personal resume content. When a key was
+already reserved in an earlier process, the API responds 409 and the
+caller must inspect the remote state. This does not provide atomic
+multi-block writes or automatically determine whether a remote write
+was committed. Only synthetic HTTP and SQLite tests have exercised it.
