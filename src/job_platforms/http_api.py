@@ -23,6 +23,10 @@ from job_platforms.core.errors import (
 from job_platforms.providers.tw104 import AuthConfig, FreshBrowserSession, Resume104Client
 from job_platforms.providers.tw104.skill_records import skill_operation_body
 from job_platforms.providers.tw104.education_records import education_operation_body
+from job_platforms.providers.tw104.experience_records import experience_operation_body
+from job_platforms.providers.tw104.language_records import language_operation_body, KINDS as LANGUAGE_KINDS
+from job_platforms.providers.tw104.layout_theme import THEME_OPTION_KEYS, theme_body
+from job_platforms.providers.tw104.record_sort import SORTABLE, sort_body
 
 
 TW104_CAPABILITIES = ProviderCapabilities(
@@ -108,9 +112,14 @@ def create_app(
                     "bio", "certificate", "sidebar", "jobCondition",
                     "experience.seniority",
                 ],
+                "experimental_theme_sections": list(THEME_OPTION_KEYS),
+                "experimental_sort_sections": list(SORTABLE),
                 "experimental_record_operations": {
                     "skill": ["create", "update", "delete"],
                     "education": ["create", "update", "delete"],
+                    "experience": ["create", "update", "delete"],
+                    "language.local": ["create", "update", "delete"],
+                    "language.foreign": ["create", "update", "delete"],
                 },
                 "experimental_writes_enabled": allow_experimental_writes,
             },
@@ -471,5 +480,320 @@ def create_app(
             resume_id, request, "delete", changes=None, position=position,
             if_match=if_match, idempotency_key=idempotency_key,
         )
+
+    async def experience_operation_http(
+        resume_id: str, request: Request, action: str, *,
+        changes: dict | None, position: int | None,
+        if_match: str | None, idempotency_key: str | None,
+    ):
+        """104-specific EXPERIENCE CRUD, not a cross-provider data model."""
+        if not allow_experimental_writes:
+            raise HTTPException(501, "104 EXPERIENCE writes require explicit opt-in")
+        if if_match is None:
+            raise HTTPException(428, "If-Match: <resumeTimestamp> is required")
+        if not idempotency_key or len(idempotency_key) < 16:
+            raise HTTPException(400, "Idempotency-Key of at least 16 characters required")
+        expected = if_match.strip('"')
+        fingerprint = hashlib.sha256(
+            json.dumps(
+                {"action": action, "position": position, "changes": changes,
+                 "timestamp": expected},
+                ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        key = ("EXPERIENCE", resume_id, idempotency_key)
+        async with request.app.state.action_lock:
+            cached = request.app.state.idempotency_results.get(key)
+            if cached is not None:
+                if cached["fingerprint"] != fingerprint:
+                    raise HTTPException(409, "Idempotency-Key reused with different payload")
+                if cached["state"] != "succeeded":
+                    raise HTTPException(
+                        409, "EXPERIENCE write outcome indeterminate; inspect before retrying"
+                    )
+                return cached["result"]
+            try:
+                before = await request.app.state.client.get_resume(resume_id)
+                if str(before.get("resumeTimestamp")) != expected:
+                    raise HTTPException(412, "Resume changed since caller's read")
+                experience_operation_body(
+                    before, action, changes=changes, position=position
+                )
+            except (ValueError, KeyError, TypeError, IndexError, UnsupportedWrite):
+                raise HTTPException(
+                    422, "Invalid EXPERIENCE fields or record position"
+                ) from None
+            except JobPlatformError as exc:
+                translate_error(exc)
+            record = {"fingerprint": fingerprint, "state": "indeterminate"}
+            request.app.state.idempotency_results[key] = record
+            try:
+                result = await request.app.state.client.mutate_experience(
+                    resume_id, action, changes=changes, position=position,
+                    expected_timestamp=expected,
+                )
+            except JobPlatformError as exc:
+                translate_error(exc)
+            else:
+                record.update({"state": "succeeded", "result": result})
+                return result
+
+    @app.post(
+        "/v1/tw104/resumes/{resume_id}/experiences",
+        dependencies=[Depends(authorize)],
+    )
+    async def create_experience(
+        resume_id: str, request: Request,
+        changes: dict = Body(...),
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        return await experience_operation_http(
+            resume_id, request, "create", changes=changes, position=None,
+            if_match=if_match, idempotency_key=idempotency_key,
+        )
+
+    @app.put(
+        "/v1/tw104/resumes/{resume_id}/experiences/{position}",
+        dependencies=[Depends(authorize)],
+    )
+    async def update_experience(
+        resume_id: str, position: int, request: Request,
+        changes: dict = Body(...),
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        return await experience_operation_http(
+            resume_id, request, "update", changes=changes, position=position,
+            if_match=if_match, idempotency_key=idempotency_key,
+        )
+
+    @app.delete(
+        "/v1/tw104/resumes/{resume_id}/experiences/{position}",
+        dependencies=[Depends(authorize)],
+    )
+    async def delete_experience(
+        resume_id: str, position: int, request: Request,
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        return await experience_operation_http(
+            resume_id, request, "delete", changes=None, position=position,
+            if_match=if_match, idempotency_key=idempotency_key,
+        )
+
+    async def language_operation_http(
+        resume_id: str, request: Request, kind: str, action: str, *,
+        changes: dict | None, position: int | None,
+        if_match: str | None, idempotency_key: str | None,
+    ):
+        """104-specific LANGUAGE CRUD, not a cross-provider data model."""
+        if kind not in LANGUAGE_KINDS:
+            raise HTTPException(422, "Language kind must be local or foreign")
+        if not allow_experimental_writes:
+            raise HTTPException(501, "104 LANGUAGE writes require explicit opt-in")
+        if if_match is None:
+            raise HTTPException(428, "If-Match: <resumeTimestamp> is required")
+        if not idempotency_key or len(idempotency_key) < 16:
+            raise HTTPException(400, "Idempotency-Key of at least 16 characters required")
+        expected = if_match.strip('"')
+        fingerprint = hashlib.sha256(
+            json.dumps(
+                {"kind":kind, "action": action, "position": position, "changes": changes,
+                 "timestamp": expected},
+                ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        key = ("LANGUAGE", resume_id, kind, idempotency_key)
+        async with request.app.state.action_lock:
+            cached = request.app.state.idempotency_results.get(key)
+            if cached is not None:
+                if cached["fingerprint"] != fingerprint:
+                    raise HTTPException(409, "Idempotency-Key reused with different payload")
+                if cached["state"] != "succeeded":
+                    raise HTTPException(
+                        409, "LANGUAGE write outcome indeterminate; inspect before retrying"
+                    )
+                return cached["result"]
+            try:
+                before = await request.app.state.client.get_resume(resume_id)
+                if str(before.get("resumeTimestamp")) != expected:
+                    raise HTTPException(412, "Resume changed since caller's read")
+                language_operation_body(
+                    before, kind, action, changes=changes, position=position
+                )
+            except (ValueError, KeyError, TypeError, IndexError, UnsupportedWrite):
+                raise HTTPException(
+                    422, "Invalid LANGUAGE fields or record position"
+                ) from None
+            except JobPlatformError as exc:
+                translate_error(exc)
+            record = {"fingerprint": fingerprint, "state": "indeterminate"}
+            request.app.state.idempotency_results[key] = record
+            try:
+                result = await request.app.state.client.mutate_language(
+                    resume_id, kind, action, changes=changes, position=position,
+                    expected_timestamp=expected,
+                )
+            except JobPlatformError as exc:
+                translate_error(exc)
+            else:
+                record.update({"state": "succeeded", "result": result})
+                return result
+
+    @app.post(
+        "/v1/tw104/resumes/{resume_id}/languages/{kind}",
+        dependencies=[Depends(authorize)],
+    )
+    async def create_language(
+        resume_id: str, kind: str, request: Request,
+        changes: dict = Body(...),
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        return await language_operation_http(
+            resume_id, request, kind, "create", changes=changes, position=None,
+            if_match=if_match, idempotency_key=idempotency_key,
+        )
+
+    @app.put(
+        "/v1/tw104/resumes/{resume_id}/languages/{kind}/{position}",
+        dependencies=[Depends(authorize)],
+    )
+    async def update_language(
+        resume_id: str, kind: str, position: int, request: Request,
+        changes: dict = Body(...),
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        return await language_operation_http(
+            resume_id, request, kind, "update", changes=changes, position=position,
+            if_match=if_match, idempotency_key=idempotency_key,
+        )
+
+    @app.delete(
+        "/v1/tw104/resumes/{resume_id}/languages/{kind}/{position}",
+        dependencies=[Depends(authorize)],
+    )
+    async def delete_language(
+        resume_id: str, kind: str, position: int, request: Request,
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        return await language_operation_http(
+            resume_id, request, kind, "delete", changes=None, position=position,
+            if_match=if_match, idempotency_key=idempotency_key,
+        )
+
+    @app.put(
+        "/v1/tw104/resumes/{resume_id}/themes/{section}",
+        dependencies=[Depends(authorize)],
+    )
+    async def update_theme(
+        resume_id: str, section: str, request: Request,
+        body: dict = Body(...),
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        if not allow_experimental_writes:
+            raise HTTPException(501, "104 LAYOUT requires experimental write opt-in")
+        if if_match is None:
+            raise HTTPException(428, "If-Match resumeTimestamp is required")
+        if not idempotency_key or len(idempotency_key) < 16:
+            raise HTTPException(400, "Idempotency-Key of at least 16 characters required")
+        if section not in THEME_OPTION_KEYS or set(body) != {"selectedTheme"}:
+            raise HTTPException(422, "Unsupported 104 theme request")
+        value = body["selectedTheme"]
+        expected = if_match.strip('"')
+        fingerprint = hashlib.sha256(json.dumps(
+            {"section": section, "value": value, "timestamp": expected},
+            sort_keys=True, ensure_ascii=False, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        key = ("LAYOUT", resume_id, section, idempotency_key)
+        async with request.app.state.action_lock:
+            saved = request.app.state.idempotency_results.get(key)
+            if saved is not None:
+                if saved["fingerprint"] != fingerprint:
+                    raise HTTPException(409, "Idempotency-Key reused for different theme")
+                if saved["state"] != "succeeded":
+                    raise HTTPException(409, "LAYOUT outcome indeterminate; inspect before retrying")
+                return saved["result"]
+            try:
+                before = await request.app.state.client.get_resume(resume_id)
+                if str(before.get("resumeTimestamp")) != expected:
+                    raise HTTPException(412, "Resume changed since caller's read")
+                options = request.app.state.client._data(
+                    await request.app.state.client.transport.get_json("/profile/ajax/options")
+                )
+                theme_body(before, options, section, value)
+            except (TypeError, ValueError, KeyError, UnsupportedWrite):
+                raise HTTPException(422, "Invalid 104 theme option or section") from None
+            except JobPlatformError as exc:
+                translate_error(exc)
+            record = {"fingerprint": fingerprint, "state": "indeterminate"}
+            request.app.state.idempotency_results[key] = record
+            try:
+                result = await request.app.state.client.set_theme(
+                    resume_id, section, value, expected_timestamp=expected,
+                )
+            except JobPlatformError as exc:
+                translate_error(exc)
+            else:
+                record.update({"state": "succeeded", "result": result})
+                return result
+
+    @app.put(
+        "/v1/tw104/resumes/{resume_id}/sort/{section}",
+        dependencies=[Depends(authorize)],
+    )
+    async def sort_resume_records(
+        resume_id: str, section: str, request: Request,
+        body: dict = Body(...),
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        if not allow_experimental_writes:
+            raise HTTPException(501, "104 SORT requires experimental write opt-in")
+        if if_match is None:
+            raise HTTPException(428, "If-Match resumeTimestamp required")
+        if not idempotency_key or len(idempotency_key) < 16:
+            raise HTTPException(400, "Idempotency-Key of at least 16 characters required")
+        if section not in SORTABLE or set(body) != {"from", "to"}:
+            raise HTTPException(422, "Unsupported 104 sort request")
+        source, target = body["from"], body["to"]
+        expected = if_match.strip('"')
+        fingerprint = hashlib.sha256(json.dumps(
+            {"section": section, "from": source, "to": target, "timestamp": expected},
+            sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        key = ("SORT", resume_id, section, idempotency_key)
+        async with request.app.state.action_lock:
+            cached = request.app.state.idempotency_results.get(key)
+            if cached is not None:
+                if cached["fingerprint"] != fingerprint:
+                    raise HTTPException(409, "Idempotency-Key reused with different sort")
+                if cached["state"] != "succeeded":
+                    raise HTTPException(409, "SORT outcome indeterminate; inspect before retrying")
+                return cached["result"]
+            try:
+                before = await request.app.state.client.get_resume(resume_id)
+                if str(before.get("resumeTimestamp")) != expected:
+                    raise HTTPException(412, "Resume changed since caller's read")
+                sort_body(before, section, source, target)
+            except (ValueError, TypeError, KeyError, UnsupportedWrite):
+                raise HTTPException(422, "Invalid 104 sort positions") from None
+            except JobPlatformError as exc:
+                translate_error(exc)
+            record = {"fingerprint": fingerprint, "state": "indeterminate"}
+            request.app.state.idempotency_results[key] = record
+            try:
+                result = await request.app.state.client.sort_records(
+                    resume_id, section, source, target, expected_timestamp=expected,
+                )
+            except JobPlatformError as exc:
+                translate_error(exc)
+            else:
+                record.update({"state": "succeeded", "result": result})
+                return result
 
     return app

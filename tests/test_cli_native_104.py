@@ -1,0 +1,122 @@
+"""Exercise explicit 104-native CLI dispatch without any browser or private data."""
+import argparse
+import asyncio
+import io
+import json
+import tempfile
+import unittest
+from contextlib import redirect_stdout
+from pathlib import Path
+from unittest.mock import patch
+
+from job_platforms.cli import _parser, _run
+
+
+class DummyClient:
+    SECTIONS = ("bio", "info", "experience", "skill", "education")
+    calls = []
+    def __init__(self, _page):
+        pass
+
+    async def mutate_experience(self, version, action, **kwargs):
+        self.calls.append(("experience", version, action, kwargs))
+        return {"verified": True}
+
+    async def mutate_language(self, version, kind, action, **kwargs):
+        self.calls.append(("language", version, kind, action, kwargs))
+        return {"verified": True}
+
+    async def set_theme(self, version, section, value, **kwargs):
+        self.calls.append(("theme", version, section, value, kwargs))
+        return {"verified": True}
+
+    async def sort_records(self, version, section, from_pos, to_pos, **kwargs):
+        self.calls.append(("sort", version, section, from_pos, to_pos, kwargs))
+        return {"verified": True}
+
+
+class FakeBrowser:
+    page = object()
+    async def __aenter__(self):
+        return self
+    async def __aexit__(self, *_):
+        return False
+
+
+class CLI104Tests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        DummyClient.calls = []
+        self.patches = [
+            patch("job_platforms.cli.AuthConfig.from_env", return_value=argparse.Namespace(headless=False)),
+            patch("job_platforms.cli.FreshBrowserSession", return_value=FakeBrowser()),
+            patch("job_platforms.cli.Resume104Client", DummyClient),
+        ]
+        for p in self.patches:
+            p.start()
+
+    async def asyncTearDown(self):
+        for p in reversed(self.patches):
+            p.stop()
+
+    async def execute(self, argv):
+        args = _parser().parse_args(argv)
+        with redirect_stdout(io.StringIO()) as captured:
+            await _run(args)
+        return json.loads(captured.getvalue())
+
+    async def test_experience_and_language_native_dispatch(self):
+        with tempfile.TemporaryDirectory() as folder:
+            file = Path(folder) / "synthetic.json"
+            file.write_text(json.dumps({"jobName": "Synthetic Engineer"}))
+            await self.execute([
+                "record", "synthetic", "experience", "update",
+                "--position", "2", "--changes-file", str(file),
+                "--if-match", "42", "--confirm", "experimental-record-write",
+            ])
+            self.assertEqual(DummyClient.calls[-1], (
+                "experience", "synthetic", "update",
+                {"changes": {"jobName": "Synthetic Engineer"}, "position": 2,
+                 "expected_timestamp": "42"},
+            ))
+            await self.execute([
+                "record", "synthetic", "language", "delete",
+                "--kind", "foreign", "--position", "1",
+                "--if-match", "42", "--confirm", "experimental-record-write",
+            ])
+            self.assertEqual(DummyClient.calls[-1][:4], (
+                "language", "synthetic", "foreign", "delete",
+            ))
+
+    async def test_theme_and_sort_native_dispatch(self):
+        await self.execute([
+            "theme", "synthetic", "skill", "2",
+            "--if-match", "41", "--confirm", "experimental-theme-write",
+        ])
+        await self.execute([
+            "sort", "synthetic", "education", "1", "2",
+            "--if-match", "41", "--confirm", "experimental-sort-write",
+        ])
+        self.assertEqual(DummyClient.calls[0], (
+            "theme", "synthetic", "skill", 2, {"expected_timestamp": "41"}
+        ))
+        self.assertEqual(DummyClient.calls[1], (
+            "sort", "synthetic", "education", 1, 2, {"expected_timestamp": "41"}
+        ))
+
+    async def test_invalid_record_combinations_do_not_write(self):
+        invalid = (
+            ["record", "synthetic", "language", "delete", "--position", "1"],
+            ["record", "synthetic", "experience", "delete", "--kind", "local", "--position", "1"],
+            ["record", "synthetic", "skill", "create"],
+            ["record", "synthetic", "education", "delete", "--changes-file", "unused", "--position", "1"],
+        )
+        for values in invalid:
+            with self.subTest(values=values), self.assertRaises(ValueError):
+                await self.execute(values + [
+                    "--if-match", "42", "--confirm", "experimental-record-write",
+                ])
+        self.assertEqual(DummyClient.calls, [])
+
+
+if __name__ == "__main__":
+    unittest.main()

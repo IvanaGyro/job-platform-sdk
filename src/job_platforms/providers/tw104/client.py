@@ -18,6 +18,17 @@ from job_platforms.core.patch import (
 )
 from .transport import BrowserTransport
 from .skill_records import skill_list, skill_operation_body, verify_skill_operation
+from .record_sort import SORTABLE, sort_body, verify_sort
+from .layout_theme import (
+    THEME_OPTION_KEYS, native_theme, theme_body, verify_theme_write,
+)
+from .language_records import (
+    KINDS as LANGUAGE_KINDS, language_lists, language_operation_body,
+    verify_language_operation,
+)
+from .experience_records import (
+    experience_list, experience_operation_body, verify_experience_operation,
+)
 from .education_records import (
     education_list, education_operation_body, verify_education_operation,
 )
@@ -291,6 +302,208 @@ class Resume104Client:
             raise VerificationError(
                 "EDUCATION write submitted but record state could not be "
                 "verified; inspect before retrying"
+            )
+
+    async def mutate_experience(
+        self,
+        resume_id: str | int,
+        action: str,
+        *,
+        expected_timestamp: int | str,
+        changes: dict | None = None,
+        position: int | None = None,
+    ) -> dict:
+        """Source-mapped 104 EXPERIENCE record POST/PUT/DELETE.
+
+        Each position is the current 1-based sort value. Unrecognized source
+        shapes and stale resume versions are rejected before writing.
+        """
+        if action not in ("create", "update", "delete"):
+            raise UnsupportedWrite("Unsupported 104 EXPERIENCE action")
+        version = self._version(resume_id)
+        async with self._write_lock:
+            before = await self.get_resume(version)
+            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+                raise ConflictError("104 resume changed before experience operation")
+            body = experience_operation_body(
+                before, action, changes=changes, position=position
+            )
+            experience_list(before)
+            method = {"create": "POST", "update": "PUT", "delete": "DELETE"}[action]
+            await self.transport.request(
+                method,
+                "/profile/ajax/resumeByBlock/experience",
+                params={"vno": version}, json_data=body,
+            )
+            for attempt in range(4):
+                try:
+                    after = await self.get_resume(version)
+                    if verify_experience_operation(
+                        before, after, action, body=body, position=position
+                    ):
+                        return {
+                            "resume_id": version,
+                            "action": action,
+                            "section": "experience",
+                            "persisted": True,
+                            "verified": True,
+                            "atomic": True,
+                            "position": (
+                                len(experience_list(after)) if action == "create"
+                                else position
+                            ),
+                        }
+                except Exception:
+                    raise VerificationError(
+                        "EXPERIENCE request submitted; read-back unavailable"
+                    ) from None
+                if attempt < 3:
+                    await asyncio.sleep(0.75)
+            raise VerificationError(
+                "EXPERIENCE write submitted but record state could not be "
+                "verified; inspect before retrying"
+            )
+
+    async def mutate_language(
+        self,
+        resume_id: str | int,
+        kind: str, action: str,
+        *,
+        expected_timestamp: int | str,
+        changes: dict | None = None,
+        position: int | None = None,
+    ) -> dict:
+        """Source-mapped 104 LANGUAGE record POST/PUT/DELETE.
+
+        Each position is the current 1-based sort value. Unrecognized source
+        shapes and stale resume versions are rejected before writing.
+        """
+        if kind not in LANGUAGE_KINDS or action not in ("create", "update", "delete"):
+            raise UnsupportedWrite("Unsupported 104 LANGUAGE action")
+        version = self._version(resume_id)
+        async with self._write_lock:
+            before = await self.get_resume(version)
+            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+                raise ConflictError("104 resume changed before language operation")
+            body = language_operation_body(
+                before, kind, action, changes=changes, position=position
+            )
+            language_lists(before)
+            method = {"create": "POST", "update": "PUT", "delete": "DELETE"}[action]
+            await self.transport.request(
+                method,
+                "/profile/ajax/resumeByBlock/language",
+                params={"vno": version}, json_data=body,
+            )
+            for attempt in range(4):
+                try:
+                    after = await self.get_resume(version)
+                    if verify_language_operation(
+                        before, after, kind, action, body=body, position=position
+                    ):
+                        return {
+                            "resume_id": version,
+                            "action": action,
+                            "section": "language",
+                            "kind": kind,
+                            "persisted": True,
+                            "verified": True,
+                            "atomic": True,
+                            "position": (
+                                len(language_lists(after)[kind]) if action == "create"
+                                else position
+                            ),
+                        }
+                except Exception:
+                    raise VerificationError(
+                        "LANGUAGE request submitted; read-back unavailable"
+                    ) from None
+                if attempt < 3:
+                    await asyncio.sleep(0.75)
+            raise VerificationError(
+                "LANGUAGE write submitted but record state could not be "
+                "verified; inspect before retrying"
+            )
+
+    async def set_theme(
+        self, resume_id: str | int, section: str, selected_theme: int, *,
+        expected_timestamp: int | str,
+    ) -> dict:
+        """104 native LAYOUT operation, validated against current site options."""
+        version = self._version(resume_id)
+        async with self._write_lock:
+            before = await self.get_resume(version)
+            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+                raise ConflictError("104 resume changed before theme selection")
+            options = self._data(await self.transport.get_json("/profile/ajax/options"))
+            body = theme_body(before, options, section, selected_theme)
+            if native_theme(before, section) == selected_theme:
+                return {
+                    "resume_id": version, "section": section,
+                    "selected_theme": selected_theme, "persisted": False,
+                    "verified": True, "atomic": True,
+                }
+            latest = await self.get_resume(version)
+            if (
+                str(latest.get("resumeTimestamp")) != str(expected_timestamp)
+                or latest.get(section) != before.get(section)
+            ):
+                raise ConflictError("104 resume changed while validating theme")
+            await self.transport.put_json(
+                "/profile/ajax/resumeByBlock/layout", body,
+                params={"vno": version},
+            )
+            for attempt in range(4):
+                try:
+                    after = await self.get_resume(version)
+                    if verify_theme_write(before, after, section, selected_theme):
+                        return {
+                            "resume_id": version, "section": section,
+                            "selected_theme": selected_theme,
+                            "persisted": True, "verified": True, "atomic": True,
+                        }
+                except Exception:
+                    raise VerificationError(
+                        "104 LAYOUT submitted; read-back unavailable"
+                    ) from None
+                if attempt < 3:
+                    await asyncio.sleep(0.75)
+            raise VerificationError(
+                "104 LAYOUT submitted; changed theme was not verified"
+            )
+
+    async def sort_records(
+        self, resume_id: str | int, section: str, from_position: int,
+        to_position: int, *, expected_timestamp: int | str,
+    ) -> dict:
+        """Adjacent 104 SKILL/EDUCATION sort with exact independent read-back."""
+        version = self._version(resume_id)
+        async with self._write_lock:
+            before = await self.get_resume(version)
+            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+                raise ConflictError("Resume changed before native sort operation")
+            body = sort_body(before, section, from_position, to_position)
+            await self.transport.put_json(
+                f"/profile/ajax/swapRecordBySort/{section}", body,
+                params={"vno": version},
+            )
+            for attempt in range(4):
+                try:
+                    after = await self.get_resume(version)
+                    if verify_sort(before, after, section, from_position, to_position):
+                        return {
+                            "resume_id": version, "section": section,
+                            "from": from_position, "to": to_position,
+                            "persisted": True, "verified": True, "atomic": True,
+                        }
+                except Exception:
+                    raise VerificationError(
+                        "104 sort submitted; read-back unavailable"
+                    ) from None
+                if attempt < 3:
+                    await asyncio.sleep(0.75)
+            raise VerificationError(
+                "104 sort submitted but exact move not verified"
             )
 
     async def create_resume(self) -> dict:

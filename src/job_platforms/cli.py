@@ -39,6 +39,36 @@ def _parser() -> argparse.ArgumentParser:
     apply_cmd.add_argument("--confirm", required=True,
                            choices=["experimental-bio-write", "experimental-section-write"],
                            help="Explicitly acknowledge unverified section writers")
+    record = sub.add_parser(
+        "record", help="104-native record CRUD (experimental; not live write verified)"
+    )
+    record.add_argument("resume_id")
+    record.add_argument("section", choices=["skill", "education", "experience", "language"])
+    record.add_argument("action", choices=["create", "update", "delete"])
+    record.add_argument("--kind", choices=["local", "foreign"], default=None,
+                        help="Required only for LANGUAGE records")
+    record.add_argument("--position", type=int, default=None,
+                        help="Current 1-based sort number for update/delete")
+    record.add_argument("--changes-file", default=None,
+                        help="Private JSON object for create/update; never commit")
+    record.add_argument("--if-match", required=True, help="Prior 104 resumeTimestamp")
+    record.add_argument("--confirm", choices=["experimental-record-write"], required=True)
+    theme = sub.add_parser("theme", help="104 LAYOUT section theme (experimental)")
+    theme.add_argument("resume_id")
+    theme.add_argument("section", choices=[
+        "info", "education", "experience", "jobCondition", "skill",
+        "certificate", "language", "project", "portfolio", "referrer", "custom",
+    ])
+    theme.add_argument("selected_theme", type=int)
+    theme.add_argument("--if-match", required=True)
+    theme.add_argument("--confirm", choices=["experimental-theme-write"], required=True)
+    ordering = sub.add_parser("sort", help="104 adjacent record move (experimental)")
+    ordering.add_argument("resume_id")
+    ordering.add_argument("section", choices=["education", "skill"])
+    ordering.add_argument("from_position", type=int)
+    ordering.add_argument("to_position", type=int)
+    ordering.add_argument("--if-match", required=True)
+    ordering.add_argument("--confirm", choices=["experimental-sort-write"], required=True)
     return parser
 
 
@@ -60,6 +90,42 @@ async def _run(args):
             result = await client.get_section(args.resume_id, args.section)
         elif args.command == "create":
             result = await client.create_resume()
+        elif args.command == "record":
+            # Explicit 104-native operation; malformed combinations never
+            # become a browser write. No generic multi-provider data model.
+            if (args.section == "language") != (args.kind is not None):
+                raise ValueError("--kind is required only for LANGUAGE")
+            needs_position = args.action in ("update", "delete")
+            if needs_position != (args.position is not None):
+                raise ValueError("--position required only for update/delete")
+            needs_fields = args.action in ("create", "update")
+            if needs_fields != (args.changes_file is not None):
+                raise ValueError("--changes-file required only for create/update")
+            changes = None
+            if needs_fields:
+                changes = json.loads(Path(args.changes_file).read_text(encoding="utf-8"))
+                if not isinstance(changes, dict):
+                    raise ValueError("Native changes file must be a JSON object")
+            operation = getattr(client, f"mutate_{args.section}")
+            params = {
+                "expected_timestamp": args.if_match.strip('"'),
+                "changes": changes, "position": args.position,
+            }
+            result = (
+                await operation(args.resume_id, args.kind, args.action, **params)
+                if args.section == "language"
+                else await operation(args.resume_id, args.action, **params)
+            )
+        elif args.command == "theme":
+            result = await client.set_theme(
+                args.resume_id, args.section, args.selected_theme,
+                expected_timestamp=args.if_match.strip('"'),
+            )
+        elif args.command == "sort":
+            result = await client.sort_records(
+                args.resume_id, args.section, args.from_position,
+                args.to_position, expected_timestamp=args.if_match.strip('"'),
+            )
         elif args.command in ("plan", "apply"):
             operations = json.loads(Path(args.patch_file).read_text(encoding="utf-8"))
             plan, _ = await client.plan_edit(args.resume_id, operations)

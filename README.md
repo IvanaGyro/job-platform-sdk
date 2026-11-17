@@ -78,12 +78,12 @@ copy** of the original response. `client.save_edit(plan)` supports:
   objects to their upstream `value`, category objects to their `no`, and
   handles the 104-specific salary and onboarding branches. Unrecognized
   shapes are rejected before any request. **Synthetic-tested, not live-tested.**
-  Theme changes use a distinct upstream `layout` operation and are not yet
-  implemented.
+  Theme changes use a distinct upstream `layout` operation; the native
+  theme API is now source-mapped as an experimental 104-only operation.
 - `/experience/formData/seniority/value` updates only the overall seniority
   selection, using an independent 104 `experience.seniority` PUT. It never
   submits or overwrites the individual `experiences` list. **Synthetic-tested,
-  not live-tested.** Other experience fields and record CRUD remain unsupported.
+  not live-tested.** Independent EXPERIENCE record CRUD is documented below.
 
 ### Experimental 104 skill records (CRUD)
 
@@ -106,8 +106,8 @@ All writes require the API Bearer token, experimental opt-in, an
 least 16 characters. Each operation reads back the full skill list and
 checks that unrelated records are unchanged. Do **not** blindly repeat an
 ambiguous failure or use stale positions. **Synthetic-tested only; real
-104 writes are not yet confirmed.** Ordering uses a different upstream
-operation and is not yet implemented.
+104 writes are not yet confirmed.** Adjacent ordering is available as a
+separate experimental native swap operation.
 
 ### Experimental 104 education records (CRUD)
 
@@ -128,8 +128,38 @@ Only the intended record is submitted, with unrelated records checked in the
 read-back. All HTTP mutations require the API Bearer token, experimental opt-in,
 `If-Match` and an `Idempotency-Key` of at least 16 characters. **Synthetic
 tests passed; the writer is not yet live write-verified.** This is not a
-generic cross-platform education model. Education ordering uses a different
-upstream operation and remains unsupported.
+generic cross-platform education model. Adjacent ordering is available as
+a separate experimental native swap operation.
+
+### More experimental 104-native operations
+
+These operations are implemented as separate methods, not as arbitrary JSON
+Patch replacement of whole record arrays. **They have only synthetic tests,
+not real 104 write/read-back/restore verification.** Use the original site or
+source to confirm any upstream changes before enabling writes.
+
+| Operation | Python SDK | HTTP endpoint |
+|---|---|---|
+| Experience create | `mutate_experience(..., "create", changes=...)` | `POST /v1/tw104/resumes/{resume_id}/experiences` |
+| Experience update/delete | `mutate_experience(..., "update"/"delete", position=...)` | `PUT/DELETE /v1/tw104/resumes/{resume_id}/experiences/{position}` |
+| Local/foreign language CRUD | `mutate_language(..., kind, action, ...)` | `POST/PUT/DELETE /v1/tw104/resumes/{resume_id}/languages/{kind}[/{position}]` |
+| Theme selection | `set_theme(..., section, selected_theme)` | `PUT /v1/tw104/resumes/{resume_id}/themes/{section}` |
+| Adjacent skill/education swap | `sort_records(..., section, from_position, to_position)` | `PUT /v1/tw104/resumes/{resume_id}/sort/{section}` |
+
+Record methods use 104's native selectors and one-based `sort` positions.
+Experience salary is serialized according to the native job type. Local and
+foreign language proficiency fields differ; changes to linked foreign
+certificates are blocked until the separate association API is mapped.
+Theme selections are validated against `GET /profile/ajax/options`, not a
+locally guessed numeric range. Sorting permits **adjacent** SKILL/EDUCATION
+swaps only; non-adjacent move behavior is not yet verified.
+
+HTTP routes are protected by the bearer token and
+`JOB_PLATFORM_104_ENABLE_EXPERIMENTAL_WRITES=1`; all write routes require
+`If-Match` and an `Idempotency-Key`. Errors after a possibly committed
+remote write are **not retried** automatically. The idempotency cache is
+**not durable** after server restart, and independent 104 requests are
+not one atomic transaction.
 
 Each modified section is written once with sibling fields preserved, then
 verified by reading back. **Multiple sections are not atomic**: if a later
@@ -158,6 +188,25 @@ xvfb-run -a job-platform --provider tw104 apply VERSION_NO --patch-file changes.
 # --confirm experimental-section-write
 # Explicitly creates a resume; no automatic retry after an uncertain outcome:
 xvfb-run -a job-platform --provider tw104 create --confirm create-one
+```
+
+### Native 104 record, theme, and sort CLI
+
+Every new 104-native operation also has a CLI entry point. These commands
+**actually write to the selected resume** and are experimental. Supply
+a fresh `resumeTimestamp`; create/update changes must be a private JSON
+object matching native 104 fields.
+
+```bash
+job-platform record VERSION_NO experience update --position 1 \
+  --changes-file private-changes.json --if-match TIMESTAMP \
+  --confirm experimental-record-write
+job-platform record VERSION_NO language delete --kind local --position 1 \
+  --if-match TIMESTAMP --confirm experimental-record-write
+job-platform theme VERSION_NO skill 2 \
+  --if-match TIMESTAMP --confirm experimental-theme-write
+job-platform sort VERSION_NO education 1 2 \
+  --if-match TIMESTAMP --confirm experimental-sort-write
 ```
 
 The `list` and `get` commands output **private** resume data; redirect them to protected files, never CI logs. The `probe` command reports metadata only.
@@ -209,7 +258,7 @@ validation checklist, see [editor coverage inventory](docs/tw104-editor-coverage
 
 The 104 provider uses same-origin browser `fetch()` for private My104 API calls. Simply copying browser cookies to `curl-cffi` caused HTTP 403 on some authenticated endpoints, even though `login/init` sometimes worked. An authenticated browser is the known-good baseline.
 
-The 104 frontend uses `resumeByBlock` for sections including personal data, education, experience, job conditions, skill, certificates, language, projects, portfolio, biography, and referees. The correct write payloads and server-side read-back checks still need to be implemented and verified one section at a time.
+The 104 frontend uses `resumeByBlock` for sections including personal data, education, experience, job conditions, skill, certificates, language, projects, portfolio, biography, and referees. Some native field encoders and record actions are implemented; others still require per-field mapping and real 104 write/read-back verification.
 
 **No guarantee is made that these unofficial integrations will continue to work if the upstream websites change.**
 
@@ -241,8 +290,8 @@ restarts. On an ambiguous error, inspect the resume before attempting another
 write. Neither this opt-in nor the presence of the API guarantees support for
 all editable sections. BIO updates are verified and CERTIFICATE/SIDEBAR/JOBCONDITION updates are
 experimental; supported sections may be combined in one plan, with non-atomic per-section
-PUT requests. Other fields return HTTP 501.
+PUT requests. Other unmapped fields return HTTP 501.
 
-Run the unit test suite with `python -m unittest discover -s tests -v`.
+Run the synthetic unit test suite with `python -m unittest discover -s tests -v`.
 This repository contains only synthetic fixtures, never account data or backup
 content. Dedicated live integration scripts stay outside the public repository.

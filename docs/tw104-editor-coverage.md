@@ -10,18 +10,18 @@ and successful real 104 writes.** Each is a separate evidence level.
 | Native group | Frontend operation families seen | Implementation in this PR | Live 104 write/read-back |
 |---|---|---|---|
 | `info` | PUT; related identity and optional information | Read/plan only | No |
-| `education` | POST, PUT, DELETE; ordering | Native record CRUD source-mapped (experimental); sorting unavailable | **No** |
-| `experience` | POST, PUT, DELETE; ordering, seniority | Seniority-only PUT source-mapped; records read/plan only | **No** |
+| `education` | POST, PUT, DELETE; ordering | Native record CRUD + adjacent swap sorting (experimental) | **No** |
+| `experience` | POST, PUT, DELETE; ordering, seniority | Seniority-only PUT + native record CRUD (experimental); record ordering pending | **No** |
 | `jobCondition` | PUT; separate layout/theme PUT | Source-mapped full native form serializer, experimental | **No** |
-| `skill` | POST, PUT, DELETE; ordering | Source-mapped record CRUD (experimental); sorting remains unavailable | **No** |
+| `skill` | POST, PUT, DELETE; ordering | Source-mapped record CRUD + adjacent swap sorting (experimental) | **No** |
 | `certificate` | PUT, DELETE; separate certification connections | Existing certificates/others PUT only, experimental | **No** (test formData empty) |
-| `language` | POST, PUT, DELETE; local/foreign records | Read/plan only | No |
+| `language` | POST, PUT, DELETE; local/foreign records | Native local/foreign record CRUD (experimental); linked foreign certificates blocked | **No** |
 | `project` | POST, PUT, DELETE; reorder; attachments | Read/plan only | No |
 | `portfolio` | POST, DELETE; attachments/upload | Read/plan only | No |
 | `bio` | POST, PUT, DELETE | Chinese and English content replacement | **Yes**, including restore |
 | `referrer` | POST, PUT, DELETE | Read/plan only | No |
 | `sidebar` | PUT | Complete-list reorder only; metadata edits rejected | **No** |
-| `layout` | PUT | Not implemented | No |
+| `layout` | PUT | Theme selection for 11 native sections using current 104 option values (experimental) | **No** |
 | `custom` | POST, PUT, DELETE | Not implemented | No |
 | `under18` | POST, PUT | Not implemented | No |
 
@@ -62,11 +62,11 @@ every possible UI control.
 1. Observe every control in the **104** editor and capture the request *shape*
    for its create/update/delete/reorder actions. Do not store real payload
    values in the repository.
-2. Implement separate 104 encoders for `info`, repeating record groups, media
-   and layout; validate every supported JSON Patch path before network I/O.
+2. Extend the existing native record/layout encoders for `info`, referrer,
+   project, portfolio, certificate connections, media, and remaining ordering; validate every supported JSON Patch path before network I/O.
 3. Live-test each source-mapped operation on the designated test resume,
    using private backups and exact read-back/restore where reversible.
-4. Add a test matrix for HTTP API, Python SDK and CLI; harden durable
+4. Extend the synthetic Python SDK, HTTP API and CLI test matrix; harden durable
    idempotency, remote-conflict reconciliation and login recovery.
 
 Current definitions:
@@ -79,3 +79,51 @@ Current definitions:
 
 The scope is **only 104**. No common data schema or adapter behavior is being
 designed for other job platforms.
+
+
+## 2026-11-17 incremental coverage
+
+- **EXPERIENCE records:** source-mapped create, update and delete; salary
+  serialization distinguishes salaried job types from part-time pay, with
+  one-based positions. Changing the section's overall seniority uses its own
+  existing adapter. Record CRUD is **not live write-verified**.
+- **LANGUAGE records:** independent local and foreign CRUD with different
+  selector fields. Mutations involving linked foreign certificates are
+  intentionally blocked until the association API can be verified.
+- **LAYOUT:** one section theme at a time, with valid values fetched from
+  \`/profile/ajax/options\`. Unknown/uninitialized theme shapes fail closed;
+  media, background color and layout ordering are not covered.
+- **SKILL / EDUCATION ordering:** adjacent swap only, sent through
+  \`/profile/ajax/swapRecordBySort/{section}\`. Exact read-back checks the
+  permutation and all unaffected records. Arbitrary moves and sorting other
+  sections require further verification.
+- Above actions are accessible in the Python SDK, experimental 104 HTTP routes
+  and CLI. All mutations use version checks and independent read-back; HTTP
+  additionally requires a bearer token, experimental opt-in and a unique
+  idempotency key. No durability beyond a single HTTP process is claimed.
+- This revision uses **synthetic tests only** for all new operations.
+  **BIO remains the only real 104 edit/write/restore-verified operation.**
+
+
+## 2026-11-17 incremental coverage
+
+- **EXPERIENCE records:** source-mapped create, update and delete; salary
+  serialization distinguishes salaried job types from part-time pay, with
+  one-based positions. Changing the section's overall seniority uses its own
+  existing adapter. Record CRUD is **not live write-verified**.
+- **LANGUAGE records:** independent local and foreign CRUD with different
+  selector fields. Mutations involving linked foreign certificates are
+  intentionally blocked until the association API can be verified.
+- **LAYOUT:** one section theme at a time, with valid values fetched from
+  `/profile/ajax/options`. Unknown/uninitialized theme shapes fail closed;
+  media, background color and layout ordering are not covered.
+- **SKILL / EDUCATION ordering:** adjacent swap only, sent through
+  `/profile/ajax/swapRecordBySort/{section}`. Exact read-back checks the
+  permutation and all unaffected records. Arbitrary moves and sorting other
+  sections require further verification.
+- Above actions are accessible in the Python SDK, experimental 104 HTTP routes
+  and CLI. All mutations use version checks and independent read-back; HTTP
+  additionally requires a bearer token, experimental opt-in and a unique
+  idempotency key. No durability beyond a single HTTP process is claimed.
+- This revision uses **synthetic tests only** for all new operations.
+  **BIO remains the only real 104 edit/write/restore-verified operation.**

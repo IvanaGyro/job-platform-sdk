@@ -263,3 +263,25 @@ block's remote status may be ambiguous. Callers must inspect before retrying.
 
 Private live-test scripts and any original personal-data backups remain in a
 private Modal directory. They are never part of the public repository.
+
+
+### New source-mapped 104 operations (synthetic only)
+
+- EXPERIENCE record CRUD: `/profile/ajax/resumeByBlock/experience`,
+  with POST/PUT/DELETE and the frontend's salaried/part-time payload branch.
+  Unlike the independently mapped seniority PUT, a record CRUD request
+  addresses only the selected experience row.
+- LANGUAGE record CRUD: `/profile/ajax/resumeByBlock/language`,
+  with distinct `languages.local` and `languages.foreign` payloads.
+  Linked certificates remain unsupported.
+- LAYOUT theme: `PUT /profile/ajax/resumeByBlock/layout`
+  with `blockValueList.layout.themeChoose.block` and `selectedTheme`.
+  Valid options are fetched from the current `/profile/ajax/options`.
+- Adjacent SKILL/EDUCATION reorder:
+  `PUT /profile/ajax/swapRecordBySort/{section}`,
+  with `blockValueList.{section}.{records}.sort={from,to}`.
+  Non-adjacent moves remain unsupported pending verified semantics.
+
+**None of these operations has passed real 104 write/read-back/restore
+validation.** Media uploads, record deletion, linked certifications,
+account-level information and hidden conditional controls are still outstanding.
