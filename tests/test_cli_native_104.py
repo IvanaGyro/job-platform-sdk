@@ -26,6 +26,14 @@ class DummyClient:
         self.calls.append(("bio-action", version, action, kwargs))
         return {"verified": True}
 
+    async def mutate_project(self, version, action, **kwargs):
+        self.calls.append(("project", version, action, kwargs))
+        return {"verified": True}
+
+    async def mutate_portfolio(self, version, action, **kwargs):
+        self.calls.append(("portfolio", version, action, kwargs))
+        return {"verified": True}
+
     async def mutate_referrer(self, version, action, **kwargs):
         self.calls.append(("referrer", version, action, kwargs))
         return {"verified": True}
@@ -169,6 +177,45 @@ class CLI104Tests(unittest.IsolatedAsyncioTestCase):
                     "bio-action", "synthetic", action, *extra,
                     "--if-match", "78", "--confirm", "experimental-bio-action-write",
                 ])
+
+    async def test_project_and_portfolio_cli_dispatch(self):
+        with tempfile.TemporaryDirectory() as folder:
+            file = Path(folder) / "synthetic-project.json"
+            file.write_text(json.dumps({
+                "name": "Synthetic Project", "introduction": "<p>Test</p>",
+            }), encoding="utf-8")
+            await self.execute([
+                "record", "synthetic", "project", "update", "--position", "1",
+                "--changes-file", str(file),
+                "--if-match", "100", "--confirm", "experimental-record-write",
+            ])
+            self.assertEqual(DummyClient.calls[-1], (
+                "project", "synthetic", "update",
+                {"expected_timestamp": "100", "changes": {
+                    "name": "Synthetic Project", "introduction": "<p>Test</p>"
+                }, "position": 1},
+            ))
+        await self.execute([
+            "record", "synthetic", "portfolio", "delete", "--position", "2",
+            "--if-match", "101", "--confirm", "experimental-record-write",
+        ])
+        self.assertEqual(DummyClient.calls[-1], (
+            "portfolio", "synthetic", "delete",
+            {"expected_timestamp": "101", "changes": None, "position": 2},
+        ))
+        await self.execute([
+            "sort", "synthetic", "portfolio", "1", "2",
+            "--if-match", "102", "--confirm", "experimental-sort-write",
+        ])
+        self.assertEqual(DummyClient.calls[-1], (
+            "sort", "synthetic", "portfolio", 1, 2,
+            {"expected_timestamp": "102"},
+        ))
+        with self.assertRaises(ValueError):
+            await self.execute([
+                 "record", "synthetic", "portfolio", "create", "--if-match", "99",
+                "--confirm", "experimental-record-write",
+            ])
 
     async def test_invalid_record_combinations_do_not_write(self):
         invalid = (

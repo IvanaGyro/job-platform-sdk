@@ -14,9 +14,15 @@ from job_platforms.core.errors import UnsupportedWrite
 
 from .education_records import education_list
 from .language_records import KINDS, language_lists
+from .project_records import project_records
+from .portfolio_records import portfolio_records
 from .skill_records import skill_list
 
-SORTABLE = {"education": "educations", "skill": "skills", "language": "languages"}
+SORTABLE = {
+    "education": "educations", "skill": "skills",
+    "language": "languages", "project": "projects",
+    "portfolio": "portfolios",
+}
 
 
 def _records(doc: dict, section: str, kind: str | None) -> list:
@@ -30,6 +36,10 @@ def _records(doc: dict, section: str, kind: str | None) -> list:
         return education_list(doc)
     if section == "skill":
         return skill_list(doc)
+    if section == "project":
+        return project_records(doc)
+    if section == "portfolio":
+        return portfolio_records(doc)
     raise UnsupportedWrite("104 sortable section not source-mapped")
 
 

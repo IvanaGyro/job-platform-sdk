@@ -27,6 +27,12 @@ from .language_records import (
     verify_language_operation,
 )
 from .bio_actions import bio_action_body, verify_bio_action
+from .project_records import (
+    project_records, project_operation_body, verify_project_operation,
+)
+from .portfolio_records import (
+    portfolio_records, portfolio_delete_body, verify_portfolio_delete,
+)
 from .referrer_records import (
     referrer_records, referrer_operation_body, verify_referrer_operation,
 )
@@ -476,6 +482,113 @@ class Resume104Client:
             raise VerificationError(
                 "REFERRER write submitted but record state could not be "
                 "verified; inspect before retrying"
+            )
+
+    async def mutate_project(
+        self,
+        resume_id: str | int,
+        action: str,
+        *,
+        expected_timestamp: int | str,
+        changes: dict | None = None,
+        position: int | None = None,
+    ) -> dict:
+        """Source-mapped 104 PROJECT record POST/PUT/DELETE.
+
+        Each position is the current 1-based sort value. Unrecognized source
+        shapes and stale resume versions are rejected before writing.
+        """
+        if action not in ("create", "update", "delete"):
+            raise UnsupportedWrite("Unsupported 104 PROJECT action")
+        version = self._version(resume_id)
+        async with self._write_lock:
+            before = await self.get_resume(version)
+            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+                raise ConflictError("104 resume changed before project operation")
+            form = before.get("project", {}).get("formData")
+            if not isinstance(form, dict):
+                raise UnsupportedWrite("104 PROJECT native formData missing")
+            options = None
+            if action == "create" and not form:
+                options = self._data(
+                    await self.transport.get_json("/profile/ajax/options")
+                )
+            body = project_operation_body(
+                before, action, changes=changes, position=position,
+                options=options,
+            )
+            project_records(before)
+            method = {"create": "POST", "update": "PUT", "delete": "DELETE"}[action]
+            await self.transport.request(
+                method,
+                "/profile/ajax/resumeByBlock/project",
+                params={"vno": version}, json_data=body,
+            )
+            for attempt in range(4):
+                try:
+                    after = await self.get_resume(version)
+                    if verify_project_operation(
+                        before, after, action, body=body, position=position
+                    ):
+                        return {
+                            "resume_id": version,
+                            "action": action,
+                            "section": "project",
+                            "persisted": True,
+                            "verified": True,
+                            "atomic": True,
+                            "position": (
+                                len(project_records(after)) if action == "create"
+                                else position
+                            ),
+                        }
+                except Exception:
+                    raise VerificationError(
+                        "PROJECT request submitted; read-back unavailable"
+                    ) from None
+                if attempt < 3:
+                    await asyncio.sleep(0.75)
+            raise VerificationError(
+                "PROJECT write submitted but record state could not be "
+                "verified; inspect before retrying"
+            )
+
+    async def mutate_portfolio(
+        self, resume_id: str | int, action: str, *,
+        expected_timestamp: int | str,
+        changes: dict | None = None,
+        position: int | None = None,
+    ) -> dict:
+        """Source-mapped 104 PORTFOLIO DELETE. Uploads not supported here."""
+        if action != "delete" or changes is not None:
+            raise UnsupportedWrite("104 PORTFOLIO native adapter only supports delete")
+        version = self._version(resume_id)
+        async with self._write_lock:
+            before = await self.get_resume(version)
+            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+                raise ConflictError("104 resume changed before portfolio delete")
+            body = portfolio_delete_body(before, position=position)
+            await self.transport.request(
+                "DELETE", "/profile/ajax/resumeByBlock/portfolio",
+                params={"vno": version}, json_data=body,
+            )
+            for attempt in range(4):
+                try:
+                    after = await self.get_resume(version)
+                    if verify_portfolio_delete(before, after, position=position):
+                        return {
+                            "resume_id": version, "section": "portfolio",
+                            "action": action, "position": position,
+                            "persisted": True, "verified": True, "atomic": True,
+                        }
+                except Exception:
+                    raise VerificationError(
+                        "104 PORTFOLIO request submitted; read-back unavailable"
+                    ) from None
+                if attempt < 3:
+                    await asyncio.sleep(0.75)
+            raise VerificationError(
+                "104 PORTFOLIO delete submitted but exact result not verified"
             )
 
     async def mutate_language(

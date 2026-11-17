@@ -357,3 +357,39 @@ These operations differ from the previously live-tested BIO PUT.
 The SDK requires an empty form for POST, existing nonempty content
 for DELETE, and exact independent read-back. Real POST/DELETE/restore
 validation has not yet been performed.
+
+
+### PROJECT no-media CRUD and adjacent sort
+
+Frontend module 1d22 submits POST and PUT to
+/profile/ajax/resumeByBlock/project with blockValueList.project.projects
+containing one record, plus themeChoose.selectedTheme. Its postData()
+converts duration month selectors into values, maps a nonempty
+isInProgress state to 1 (otherwise 0), and maps a cover object to
+file={type,content,ext}. The new adapter supports **type=0 only**
+(no cover), with empty content and no ext. POST omits sort; PUT
+includes the current sort. A first POST into empty formData uses the
+first live optionsProjectTheme value.
+
+DELETE submits blockValueList.project.projects.sort=[POSITION].
+Adjacent reordering submits
+blockValueList.project.projects.sort={from:FROM,to:TO} to
+/profile/ajax/swapRecordBySort/project. There is no verification yet
+of real populated project GET fields or write/read-back/restore.
+
+### PORTFOLIO deletion, ordering and missing multipart upload
+
+Frontend module 44aa deletes via DELETE
+/profile/ajax/resumeByBlock/portfolio with
+blockValueList.portfolio.sort=[POSITION]. This differs from the
+PROJECT structure. Adjacent reorder uses
+blockValueList.portfolio.portfolios.sort={from:FROM,to:TO} on the
+swapRecordBySort/portfolio endpoint.
+
+The real read-only GET response includes portfolio.formData.portfolios
+with name, attach, attachType and sort. The attachment contains
+name, status, url, fileId, thumbnailFileId, src and crawler.
+
+**Not yet implemented:** POST multipart/form-data of attachment,
+generation of file previews and website link thumbnails, attachment
+replacement and full lifecycle, as well as real write/restore tests.

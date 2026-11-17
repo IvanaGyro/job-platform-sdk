@@ -131,6 +131,59 @@ tests passed; the writer is not yet live write-verified.** This is not a
 generic cross-platform education model. Adjacent ordering is available as
 a separate experimental native swap operation.
 
+### Experimental 104 PROJECT and PORTFOLIO actions
+
+The 104 PROJECT section is initially empty on the designated test resume.
+The official frontend (module 1d22) uses a separate POST for first record
+creation, PUT for one-record editing, DELETE by native sort ID, and a
+swapRecordBySort endpoint for ordering.
+
+The Python SDK exposes:
+- Resume104Client.mutate_project(resume_id, action, changes=..., position=...,
+  expected_timestamp=...) for create, update and delete.
+- Resume104Client.mutate_portfolio(resume_id, "delete", position=...,
+  expected_timestamp=...) for **deleting a single existing portfolio**.
+- Resume104Client.sort_records(resume_id, "project"/"portfolio", from_position,
+  to_position, expected_timestamp=...) for adjacent positions only.
+
+The experimental HTTP endpoints are:
+| Method | Endpoint | Operation |
+|---|---|---|
+| POST | /v1/tw104/resumes/{resume_id}/projects | Create a no-media project |
+| PUT | /v1/tw104/resumes/{resume_id}/projects/{position} | Update existing no-media project |
+| DELETE | /v1/tw104/resumes/{resume_id}/projects/{position} | Delete one project |
+| DELETE | /v1/tw104/resumes/{resume_id}/portfolios/{position} | Delete one portfolio entry |
+| PUT | /v1/tw104/resumes/{resume_id}/sort/project | Adjacent project swap |
+| PUT | /v1/tw104/resumes/{resume_id}/sort/portfolio | Adjacent portfolio swap |
+
+All mutations require experimental HTTP opt-in, authentication,
+If-Match and Idempotency-Key. The equivalent CLI commands use
+job-platform record and job-platform sort with explicit confirmation.
+
+PROJECT creation requires these **no-media** fields: name, duration
+(startYear/startMonth/endYear/endMonth), isInProgress, introduction
+(HTML string) and url (optional http/https URL). The adapter generates
+file.type=0 and an empty file.content, without accepting cover images,
+video uploads, file metadata or arbitrary extra fields. It refuses
+updates of existing projects with nonempty media, preventing accidental
+loss of an uploaded image or video. The first creation resolves its
+initial theme from the current optionsProjectTheme, not a fixed value.
+104 inputField read-only validation reported max 6 PROJECT entries,
+name 120 characters, introduction HTML 4000 and url 200.
+
+The PORTFOLIO entry GET shape was checked with a real, **read-only**
+104 response (one existing attachment). Deletion uses the native
+blockValueList.portfolio.sort list, **not** the PROJECT or REFERRER
+delete shape. A deletion can permanently remove an uploaded attachment
+from the 104 service; do not run it without an independent private
+backup. File/link addition uses a separate multipart upload and,
+for some formats, thumbnail/preview processing: this is still TODO.
+
+**These new write/sort actions have synthetic tests only.** No remote
+PROJECT or PORTFOLIO writes, deletions or uploads have been performed.
+Before production use, first-create POST, native GET, update, delete
+and restore must be individually verified on a safe test resume.
+
 ### Experimental BIO creation and clearing
 
 The existing 104 BIO HTML editor supports a previously live-verified PUT

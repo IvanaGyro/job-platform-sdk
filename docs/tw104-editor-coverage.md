@@ -16,8 +16,8 @@ and successful real 104 writes.** Each is a separate evidence level.
 | `skill` | POST, PUT, DELETE; ordering | Source-mapped record CRUD + adjacent swap sorting (experimental) | **No** |
 | `certificate` | PUT, DELETE; separate certification connections | Existing certificates/others PUT only, experimental | **No** (test formData empty) |
 | `language` | POST, PUT, DELETE; local/foreign records | Native local/foreign record CRUD + adjacent local/foreign sorting (experimental); linked certificates blocked | **No** |
-| `project` | POST, PUT, DELETE; reorder; attachments | Read/plan only | No |
-| `portfolio` | POST, DELETE; attachments/upload | Read/plan only | No |
+| `project` | POST, PUT, DELETE; reorder; attachments | Source-mapped **no-media** first-create/CRUD and adjacent reorder (experimental); media pending | **No** |
+| `portfolio` | POST, DELETE; attachments/upload; reorder | Source-mapped one-record DELETE and adjacent reorder (experimental); multipart upload/preview pending | **No** |
 | `bio` | POST, PUT, DELETE | HTML PUT live-verified; first-create POST and clear DELETE experimental | **PUT only** |
 | `referrer` | POST, PUT, DELETE; reorder | Native record create/update/delete with empty-form initialization (experimental); sorting pending | **No** |
 | `sidebar` | PUT | Complete-list reorder only; metadata edits rejected | **No** |
@@ -198,3 +198,30 @@ in blockValueList.bio. Both additional operations are exposed in SDK,
 CLI and HTTP with strict state preconditions. The original BIO PUT has
 passed a live read/modify/read/restore test; POST and DELETE have
 synthetic tests only. No actual BIO deletion was attempted.
+
+
+### PROJECT and PORTFOLIO native adapters (2026-11-17)
+
+Read-only 104 verification on the designated test resume found an empty
+PROJECT formData, a populated PORTFOLIO formData with one record, and
+native options for three project themes and three portfolio themes.
+The official editor inputField reports a maximum of six entries in
+each section; PROJECT name 120 characters, intro text 2000 / HTML 4000,
+link URL 200. The real PORTFOLIO record had native fields name, attach,
+attachType and sort. Its attachment metadata uses name, status, url,
+fileId, thumbnailFileId, src and crawler.
+
+PROJECT no-media create/update/delete is mapped to frontend module
+1d22. Native wire JSON uses projects[] and a theme selection; the
+first POST initializes an empty form with the site-provided theme.
+The encoder intentionally disallows uploading or overwriting media,
+and cannot yet guarantee real populated GET compatibility. One-record
+PORTFOLIO delete follows module 44aa; its payload contains
+blockValueList.portfolio.sort as a list. The separate multipart POST,
+file conversion and asynchronous thumbnail workflow remain missing.
+
+PROJECT and PORTFOLIO adjacent sorting use swapRecordBySort and
+independent sibling-preserving read-back. Non-adjacent sorting remains
+unsupported until its move-vs-swap semantics are verified. All new
+write/sort operations are **synthetic-only**; no remote mutations
+were made to the real resume or attachment.

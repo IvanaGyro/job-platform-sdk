@@ -53,7 +53,7 @@ def _parser() -> argparse.ArgumentParser:
         "record", help="104-native record CRUD (experimental; not live write verified)"
     )
     record.add_argument("resume_id")
-    record.add_argument("section", choices=["skill", "education", "experience", "language", "referrer"])
+    record.add_argument("section", choices=["skill", "education", "experience", "language", "referrer", "project", "portfolio"])
     record.add_argument("action", choices=["create", "update", "delete"])
     record.add_argument("--kind", choices=["local", "foreign"], default=None,
                         help="Required only for LANGUAGE records")
@@ -74,7 +74,7 @@ def _parser() -> argparse.ArgumentParser:
     theme.add_argument("--confirm", choices=["experimental-theme-write"], required=True)
     ordering = sub.add_parser("sort", help="104 adjacent record move (experimental)")
     ordering.add_argument("resume_id")
-    ordering.add_argument("section", choices=["education", "skill", "language"])
+    ordering.add_argument("section", choices=["education", "skill", "language", "project", "portfolio"])
     ordering.add_argument("--kind", choices=["local", "foreign"], default=None,
                           help="Required only for LANGUAGE record sorting")
     ordering.add_argument("from_position", type=int)
@@ -130,6 +130,8 @@ async def _run(args):
                 changes = json.loads(Path(args.changes_file).read_text(encoding="utf-8"))
                 if not isinstance(changes, dict):
                     raise ValueError("Native changes file must be a JSON object")
+            if args.section == "portfolio" and args.action != "delete":
+                raise ValueError("PORTFOLIO file/link creation uses a different multipart API")
             operation = getattr(client, f"mutate_{args.section}")
             params = {
                 "expected_timestamp": args.if_match.strip('"'),
