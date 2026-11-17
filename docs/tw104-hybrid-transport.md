@@ -37,8 +37,11 @@ unattended production resume without a private backup and independent GET.
 - Accepts relative 104 paths only; rejects external hostnames and fragments.
 - POST/PUT/DELETE require a previously observed `104-profile-ver`.
   Version refresh alone is not an atomic concurrency guarantee.
-- JSON, URL-encoded form fields and bounded multipart files are supported by
-  source-based implementation and synthetic tests. No automatic retry occurs;
+- JSON, URL-encoded form fields and bounded multipart files are supported.
+  The `CurlMime` serializer is also covered by a real **localhost HTTP wire
+  test** of form-only LINK and generated PDF FILE requests, confirming exact
+  field and file bytes; these are **not** live 104 write confirmations.
+  No automatic retry occurs;
   ambiguous network failures during writes raise `VerificationError`.
 - A 401, 403 or redirect is an authentication/network-risk failure, but a
   403 does **not** prove an expired cookie. A 2xx HTML response or malformed
@@ -56,7 +59,11 @@ unattended production resume without a private backup and independent GET.
 
 - **Synthetic unit tests:** cookie-domain scoping, proxy binding, read
   decoding, 401/403/redirect/non-JSON handling, header version propagation,
-  write gate, form encoding and uncertain-write non-retry.
+  write gate, form encoding, `CurlMime` cleanup and uncertain-write non-retry.
+- **Local HTTP transport test:** `ThreadingHTTPServer` parses actual multipart
+  bodies for both text-only LINK and synthetic PDF FILE including native
+  version headers. This test is conditional on the optional `curl_cffi`
+  dependency; the base CI skips it if the extra is not installed.
 - **Earlier private live observation (not this implementation):** Chrome 146
   `curl_cffi` + **original login proxy** + session cookies returned HTTP 200
   resume-overview JSON; the same request directly returned 403.

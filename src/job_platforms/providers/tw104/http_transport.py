@@ -130,24 +130,42 @@ class CurlCffiTransport:
             elif form_data is not None:
                 kwargs["data"] = urlencode(form_data, doseq=True)
                 headers["Content-Type"] = "application/x-www-form-urlencoded;charset=UTF-8"
-            elif multipart_fields is not None:
-                kwargs["data"] = multipart_fields
-                if multipart_upload is not None:
-                    kwargs["files"] = {multipart_upload.field_name: (
-                        multipart_upload.filename, multipart_upload.content,
-                        multipart_upload.content_type,
-                    )}
+            mime = None
+            if multipart_fields is not None:
+                # curl_cffi does not support requests' files= API. Use
+                # CurlMime even for text-only FormData: 104 PORTFOLIO LINK
+                # needs multipart/form-data without a file.
+                from curl_cffi import CurlMime
+                mime = CurlMime()
+                try:
+                    for key, value in multipart_fields.items():
+                        mime.addpart(name=key, data=value.encode("utf-8"))
+                    if multipart_upload is not None:
+                        mime.addpart(
+                            name=multipart_upload.field_name,
+                            content_type=multipart_upload.content_type,
+                            filename=multipart_upload.filename,
+                            data=multipart_upload.content,
+                        )
+                except Exception:
+                    mime.close()
+                    raise ValueError("Failed to prepare multipart upload") from None
+                kwargs["multipart"] = mime
             try:
-                response = await self._session.request(
-                    method, self.ORIGIN + path, **kwargs,
-                )
-            except Exception:
-                # A raw curl exception might contain credential-bearing proxy URL.
-                if write:
-                    raise VerificationError(
-                        "104 HTTP write outcome unknown; inspect before retrying"
-                    ) from None
-                raise UpstreamError(urlsplit(path).path, 0) from None
+                try:
+                    response = await self._session.request(
+                        method, self.ORIGIN + path, **kwargs,
+                    )
+                except Exception:
+                    # A raw curl exception might contain credential-bearing proxy URL.
+                    if write:
+                        raise VerificationError(
+                            "104 HTTP write outcome unknown; inspect before retrying"
+                        ) from None
+                    raise UpstreamError(urlsplit(path).path, 0) from None
+            finally:
+                if mime is not None:
+                    mime.close()
             status = response.status_code
             if status in (401, 403) or 300 <= status < 400:
                 raise AuthenticationRequired(

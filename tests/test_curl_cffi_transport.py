@@ -7,6 +7,7 @@ from job_platforms.core.errors import (
     AuthenticationRequired, UnsupportedWrite, UpstreamError, VerificationError,
 )
 from job_platforms.providers.tw104.http_transport import CurlCffiTransport
+from job_platforms.providers.tw104.transport import BrowserUpload
 from job_platforms.providers.tw104.client import Resume104Client
 
 class Reply:
@@ -160,6 +161,100 @@ class CurlTransportTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(captured["trust_env"])
         self.assertEqual(len(captured["cookies"].jar),1)
         await t.aclose()
+
+    async def test_multipart_uses_curlmime_and_closes_native_resource(self):
+        class FakeMime:
+            instances = []
+            def __init__(self):
+                self.parts = []
+                self.closed = False
+                self.instances.append(self)
+            def addpart(self, **kwargs):
+                self.parts.append(kwargs)
+            def close(self):
+                self.closed = True
+        fake_cffi = ModuleType("curl_cffi")
+        fake_cffi.CurlMime = FakeMime
+        fake_cffi.__path__ = []
+        sample = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF\n"
+        t, session = self.transport([Reply(version="v1"), Reply()],
+                                    allow_writes=True)
+        await t.get_json("/profile/ajax/overview")
+        upload = BrowserUpload("attachment", "synthetic.pdf",
+                               "application/pdf", sample)
+        with patch.dict(sys.modules, {"curl_cffi": fake_cffi}):
+            await t.request("POST", "/profile/ajax/resumeByBlock/portfolio",
+                            multipart_fields={"blockValueList[portfolio][attachType]": "1"},
+                            multipart_upload=upload)
+        method, url, kwargs = session.calls[1]
+        self.assertEqual(method, "POST")
+        self.assertNotIn("files", kwargs)
+        self.assertIs(kwargs["multipart"], FakeMime.instances[0])
+        self.assertTrue(kwargs["multipart"].closed)
+        self.assertEqual(len(kwargs["multipart"].parts), 2)
+        self.assertEqual(kwargs["multipart"].parts[0]["name"],
+                         "blockValueList[portfolio][attachType]")
+        self.assertEqual(kwargs["multipart"].parts[0]["data"], b"1")
+        self.assertEqual(kwargs["multipart"].parts[1]["data"], sample)
+        self.assertEqual(kwargs["multipart"].parts[1]["filename"], "synthetic.pdf")
+        self.assertNotIn("data", kwargs)
+        self.assertNotIn("Content-Type", kwargs["headers"])
+
+    async def test_multipart_link_without_file_is_still_formdata(self):
+        class FakeMime:
+            instances = []
+            def __init__(self):
+                self.parts = []
+                self.closed = False
+                self.instances.append(self)
+            def addpart(self, **kwargs):
+                self.parts.append(kwargs)
+            def close(self):
+                self.closed = True
+        fake_cffi = ModuleType("curl_cffi")
+        fake_cffi.CurlMime = FakeMime
+        fake_cffi.__path__ = []
+        t, session = self.transport([Reply(version="v1"), Reply()],
+                                    allow_writes=True)
+        await t.get_json("/profile/ajax/overview")
+        with patch.dict(sys.modules, {"curl_cffi": fake_cffi}):
+            await t.request("POST", "/profile/ajax/resumeByBlock/portfolio",
+                            multipart_fields={"example": "你好&world"})
+        _, _, kwargs = session.calls[1]
+        self.assertEqual(kwargs["multipart"].parts,
+                         [{"name": "example", "data": "你好&world".encode()}])
+        self.assertTrue(kwargs["multipart"].closed)
+        self.assertNotIn("data", kwargs)
+        self.assertNotIn("files", kwargs)
+
+    async def test_multipart_cleanup_on_uncertain_write(self):
+        class FakeMime:
+            instances = []
+            def __init__(self):
+                self.closed = False
+                self.instances.append(self)
+            def addpart(self, **kwargs):
+                pass
+            def close(self):
+                self.closed = True
+        fake_cffi = ModuleType("curl_cffi")
+        fake_cffi.CurlMime = FakeMime
+        fake_cffi.__path__ = []
+        t, session = self.transport([Reply(version="v1")], allow_writes=True)
+        await t.get_json("/profile/ajax/overview")
+        session.error = RuntimeError("synthetic network failure")
+        sample = b"%PDF-1.4\n%%EOF\n"
+        with patch.dict(sys.modules, {"curl_cffi": fake_cffi}):
+            with self.assertRaises(VerificationError):
+                await t.request("POST", "/profile/ajax/resumeByBlock/portfolio",
+                                multipart_fields={},
+                                multipart_upload=BrowserUpload(
+                                    "attachment", "synthetic.pdf",
+                                    "application/pdf", sample))
+        # The allocated form is closed without retry or raw credential leakage.
+        self.assertEqual(len(session.calls), 2)
+        self.assertTrue(FakeMime.instances[0].closed)
+
 
 if __name__ == "__main__":
     unittest.main()
