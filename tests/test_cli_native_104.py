@@ -117,6 +117,25 @@ class CLI104Tests(unittest.IsolatedAsyncioTestCase):
             "sort", "synthetic", "education", 1, 2, {"expected_timestamp": "41"}
         ))
 
+    async def test_language_adjacent_sort_native_cli_dispatch(self):
+        await self.execute([
+            "sort", "synthetic", "language", "1", "2",
+            "--kind", "local", "--if-match", "41",
+            "--confirm", "experimental-sort-write",
+        ])
+        self.assertEqual(DummyClient.calls[-1], (
+            "sort", "synthetic", "language", 1, 2,
+            {"expected_timestamp": "41", "kind": "local"},
+        ))
+        for argv in (
+            ["sort", "synthetic", "language", "1", "2"],
+            ["sort", "synthetic", "skill", "1", "2", "--kind", "local"],
+        ):
+            with self.assertRaises(ValueError):
+                await self.execute(argv + [
+                    "--if-match", "41", "--confirm", "experimental-sort-write",
+                ])
+
     async def test_invalid_record_combinations_do_not_write(self):
         invalid = (
             ["record", "synthetic", "language", "delete", "--position", "1"],

@@ -547,14 +547,17 @@ class Resume104Client:
     async def sort_records(
         self, resume_id: str | int, section: str, from_position: int,
         to_position: int, *, expected_timestamp: int | str,
+        kind: str | None = None,
     ) -> dict:
-        """Adjacent 104 SKILL/EDUCATION sort with exact independent read-back."""
+        """Adjacent 104 SKILL/EDUCATION or local/foreign LANGUAGE sort."""
         version = self._version(resume_id)
         async with self._write_lock:
             before = await self.get_resume(version)
             if str(before.get("resumeTimestamp")) != str(expected_timestamp):
                 raise ConflictError("Resume changed before native sort operation")
-            body = sort_body(before, section, from_position, to_position)
+            body = sort_body(
+                before, section, from_position, to_position, kind=kind
+            )
             await self.transport.put_json(
                 f"/profile/ajax/swapRecordBySort/{section}", body,
                 params={"vno": version},
@@ -562,10 +565,14 @@ class Resume104Client:
             for attempt in range(4):
                 try:
                     after = await self.get_resume(version)
-                    if verify_sort(before, after, section, from_position, to_position):
+                    if verify_sort(
+                        before, after, section, from_position, to_position,
+                        kind=kind,
+                    ):
                         return {
                             "resume_id": version, "section": section,
                             "from": from_position, "to": to_position,
+                            **({"kind": kind} if kind is not None else {}),
                             "persisted": True, "verified": True, "atomic": True,
                         }
                 except Exception:

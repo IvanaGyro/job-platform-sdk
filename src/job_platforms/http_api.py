@@ -872,12 +872,20 @@ def create_app(
             raise HTTPException(428, "If-Match resumeTimestamp required")
         if not idempotency_key or len(idempotency_key) < 16:
             raise HTTPException(400, "Idempotency-Key of at least 16 characters required")
-        if section not in SORTABLE or set(body) != {"from", "to"}:
+        expected_fields = (
+            {"from", "to", "kind"} if section == "language"
+            else {"from", "to"}
+        )
+        if section not in SORTABLE or set(body) != expected_fields:
             raise HTTPException(422, "Unsupported 104 sort request")
+        kind = body.get("kind")
+        if section == "language" and kind not in LANGUAGE_KINDS:
+            raise HTTPException(422, "LANGUAGE sort requires local or foreign kind")
         source, target = body["from"], body["to"]
         expected = if_match.strip('"')
         fingerprint = hashlib.sha256(json.dumps(
-            {"section": section, "from": source, "to": target, "timestamp": expected},
+            {"section": section, "kind": kind,
+             "from": source, "to": target, "timestamp": expected},
             sort_keys=True, separators=(",", ":"),
         ).encode("utf-8")).hexdigest()
         key = ("SORT", resume_id, section, idempotency_key)
@@ -893,7 +901,7 @@ def create_app(
                 before = await request.app.state.client.get_resume(resume_id)
                 if str(before.get("resumeTimestamp")) != expected:
                     raise HTTPException(412, "Resume changed since caller's read")
-                sort_body(before, section, source, target)
+                sort_body(before, section, source, target, kind=kind)
             except (ValueError, TypeError, KeyError, UnsupportedWrite):
                 raise HTTPException(422, "Invalid 104 sort positions") from None
             except JobPlatformError as exc:
@@ -902,7 +910,8 @@ def create_app(
             request.app.state.idempotency_results[key] = record
             try:
                 result = await request.app.state.client.sort_records(
-                    resume_id, section, source, target, expected_timestamp=expected,
+                    resume_id, section, source, target,
+                    kind=kind, expected_timestamp=expected,
                 )
             except JobPlatformError as exc:
                 translate_error(exc)

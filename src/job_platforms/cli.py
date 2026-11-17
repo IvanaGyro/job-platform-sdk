@@ -64,7 +64,9 @@ def _parser() -> argparse.ArgumentParser:
     theme.add_argument("--confirm", choices=["experimental-theme-write"], required=True)
     ordering = sub.add_parser("sort", help="104 adjacent record move (experimental)")
     ordering.add_argument("resume_id")
-    ordering.add_argument("section", choices=["education", "skill"])
+    ordering.add_argument("section", choices=["education", "skill", "language"])
+    ordering.add_argument("--kind", choices=["local", "foreign"], default=None,
+                          help="Required only for LANGUAGE record sorting")
     ordering.add_argument("from_position", type=int)
     ordering.add_argument("to_position", type=int)
     ordering.add_argument("--if-match", required=True)
@@ -122,9 +124,12 @@ async def _run(args):
                 expected_timestamp=args.if_match.strip('"'),
             )
         elif args.command == "sort":
+            if (args.section == "language") != (args.kind is not None):
+                raise ValueError("--kind required only for LANGUAGE sorting")
             result = await client.sort_records(
                 args.resume_id, args.section, args.from_position,
                 args.to_position, expected_timestamp=args.if_match.strip('"'),
+                **({"kind": args.kind} if args.kind is not None else {}),
             )
         elif args.command in ("plan", "apply"):
             operations = json.loads(Path(args.patch_file).read_text(encoding="utf-8"))

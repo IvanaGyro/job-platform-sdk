@@ -332,3 +332,13 @@ test resume. The current /profile/ajax/options has two referrer themes;
 the editor uses its first one for a first POST. The new native writer
 supports this branch without hard-coding an option ID. Real writes and
 restoration remain unverified.
+
+
+### Native LANGUAGE adjacent sort (source-mapped only)
+
+The frontend's local/foreign drag-end sends a swapRecordBySort
+request with blockValueList.language.languages. One of the two
+groups contains sort={from,to}, while the other contains sort=[].
+The SDK maps only adjacent swaps and verifies the other group's
+content is unchanged. The designated test resume contains only one
+record per group; no real sorting or restore has been performed.

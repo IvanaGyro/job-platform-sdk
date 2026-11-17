@@ -15,7 +15,7 @@ and successful real 104 writes.** Each is a separate evidence level.
 | `jobCondition` | PUT; separate layout/theme PUT | Source-mapped full native form serializer, experimental | **No** |
 | `skill` | POST, PUT, DELETE; ordering | Source-mapped record CRUD + adjacent swap sorting (experimental) | **No** |
 | `certificate` | PUT, DELETE; separate certification connections | Existing certificates/others PUT only, experimental | **No** (test formData empty) |
-| `language` | POST, PUT, DELETE; local/foreign records | Native local/foreign record CRUD (experimental); linked foreign certificates blocked | **No** |
+| `language` | POST, PUT, DELETE; local/foreign records | Native local/foreign record CRUD + adjacent local/foreign sorting (experimental); linked certificates blocked | **No** |
 | `project` | POST, PUT, DELETE; reorder; attachments | Read/plan only | No |
 | `portfolio` | POST, DELETE; attachments/upload | Read/plan only | No |
 | `bio` | POST, PUT, DELETE | Chinese and English content replacement | **Yes**, including restore |
@@ -179,3 +179,12 @@ and HTTP idempotency regression cases.
 Missing: real populated GET shape, first POST/read-back/restore, all UI
 conditional contact-visibility options, and sorting. No real contacts or
 credentials are in the public repository.
+
+
+### LANGUAGE adjacent sort (2026-11-17)
+
+Official frontend module 96e2 uses swapRecordBySort for independent
+local and foreign collections. Drag-end emits a nested languages object
+with both foreign.sort and local.sort; the inactive group is [].
+The new SDK, CLI and HTTP route require an explicit group and preserve
+the untouched group. These operations have synthetic tests only.

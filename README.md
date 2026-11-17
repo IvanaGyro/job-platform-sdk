@@ -202,15 +202,16 @@ source to confirm any upstream changes before enabling writes.
 | Experience update/delete | `mutate_experience(..., "update"/"delete", position=...)` | `PUT/DELETE /v1/tw104/resumes/{resume_id}/experiences/{position}` |
 | Local/foreign language CRUD | `mutate_language(..., kind, action, ...)` | `POST/PUT/DELETE /v1/tw104/resumes/{resume_id}/languages/{kind}[/{position}]` |
 | Theme selection | `set_theme(..., section, selected_theme)` | `PUT /v1/tw104/resumes/{resume_id}/themes/{section}` |
-| Adjacent skill/education swap | `sort_records(..., section, from_position, to_position)` | `PUT /v1/tw104/resumes/{resume_id}/sort/{section}` |
+| Adjacent skill/education/language swap | `sort_records(..., section, from_position, to_position)` | `PUT /v1/tw104/resumes/{resume_id}/sort/{section}` |
 
 Record methods use 104's native selectors and one-based `sort` positions.
 Experience salary is serialized according to the native job type. Local and
 foreign language proficiency fields differ; changes to linked foreign
 certificates are blocked until the separate association API is mapped.
 Theme selections are validated against `GET /profile/ajax/options`, not a
-locally guessed numeric range. Sorting permits **adjacent** SKILL/EDUCATION
-swaps only; non-adjacent move behavior is not yet verified.
+locally guessed numeric range. Sorting permits **adjacent** SKILL/EDUCATION swaps and **adjacent**
+local/foreign LANGUAGE swaps. The language group is an explicit kind
+parameter; non-adjacent move behavior is not yet verified.
 
 HTTP routes are protected by the bearer token and
 `JOB_PLATFORM_104_ENABLE_EXPERIMENTAL_WRITES=1`; all write routes require
@@ -365,3 +366,16 @@ selector objects, and descending record `sort` values. Those cases
 are now covered by the 104 encoder and synthetic regression tests.
 **No newly added writer has been real 104 write/read-back/restore verified;
 the new check performed no mutations.**
+
+
+### Experimental native LANGUAGE ordering
+
+The 104 editor implements independent language groups, local and foreign.
+Both groups have separate native sort entries, with the inactive group
+sent as an empty list. The API requires an explicit kind in its body;
+the CLI example is:
+
+    job-platform sort VERSION_NO language 1 2 --kind local --if-match TIMESTAMP --confirm experimental-sort-write
+
+Only adjacent moves are source-mapped, with exact read-back checks.
+Arbitrary-distance sorting and live writes remain unverified.
