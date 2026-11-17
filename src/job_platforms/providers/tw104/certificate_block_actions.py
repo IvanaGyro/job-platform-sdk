@@ -8,7 +8,9 @@ These actions affect the resume's certificate block only. They DO NOT
 create, delete, connect or disconnect account-level certifications.
 Clearing is deliberately supported only when no certificate IDs are
 linked, preventing accidental loss of associations.
-All writes remain source-mapped/synthetic only.
+Initial PUT succeeded in a private real 104 test on 2026-11-17;
+the first live read-back showed certifications[], not certificates[].
+Clear and round-trip restoration must be evaluated separately.
 """
 from __future__ import annotations
 
@@ -29,14 +31,23 @@ def _certificates(form: dict) -> dict:
     if not isinstance(form, dict) or not form:
         raise UnsupportedWrite("104 CERTIFICATE populated form required")
     block = form.get("certificate")
-    if not isinstance(block, dict) or not {"certificates", "others"} <= block.keys():
-        raise UnsupportedWrite("104 CERTIFICATE native structure changed")
-    if not isinstance(block["certificates"], list) or not isinstance(
-        block["others"], str
+    if (
+        not isinstance(block, dict)
+        or "others" not in block
+        or not isinstance(block["others"], str)
+        or not ({"certificates", "certifications"} & set(block))
+        or set(block) - {"others", "certificates", "certifications"}
     ):
-        raise UnsupportedWrite("104 CERTIFICATE invalid text/links")
-    if any(not isinstance(x, dict) for x in block["certificates"]):
-        raise UnsupportedWrite("104 CERTIFICATE unknown certification link")
+        raise UnsupportedWrite("104 CERTIFICATE native structure changed")
+    # 2026-11-17 *live* GET after a successful initial PUT supplied
+    # only {certifications:[], others:"..."} -- no certificates key.
+    # The editor's initial view model adds certificates:[] internally.
+    for key in ("certificates", "certifications"):
+        if key in block and (
+            not isinstance(block[key], list)
+            or any(not isinstance(x, dict) for x in block[key])
+        ):
+            raise UnsupportedWrite("104 CERTIFICATE unknown certification link")
     return block
 
 
@@ -58,7 +69,7 @@ def certificate_block_body(
         if others is not None:
             raise UnsupportedWrite("104 CERTIFICATE clear takes no text")
         block = _certificates(form)
-        if block["certificates"]:
+        if block.get("certificates") or block.get("certifications"):
             raise UnsupportedWrite(
                 "104 CERTIFICATE with linked items cannot be safely cleared"
             )
@@ -83,7 +94,8 @@ def verify_certificate_block(
         except UnsupportedWrite:
             return False
         return (
-            block["certificates"] == []
+            not block.get("certificates")
+            and not block.get("certifications")
             and block["others"] == body["blockValueList"]["certificate"]["others"]
         )
     if action == "clear":
@@ -95,5 +107,9 @@ def verify_certificate_block(
             block = _certificates(new_form)
         except UnsupportedWrite:
             return False
-        return block["certificates"] == [] and block["others"] == ""
+        return (
+            not block.get("certificates")
+            and not block.get("certifications")
+            and block["others"] == ""
+        )
     return False

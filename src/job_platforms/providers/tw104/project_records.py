@@ -168,6 +168,18 @@ def _wire(data: dict, *, include_sort: bool) -> dict:
     img = data.get("img", {"type": 0})
     if not isinstance(img, dict) or img.get("type") != 0:
         raise UnsupportedWrite("104 PROJECT media editing requires a separate verified adapter")
+    # Real 104 GET adds fileId/url/thumbnailStatus/thumbnailUrl even when
+    # type=NONE. Reject disguised media before emitting file:{type:0}.
+    if set(img) - {
+        "type", "fileId", "url", "thumbnailStatus",
+        "thumbnailUrl", "ext",
+    } or any(
+        k != "type" and v not in (None, "")
+        for k, v in img.items()
+    ):
+        raise UnsupportedWrite(
+            "104 PROJECT NONE media has nonempty or unexpected attachment data"
+        )
     duration = value["duration"]
     if value["isInProgress"]:
         duration["endYear"] = ""
@@ -228,6 +240,10 @@ def _content(row: dict) -> dict:
     return value
 
 
+def _without_sort(row: dict) -> dict:
+    return {k: deepcopy(v) for k, v in row.items() if k != "sort"}
+
+
 def verify_project_operation(
     before: dict, after: dict, action: str, *,
     body: dict, position: int | None,
@@ -240,22 +256,25 @@ def verify_project_operation(
         if len(new) != len(old) + 1:
             return False
         expected = body["blockValueList"]["project"]["projects"][0]
-        from collections import Counter
-        import json
-        def bag(rows):
-            return Counter(json.dumps(
-                _content(x), sort_keys=True, ensure_ascii=False
-            ) for x in rows)
-        addition = bag(new) - bag(old)
-        return addition == Counter({
-            json.dumps(expected, sort_keys=True, ensure_ascii=False): 1
-        })
+        siblings = [_without_sort(row) for row in old]
+        # Preserve arbitrary preexisting media projects. Only the new
+        # no-media record should be re-encoded as file:{type:0}.
+        for index, row in enumerate(new):
+            try:
+                if _wire(row, include_sort=False) != expected:
+                    continue
+            except UnsupportedWrite:
+                continue
+            remaining = [_without_sort(x) for j, x in enumerate(new) if j != index]
+            if remaining == siblings:
+                return True
+        return False
     if action == "update":
         if len(new) != len(old):
             return False
         old_map = {x["sort"]: x for x in old}
         new_map = {x["sort"]: x for x in new}
-        if old_map.keys() != new_map.keys():
+        if old_map.keys() != new_map.keys() or position not in old_map:
             return False
         if any(old_map[i] != new_map[i] for i in old_map if i != position):
             return False
@@ -265,6 +284,8 @@ def verify_project_operation(
     if action == "delete":
         if len(new) != len(old) - 1:
             return False
-        expected = [_content(x) for x in old if x["sort"] != position]
-        return [_content(x) for x in new] == expected
+        if position not in {x["sort"] for x in old}:
+            return False
+        expected = [_without_sort(x) for x in old if x["sort"] != position]
+        return [_without_sort(x) for x in new] == expected
     return False

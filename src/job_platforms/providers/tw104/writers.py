@@ -54,13 +54,31 @@ def bio_data(document: dict[str, Any]) -> dict[str, str]:
 def certificate_data(document: dict[str, Any]) -> dict[str, Any]:
     try:
         value = document["certificate"]["formData"]["certificate"]
-        certificates, others = value["certificates"], value["others"]
+        others = value["others"]
     except (KeyError, TypeError) as exc:
         raise UnsupportedWrite("104 CERTIFICATE response shape is not supported") from exc
-    if not isinstance(certificates, list) or not isinstance(others, str):
-        raise UnsupportedWrite("104 CERTIFICATE expects list and string fields")
-    if not all(isinstance(item, dict) for item in certificates):
-        raise UnsupportedWrite("104 CERTIFICATE expects object entries")
+    if not isinstance(value, dict) or not isinstance(others, str):
+        raise UnsupportedWrite("104 CERTIFICATE expects a native object and text")
+    if "certificates" in value:
+        certificates = value["certificates"]
+        if (
+            not isinstance(certificates, list)
+            or not all(isinstance(item, dict) for item in certificates)
+        ):
+            raise UnsupportedWrite("104 CERTIFICATE invalid linked certificates")
+    elif value.get("certifications") == []:
+        # Live GET on an initialized but link-free certificate section
+        # has {certifications:[],others:...} and no certificates key.
+        certificates = []
+    else:
+        raise UnsupportedWrite(
+            "104 CERTIFICATE associations cannot be inferred from this response"
+        )
+    if "certifications" in value and (
+        not isinstance(value["certifications"], list)
+        or (value["certifications"] and "certificates" not in value)
+    ):
+        raise UnsupportedWrite("104 CERTIFICATE has unsupported linked records")
     return {"certificates": deepcopy(certificates), "others": others}
 
 

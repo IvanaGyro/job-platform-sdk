@@ -14,9 +14,9 @@ and successful real 104 writes.** Each is a separate evidence level.
 | `experience` | POST, PUT, DELETE; ordering, seniority | Seniority-only PUT + native record CRUD (experimental); record ordering pending | **No** |
 | `jobCondition` | PUT; separate layout/theme PUT | Source-mapped full native form serializer, experimental | **No** |
 | `skill` | POST, PUT, DELETE; ordering | Source-mapped record CRUD + adjacent swap sorting (experimental) | **No** |
-| `certificate` | PUT, DELETE; certification connections | Existing certificates/others PUT plus first-empty initialization PUT and text-only clear DELETE (no associations), experimental | **No** |
+| `certificate` | PUT, DELETE; certification connections | Existing text PUT plus first-empty PUT and guarded clear; global associations excluded | **Initialize PUT + clear DELETE verified and restored**; corrected SDK wrapper synthetic |
 | `language` | POST, PUT, DELETE; local/foreign records | Native local/foreign record CRUD + adjacent local/foreign sorting (experimental); linked certificates blocked | **No** |
-| `project` | POST, PUT, DELETE; reorder; attachments | Source-mapped **no-media** first-create/CRUD and adjacent reorder (experimental); media pending | **No** |
+| `project` | POST, PUT, DELETE; reorder; attachments | No-media CRUD and adjacent reorder; media pending | **First-create POST and DELETE verified and restored**; update/sort synthetic |
 | `portfolio` | POST, DELETE; attachments/upload; reorder | Link-only multipart POST (LINK=2), one-record DELETE, adjacent reorder experimental; file uploads/previews pending | **No** |
 | `bio` | POST, PUT, DELETE | HTML PUT live-verified; first-create POST and clear DELETE experimental | **PUT only** |
 | `referrer` | POST, PUT, DELETE; reorder | Native record CRUD, empty-form first-create, **exactly-two-record** hardcoded adjacent swap (experimental) | **No** |
@@ -307,3 +307,18 @@ serialize action names and safe typed argument shapes. They do not
 construct an unverified URL or initiate any remote mutation.
 Real association/disassociation and independent read-back
 must be established before making these executable.
+
+
+### Authenticated 104 test resume results (2026-11-17)
+
+Native CERTIFICATE initialization and text-only clear were verified
+by independent GET and exact restore. A live GET after PUT contains
+certificate.certifications=[] and certificate.others, **without**
+certificate.certificates. This corrected an earlier faulty read-back.
+PROJECT first POST and one-item DELETE were also verified and returned
+its formData to exactly empty. Real PROJECT GET selectors and image
+metadata are now covered by synthetic regression tests.
+
+PORTFOLIO link testing aborted before writing because the previous
+private snapshot's attachment identity did not match a fresh read.
+See the separate redacted report tw104-live-smoke-report.md.

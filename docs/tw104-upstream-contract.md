@@ -477,3 +477,20 @@ Public frontend module 779c dispatches:
 Exact deployed URLs and real reference/ID shapes are not yet verified.
 The SDK offers non-writing source-level planners for these actions,
 with positive integer IDs, no duplicates, and no mutations.
+
+
+### Authenticated response normalization: CERTIFICATE and PROJECT
+
+After a successful 104 certificate PUT, an initialized empty-link
+GET block contains formData.certificate={others:TEXT,certifications:[]}
+but no certificates property. Only when certifications is exactly
+empty and certificates is absent can an outgoing certificates:[]
+be inferred for the native writer. The native DELETE cleared the
+temporary test text and an independent GET returned formData={}.
+
+After a successful PROJECT no-media POST, GET normalizes month values
+to option objects with text and value, uses [] for false progress,
+and supplies img fields type, fileId, url, thumbnailStatus,
+thumbnailUrl, the latter four empty for NONE type 0.
+PROJECT one-item DELETE returned the original empty formData.
+See tw104-live-smoke-report.md.

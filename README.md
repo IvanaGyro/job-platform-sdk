@@ -131,6 +131,23 @@ tests passed; the writer is not yet live write-verified.** This is not a
 generic cross-platform education model. Adjacent ordering is available as
 a separate experimental native swap operation.
 
+### Live 104 test-resume verification (2026-11-17)
+
+A user-authorized test resume has now independently verified and
+restored CERTIFICATE first PUT + text-only DELETE and PROJECT no-media
+POST + record DELETE. The true CERTIFICATE GET has
+certifications:[] and can omit certificates even though the PUT sends
+certificates:[]. The decoder and source-mapped projection now handle
+this link-free form, while rejecting unverified attached records.
+Real PROJECT GET returns month selectors, an array-valued progress
+state and an object-valued NONE cover.
+
+PROJECT updates, sorting, PORTFOLIO link/media changes, all CUSTOM
+writes, global certificate CRUD and resume associations are not yet
+verified live. A PORTFOLIO link test aborted before network mutation
+because an existing attachment did not match the initial private
+snapshot. See docs/tw104-live-smoke-report.md for a redacted report.
+
 ### Offline native 104 CUSTOM text and certification connection plans
 
 The last two native 104 workflows still lack a validated populated GET
