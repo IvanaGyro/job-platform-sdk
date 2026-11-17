@@ -155,11 +155,27 @@ def custom_text_update_body(
         media[0], dict
     ) or media[0].get("type") != 0:
         raise UnsupportedWrite("104 CUSTOM record has media; refusing overwrite")
-    if not isinstance(row["duration"], dict) or any(
-        row["duration"].get(k) not in (None, "", {})
-        for k in ("startYear", "startMonth", "endYear", "endMonth")
+    duration = row["duration"]
+    if (
+        not isinstance(duration, dict)
+        or not {"startYear", "startMonth", "endYear", "endMonth"} <= duration.keys()
+        or set(duration) - {
+            "startYear", "startMonth", "endYear", "endMonth",
+            "index", "durationGroup",
+        }
+        or any(duration.get(k) not in (None, "", {})
+               for k in ("startYear", "startMonth", "endYear", "endMonth"))
+        or duration.get("index", -1) not in (-1, None)
+        or duration.get("durationGroup", {}) not in ({}, None)
     ):
         raise UnsupportedWrite("104 CUSTOM text has unsupported date information")
+    for key, value in media[0].items():
+        if key == "type":
+            continue
+        if key not in {
+            "url", "src", "fileId", "thumbnailUrl", "content", "ext",
+        } or value not in (None, ""):
+            raise UnsupportedWrite("104 CUSTOM text has unexpected media metadata")
     if row["isInProgress"] not in (False, 0, []):
         raise UnsupportedWrite("104 CUSTOM text has unsupported progress state")
     if row["url"] not in ("", None):

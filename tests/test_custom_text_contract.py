@@ -119,6 +119,12 @@ class CustomTextTests(unittest.TestCase):
         img=deepcopy(INITIAL)
         img["custom"]["content"][0]["file"][0]["type"]=1
         cases.append(img)
+        disguised_media=deepcopy(INITIAL)
+        disguised_media["custom"]["content"][0]["file"][0]["fileId"]="hidden-id"
+        cases.append(disguised_media)
+        extra_duration=deepcopy(INITIAL)
+        extra_duration["custom"]["content"][0]["duration"]["unexpected"]="hidden"
+        cases.append(extra_duration)
         second=deepcopy(INITIAL)
         second["custom"]["content"].append(deepcopy(second["custom"]["content"][0]))
         cases.append(second)
