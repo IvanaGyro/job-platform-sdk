@@ -27,6 +27,9 @@ from .language_records import (
     verify_language_operation,
 )
 from .bio_actions import bio_action_body, verify_bio_action
+from .certificate_block_actions import (
+    certificate_block_body, verify_certificate_block,
+)
 from .project_records import (
     project_records, project_operation_body, verify_project_operation,
 )
@@ -373,6 +376,49 @@ class Resume104Client:
             raise VerificationError(
                 "EXPERIENCE write submitted but record state could not be "
                 "verified; inspect before retrying"
+            )
+
+    async def mutate_certificate_block(
+        self, resume_id: str | int, action: str, *,
+        expected_timestamp: int | str, others: str | None = None,
+    ) -> dict:
+        """Create empty 104 CERTIFICATE block or clear its text-only content.
+
+        Source-mapped from frontend module 779c; not live write-verified.
+        Account-global certifications and linked certificate IDs are excluded.
+        """
+        if action not in ("initialize", "clear"):
+            raise UnsupportedWrite("104 CERTIFICATE action unsupported")
+        version = self._version(resume_id)
+        async with self._write_lock:
+            before = await self.get_resume(version)
+            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+                raise ConflictError("104 resume changed before certificate operation")
+            body = certificate_block_body(before, action, others=others)
+            await self.transport.request(
+                "PUT" if action == "initialize" else "DELETE",
+                "/profile/ajax/resumeByBlock/certificate",
+                params={"vno": version}, json_data=body,
+            )
+            for attempt in range(4):
+                try:
+                    after = await self.get_resume(version)
+                    if verify_certificate_block(
+                        before, after, action, body=body
+                    ):
+                        return {
+                            "resume_id": version, "section": "certificate",
+                            "action": action, "persisted": True,
+                            "verified": True, "atomic": True,
+                        }
+                except Exception:
+                    raise VerificationError(
+                        "104 CERTIFICATE submitted; read-back unavailable"
+                    ) from None
+                if attempt < 3:
+                    await asyncio.sleep(0.75)
+            raise VerificationError(
+                "104 CERTIFICATE submitted but exact outcome not verified"
             )
 
     async def mutate_bio(

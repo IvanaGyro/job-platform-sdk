@@ -416,3 +416,20 @@ is not relied upon for confirmation.
 
 Binary file uploads, replacement, and preview/thumbnail processing
 are still unimplemented. No real 104 link was posted in this session.
+
+
+### CERTIFICATE empty formData, initialize PUT and clear DELETE
+
+The 104 editor module 779c implements CREATE as UPDATE:
+  PUT /profile/ajax/resumeByBlock/certificate
+  blockValueList.certificate={certificates:[],others:TEXT}
+
+The independent CLEAR branch uses:
+  DELETE /profile/ajax/resumeByBlock/certificate
+  blockValueList.certificate={certificates:"",others:""}
+
+These are resume-local section operations, distinct from the
+certifications API (account-global records) and certificationConnect
+(resume/record associations). The current adapter intentionally blocks
+clearing any populated association list. Both lifecycle operations
+are synthetic-tested only and were not executed on the live test resume.

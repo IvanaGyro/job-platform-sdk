@@ -14,7 +14,7 @@ and successful real 104 writes.** Each is a separate evidence level.
 | `experience` | POST, PUT, DELETE; ordering, seniority | Seniority-only PUT + native record CRUD (experimental); record ordering pending | **No** |
 | `jobCondition` | PUT; separate layout/theme PUT | Source-mapped full native form serializer, experimental | **No** |
 | `skill` | POST, PUT, DELETE; ordering | Source-mapped record CRUD + adjacent swap sorting (experimental) | **No** |
-| `certificate` | PUT, DELETE; separate certification connections | Existing certificates/others PUT only, experimental | **No** (test formData empty) |
+| `certificate` | PUT, DELETE; certification connections | Existing certificates/others PUT plus first-empty initialization PUT and text-only clear DELETE (no associations), experimental | **No** |
 | `language` | POST, PUT, DELETE; local/foreign records | Native local/foreign record CRUD + adjacent local/foreign sorting (experimental); linked certificates blocked | **No** |
 | `project` | POST, PUT, DELETE; reorder; attachments | Source-mapped **no-media** first-create/CRUD and adjacent reorder (experimental); media pending | **No** |
 | `portfolio` | POST, DELETE; attachments/upload; reorder | Link-only multipart POST (LINK=2), one-record DELETE, adjacent reorder experimental; file uploads/previews pending | **No** |
@@ -243,3 +243,20 @@ The returned new record must match the requested link, while all prior
 attachment records remain unchanged on read-back. The HTTP endpoint
 retains opt-in, If-Match and in-process Idempotency-Key protection.
 Only synthetic HTTP/CLI/browser transport tests have been performed.
+
+
+### CERTIFICATE text-only block lifecycle (2026-11-17)
+
+Public module 779c.CREATE delegates to UPDATE, which issues a native
+PUT for blockValueList.certificate={certificates:[],others:TEXT}.
+It works with the initialized/certification-free branch, while the
+site's actual empty formData was observed in an authenticated
+read-only GET. The independent CLEAR action is DELETE with
+certificates="" and others="". This writer refuses a clear when
+the block has any linked certificates. It also refuses account-level
+certification changes and association operations (certificationConnect).
+
+The Python SDK, CLI and HTTP lifecycle APIs have synthetic regression
+coverage only, with If-Match, in-memory Idempotency-Key, no blind retry
+and exact read-back checks. Real initialization and restore are still
+unverified.

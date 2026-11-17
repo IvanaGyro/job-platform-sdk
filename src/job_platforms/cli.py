@@ -39,6 +39,17 @@ def _parser() -> argparse.ArgumentParser:
     apply_cmd.add_argument("--confirm", required=True,
                            choices=["experimental-bio-write", "experimental-section-write"],
                            help="Explicitly acknowledge unverified section writers")
+    certificate_block = sub.add_parser(
+        "certificate-block",
+        help="Initialize or clear resume-owned CERTIFICATE text (experimental)"
+    )
+    certificate_block.add_argument("resume_id")
+    certificate_block.add_argument("action", choices=["initialize", "clear"])
+    certificate_block.add_argument("--others-file", default=None)
+    certificate_block.add_argument("--if-match", required=True)
+    certificate_block.add_argument(
+        "--confirm", choices=["experimental-certificate-write"], required=True,
+    )
     bio_action = sub.add_parser(
         "bio-action", help="104 initial BIO POST or clear/delete (experimental)"
     )
@@ -102,6 +113,17 @@ async def _run(args):
             result = await client.get_section(args.resume_id, args.section)
         elif args.command == "create":
             result = await client.create_resume()
+        elif args.command == "certificate-block":
+            if (args.action == "initialize") != (args.others_file is not None):
+                raise ValueError("--others-file required only for initialize")
+            others = (
+                Path(args.others_file).read_text(encoding="utf-8")
+                if args.others_file is not None else None
+            )
+            result = await client.mutate_certificate_block(
+                args.resume_id, args.action, others=others,
+                expected_timestamp=args.if_match.strip('"'),
+            )
         elif args.command == "bio-action":
             if (args.action == "create") != (args.changes_file is not None):
                 raise ValueError("--changes-file is required only for create")

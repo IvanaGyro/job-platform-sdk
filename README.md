@@ -131,6 +131,36 @@ tests passed; the writer is not yet live write-verified.** This is not a
 generic cross-platform education model. Adjacent ordering is available as
 a separate experimental native swap operation.
 
+### Experimental 104 CERTIFICATE block initialization / text clearing
+
+The real test resume has an empty CERTIFICATE formData. Its public
+frontend module 779c maps first-creation to **PUT**, not POST, with
+blockValueList.certificate.certificates=[] and an others text value.
+The whole-block clear uses **DELETE** with the two fields set to
+empty strings (certificates="", others=""). Neither operation is
+the same as account-global certification CRUD or linking a certificate
+to a resume.
+
+The new Resume104Client.mutate_certificate_block() method and the
+experimental HTTP endpoint /v1/tw104/resumes/{resume_id}/certificate-block
+support first initialization (POST in *our* HTTP API; upstream PUT) and
+text-only clearing (DELETE in both). The CLI commands are:
+
+    job-platform certificate-block VERSION_NO initialize --others-file private-text.txt --if-match TIMESTAMP --confirm experimental-certificate-write
+    job-platform certificate-block VERSION_NO clear --if-match TIMESTAMP --confirm experimental-certificate-write
+
+The adapter requires empty formData for initialization and enforces
+a conservative 1-200-character nonempty others text limit. Clearing is
+permitted only when the resume block has **no linked certificate
+entries**, to prevent breaking other certification associations. All
+actions use the normal optimistic timestamp and independent read-back;
+HTTP also uses opt-in bearer authorization and in-memory idempotency.
+
+**Synthetic-only:** 104 has not accepted or restored these native
+operations in a real write test. Account-wide certification creation,
+edits, deletion, suggestion search and certificationConnect
+association/disassociation remain unimplemented.
+
 ### Experimental 104 PROJECT and PORTFOLIO actions
 
 The 104 PROJECT section is initially empty on the designated test resume.

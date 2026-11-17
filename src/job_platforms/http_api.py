@@ -30,6 +30,9 @@ from job_platforms.providers.tw104.portfolio_records import (
     portfolio_delete_body, portfolio_link_fields,
 )
 from job_platforms.providers.tw104.bio_actions import bio_action_body
+from job_platforms.providers.tw104.certificate_block_actions import (
+    certificate_block_body,
+)
 from job_platforms.providers.tw104.language_records import language_operation_body, KINDS as LANGUAGE_KINDS
 from job_platforms.providers.tw104.layout_theme import THEME_OPTION_KEYS, theme_body
 from job_platforms.providers.tw104.record_sort import SORTABLE, sort_body
@@ -1205,6 +1208,83 @@ def create_app(
     ):
         return await native_bio_action(
             resume_id, request, "clear", changes=None,
+            if_match=if_match, idempotency_key=idempotency_key,
+        )
+
+    async def native_certificate_block_action(
+        resume_id: str, request: Request, action: str, *,
+        others: str | None, if_match: str | None,
+        idempotency_key: str | None,
+    ):
+        if not allow_experimental_writes:
+            raise HTTPException(501, "104 CERTIFICATE block writes require opt-in")
+        if if_match is None:
+            raise HTTPException(428, "If-Match resumeTimestamp is required")
+        if not idempotency_key or len(idempotency_key) < 16:
+            raise HTTPException(400, "Idempotency-Key of at least 16 characters required")
+        expected = if_match.strip('"')
+        fingerprint = hashlib.sha256(json.dumps(
+            {"action": action, "others": others, "timestamp": expected},
+            ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        key = ("CERTIFICATE_BLOCK", resume_id, idempotency_key)
+        async with request.app.state.action_lock:
+            cached = request.app.state.idempotency_results.get(key)
+            if cached is not None:
+                if cached["fingerprint"] != fingerprint:
+                    raise HTTPException(409, "Idempotency-Key reused with different certificate action")
+                if cached["state"] != "succeeded":
+                    raise HTTPException(409, "Certificate action result uncertain; inspect before retry")
+                return cached["result"]
+            try:
+                before = await request.app.state.client.get_resume(resume_id)
+                if str(before.get("resumeTimestamp")) != expected:
+                    raise HTTPException(412, "Resume changed since caller's read")
+                certificate_block_body(before, action, others=others)
+            except (TypeError, KeyError, ValueError, UnsupportedWrite):
+                raise HTTPException(422, "Invalid CERTIFICATE block action") from None
+            except JobPlatformError as exc:
+                translate_error(exc)
+            record = {"fingerprint": fingerprint, "state": "indeterminate"}
+            request.app.state.idempotency_results[key] = record
+            try:
+                result = await request.app.state.client.mutate_certificate_block(
+                    resume_id, action, others=others, expected_timestamp=expected,
+                )
+            except JobPlatformError as exc:
+                translate_error(exc)
+            else:
+                record.update({"state": "succeeded", "result": result})
+                return result
+
+    @app.post(
+        "/v1/tw104/resumes/{resume_id}/certificate-block",
+        dependencies=[Depends(authorize)],
+    )
+    async def initialize_certificate_block(
+        resume_id: str, request: Request,
+        changes: dict = Body(...),
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        if set(changes) != {"others"}:
+            raise HTTPException(422, "Expected the single others text field")
+        return await native_certificate_block_action(
+            resume_id, request, "initialize", others=changes["others"],
+            if_match=if_match, idempotency_key=idempotency_key,
+        )
+
+    @app.delete(
+        "/v1/tw104/resumes/{resume_id}/certificate-block",
+        dependencies=[Depends(authorize)],
+    )
+    async def clear_certificate_block(
+        resume_id: str, request: Request,
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        return await native_certificate_block_action(
+            resume_id, request, "clear", others=None,
             if_match=if_match, idempotency_key=idempotency_key,
         )
 

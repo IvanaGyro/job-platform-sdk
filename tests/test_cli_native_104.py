@@ -22,6 +22,10 @@ class DummyClient:
         self.calls.append(("experience", version, action, kwargs))
         return {"verified": True}
 
+    async def mutate_certificate_block(self, version, action, **kwargs):
+        self.calls.append(("certificate-block", version, action, kwargs))
+        return {"verified": True}
+
     async def mutate_bio(self, version, action, **kwargs):
         self.calls.append(("bio-action", version, action, kwargs))
         return {"verified": True}
@@ -233,6 +237,39 @@ class CLI104Tests(unittest.IsolatedAsyncioTestCase):
                  "record", "synthetic", "portfolio", "create", "--if-match", "99",
                 "--confirm", "experimental-record-write",
             ])
+
+    async def test_native_certificate_block_initialization_and_clear(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "synthetic-certification.txt"
+            source.write_text("Synthetic certificate", encoding="utf-8")
+            await self.execute([
+                "certificate-block", "synthetic", "initialize",
+                "--others-file", str(source), "--if-match", "100",
+                "--confirm", "experimental-certificate-write",
+            ])
+            self.assertEqual(DummyClient.calls[-1], (
+                "certificate-block", "synthetic", "initialize",
+                {"others": "Synthetic certificate",
+                 "expected_timestamp": "100"},
+            ))
+        await self.execute([
+            "certificate-block", "synthetic", "clear",
+            "--if-match", "101",
+            "--confirm", "experimental-certificate-write",
+        ])
+        self.assertEqual(DummyClient.calls[-1], (
+            "certificate-block", "synthetic", "clear",
+            {"others": None, "expected_timestamp": "101"},
+        ))
+        for argv in (
+            ["certificate-block", "synthetic", "initialize"],
+            ["certificate-block", "synthetic", "clear", "--others-file", "invalid"],
+        ):
+            with self.assertRaises(ValueError):
+                await self.execute(argv + [
+                    "--if-match", "101",
+                    "--confirm", "experimental-certificate-write",
+                ])
 
     async def test_invalid_record_combinations_do_not_write(self):
         invalid = (
