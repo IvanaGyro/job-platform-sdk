@@ -60,6 +60,15 @@ unattended production resume without a private backup and independent GET.
 - **Earlier private live observation (not this implementation):** Chrome 146
   `curl_cffi` + **original login proxy** + session cookies returned HTTP 200
   resume-overview JSON; the same request directly returned 403.
-- **Current new transport:** treat every endpoint as source/synthetic-only
-  until the private same-session browser-versus-HTTP A/B finishes successfully.
-  Do not infer that JA4 matching proves anything about 104's decision logic.
+- **New transport, real read-only 104 A/B (2026-11-17):** browser login
+  succeeded on the original proxy; both implementations independently
+  returned successful JSON for `overview`, `resumeByBlock` and `options`
+  with the same top-level data keys (1, 17 and 51 keys, respectively).
+  The requested resume version was confirmed, and a `104-profile-ver`
+  header was observed by the HTTP transport after native GET requests.
+  Signed media tokens and full-field equality were **not** checked.
+- **New transport writes:** only synthetic-tested. A real reversible BIO
+  PUT/read-back/restore smoke test is separate and must not be marked
+  complete unless the private test log confirms it.
+- These observations do not prove that matching JA4 alone determines
+  upstream authorization, or that a proxy-free connection is viable.
