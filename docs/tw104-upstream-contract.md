@@ -302,3 +302,17 @@ The SDK maps selected known INFO JSON Patch paths to a complete frontend-
 compatible native body. It rejects unknown or absent selector shapes
 instead of silently emptying their values. No real 104 INFO write has
 been performed; this is contract reconstruction with synthetic tests.
+
+
+### Real EXPERIENCE GET shape (read-only verification)
+
+The 104 editor returned four experience records in **descending**
+`sort` order (values 4, 3, 2, 1). Salary monthly/yearly fields
+appeared as either integer or string depending on the record; company
+size appeared as either a selector or an empty string. The upstream
+serializer preserves numeric salaries and flattens nonempty company
+size selectors to their `value`.
+
+This was **read-only** validation, with no experience mutation.
+Record creation and deletion may renumber positions, so the SDK does
+not infer an array index from a 104 record's 1-based `sort` number.

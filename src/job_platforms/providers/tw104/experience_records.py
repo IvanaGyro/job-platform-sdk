@@ -55,6 +55,12 @@ def _text(value: Any, name: str, *, required: bool = False) -> str:
     return value
 
 
+def _company_scale(value: Any) -> str | int:
+    if isinstance(value, dict):
+        return _select(value, "companyScale", optional=True)
+    return _scalar(value, "companyScale")
+
+
 def experience_record(record: Any) -> dict:
     if not isinstance(record, dict) or set(record) != NATIVE_FIELDS:
         raise UnsupportedWrite("104 EXPERIENCE native record shape changed")
@@ -62,8 +68,9 @@ def experience_record(record: Any) -> dict:
         _text(record[key], key, required=True)
     for key in ("logo", "description"):
         _text(record[key], key)
-    for key in ("custNo", "invoice", "companyScale"):
+    for key in ("custNo", "invoice"):
         _scalar(record[key], key)
+    _company_scale(record["companyScale"])
     job_type = _select(record["jobType"], "jobType")
     if job_type not in SALARIED_JOB_TYPES | {PART_TIME_JOB_TYPE}:
         raise UnsupportedWrite("104 EXPERIENCE unsupported employment type")
@@ -92,7 +99,7 @@ def experience_record(record: Any) -> dict:
     }:
         raise UnsupportedWrite("104 EXPERIENCE unsupported salary shape")
     for key in ("monthPay", "yearPay", "jobParttimePay"):
-        _text(salary[key], key)
+        _scalar(salary[key], key)
     _select(salary["jobParttimeType"], "jobParttimeType", optional=True)
     for key in ("companyVisibility", "stillWork", "salaryVisibility"):
         if not isinstance(record[key], bool):
@@ -113,8 +120,13 @@ def experience_list(document: dict) -> list[dict]:
     if not isinstance(records, list):
         raise UnsupportedWrite("104 EXPERIENCE records must be an array")
     rows = [experience_record(item) for item in records]
-    if [x["sort"] for x in rows] != list(range(1, len(rows) + 1)):
-        raise UnsupportedWrite("104 EXPERIENCE sorts are not sequential")
+    # A real 104 GET returned [4,3,2,1]: newest-first / descending.
+    # Both sequential orientations are supported, but mixed/sparse
+    # identifiers still fail closed until their semantics are verified.
+    observed = [x["sort"] for x in rows]
+    ascending = list(range(1, len(rows) + 1))
+    if observed != ascending and observed != ascending[::-1]:
+        raise UnsupportedWrite("104 EXPERIENCE sorts are not sequential in either direction")
     return rows
 
 
@@ -130,7 +142,7 @@ def experience_wire_record(row: dict) -> dict:
         "invoice": r["invoice"] or "",
         "companyName": r["companyName"],
         "industry": _category(r["industry"], "industry"),
-        "companyScale": r["companyScale"] or "",
+        "companyScale": _company_scale(r["companyScale"]) or "",
         "jobName": r["jobName"],
         "workArea": _category(r["workArea"], "workArea"),
         "jobType": job_type,
@@ -181,7 +193,8 @@ def experience_operation_body(
     else:
         if isinstance(position, bool) or not isinstance(position, int) or not 1 <= position <= len(records):
             raise UnsupportedWrite("104 EXPERIENCE update needs existing sort")
-        row = {**records[position - 1], **changes}
+        current = next(record for record in records if record["sort"] == position)
+        row = {**current, **changes}
     wire = experience_wire_record(row)
     if action == "create":
         wire.pop("sort")  # f30d uses undefined when creating a record
@@ -197,30 +210,60 @@ def _comparable(row: dict) -> dict:
     return value
 
 
-def verify_experience_operation(before: dict, after: dict, action: str, *, body: dict, position: int | None) -> bool:
-    """Check changed row and all unaffected siblings and section-level fields."""
+def verify_experience_operation(
+    before: dict, after: dict, action: str, *,
+    body: dict, position: int | None,
+) -> bool:
+    """Verify exactly one record changed despite 104's descending GET order.
+
+    Non-record metadata must be unchanged. Create has a new positive sort
+    number, while delete may renumber rows. For delete compare a multiset
+    of record payloads without their position numbers.
+    """
+    from collections import Counter
+    import json
+
     old = experience_list(before)
     new = experience_list(after)
     old_form = before["experience"]["formData"]
     new_form = after["experience"]["formData"]
-    if old_form["seniority"] != new_form["seniority"] or old_form["themeChoose"] != new_form["themeChoose"]:
+    if (
+        old_form["seniority"] != new_form["seniority"]
+        or old_form["themeChoose"] != new_form["themeChoose"]
+    ):
         return False
+
+    def by_sort(rows: list[dict]) -> dict[int, dict]:
+        return {row["sort"]: _comparable(row) for row in rows}
+
+    def bag(rows: list[dict]) -> Counter[str]:
+        return Counter(json.dumps(
+            _comparable(row), ensure_ascii=False, sort_keys=True
+        ) for row in rows)
+
+    old_rows, new_rows = by_sort(old), by_sort(new)
     if action == "create":
-        if len(new) != len(old) + 1 or [_comparable(x) for x in new[:-1]] != [_comparable(x) for x in old]:
+        if len(new) != len(old) + 1 or not set(old_rows) < set(new_rows):
+            return False
+        if any(old_rows[k] != new_rows.get(k) for k in old_rows):
+            return False
+        added_keys = set(new_rows) - set(old_rows)
+        if len(added_keys) != 1:
             return False
         expected = body["blockValueList"]["experience"]["experiences"][0]
-        return _comparable(new[-1]) == expected
+        return new_rows[added_keys.pop()] == expected
     if action == "update":
-        if len(new) != len(old) or any(
-            _comparable(new[i]) != _comparable(old[i])
-            for i in range(len(old)) if i != position - 1
-        ):
+        if len(new) != len(old) or set(old_rows) != set(new_rows):
+            return False
+        if any(old_rows[k] != new_rows[k] for k in old_rows if k != position):
             return False
         expected = body["blockValueList"]["experience"]["experiences"][0]
-        return experience_wire_record(new[position - 1]) == expected
+        return experience_wire_record(
+            next(row for row in new if row["sort"] == position)
+        ) == expected
     if action == "delete":
-        if len(new) != len(old) - 1:
+        if len(new) != len(old) - 1 or position not in old_rows:
             return False
-        expected = old[:position - 1] + old[position:]
-        return [_comparable(x) for x in new] == [_comparable(x) for x in expected]
+        removed = next(row for row in old if row["sort"] == position)
+        return bag(new) == bag([row for row in old if row is not removed])
     return False

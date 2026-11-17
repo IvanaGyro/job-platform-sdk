@@ -103,6 +103,19 @@ class ExperienceTests(unittest.IsolatedAsyncioTestCase):
         })
         self.assertEqual(experience_list(BASE), [ROW])
 
+    def test_observed_mixed_salary_number_and_company_scale_selector(self):
+        # Real 104 read-only inspection found mixed str/int salary values.
+        row = deepcopy(ROW)
+        row["salary"]["monthPay"] = 123
+        row["salary"]["yearPay"] = 456
+        row["companyScale"] = {"text": "Small", "value": 7}
+        encoded = experience_wire_record(row)
+        self.assertEqual(encoded["salary"]["monthPay"], 123)
+        self.assertEqual(encoded["salary"]["yearPay"], 456)
+        self.assertEqual(encoded["companyScale"], 7)
+        row["companyScale"] = {}
+        self.assertEqual(experience_wire_record(row)["companyScale"], "")
+
     def test_source_methods_and_no_create_sort(self):
         create = {k: deepcopy(v) for k, v in ROW.items() if k not in ("logo", "sort")}
         create["companyName"] = "New Synthetic Corporation"
@@ -141,6 +154,56 @@ class ExperienceTests(unittest.IsolatedAsyncioTestCase):
         broken["experience"]["formData"]["experiences"][0]["sort"] = 0
         with self.assertRaises(UnsupportedWrite):
             experience_list(broken)
+
+    def test_descending_sort_is_identified_by_upstream_sort_not_array_index(self):
+        before = deepcopy(BASE)
+        first = deepcopy(ROW)
+        first["sort"] = 2
+        first["jobName"] = "Higher sort first"
+        second = deepcopy(ROW)
+        second["sort"] = 1
+        second["jobName"] = "Lower sort second"
+        before["experience"]["formData"]["experiences"] = [first, second]
+        self.assertEqual(
+            [x["sort"] for x in experience_list(before)], [2, 1]
+        )
+        updated = experience_operation_body(
+            before, "update", position=1, changes={"jobName": "Changed low sort"}
+        )
+        self.assertEqual(
+            updated["blockValueList"]["experience"]["experiences"][0]["jobName"],
+            "Changed low sort",
+        )
+        after = deepcopy(before)
+        after["experience"]["formData"]["experiences"][1]["jobName"] = "Changed low sort"
+        self.assertTrue(verify_experience_operation(
+            before, after, "update", body=updated, position=1
+        ))
+        after["experience"]["formData"]["experiences"][0]["description"] = "Unrelated edit"
+        self.assertFalse(verify_experience_operation(
+            before, after, "update", body=updated, position=1
+        ))
+
+        created_row = {k: deepcopy(v) for k, v in ROW.items() if k not in ("logo", "sort")}
+        created_row["companyName"] = "Newest Synthetic"
+        create_body = experience_operation_body(
+            before, "create", changes=created_row
+        )
+        created = deepcopy(before)
+        newcomer = {**deepcopy(ROW), **created_row, "sort": 3}
+        created["experience"]["formData"]["experiences"].insert(0, newcomer)
+        self.assertTrue(verify_experience_operation(
+            before, created, "create", body=create_body, position=None
+        ))
+
+        delete_body = experience_operation_body(before, "delete", position=1)
+        deleted = deepcopy(before)
+        deleted["experience"]["formData"]["experiences"] = [
+            {**deepcopy(first), "sort": 1}
+        ]
+        self.assertTrue(verify_experience_operation(
+            before, deleted, "delete", body=delete_body, position=1
+        ))
 
     async def test_update_create_delete_and_readback(self):
         client = Client()

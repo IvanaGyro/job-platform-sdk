@@ -318,3 +318,15 @@ PUT requests. Other unmapped fields return HTTP 501.
 Run the synthetic unit test suite with `python -m unittest discover -s tests -v`.
 This repository contains only synthetic fixtures, never account data or backup
 content. Dedicated live integration scripts stay outside the public repository.
+
+
+## Latest 104 read-only compatibility check
+
+A fresh authenticated **read-only** 104 check of the designated test
+resume verified the protected BIO backup and successfully parsed INFO,
+EXPERIENCE, LANGUAGE and INFO theme structures. It exposed legitimate
+mixed integer/string experience salaries, optional company-size
+selector objects, and descending record `sort` values. Those cases
+are now covered by the 104 encoder and synthetic regression tests.
+**No newly added writer has been real 104 write/read-back/restore verified;
+the new check performed no mutations.**

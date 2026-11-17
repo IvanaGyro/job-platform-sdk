@@ -142,3 +142,23 @@ SDK and HTTP PATCH regression tests.
 and login phone, birth date/job status, photos/cover/signature upload,
 advanced profile visual presentation and other conditional media fields.
 The full INFO editor is **not** yet implemented or live verified.
+
+
+### 104 read-only validation and regression (2026-11-17)
+
+On the designated test resume, a fresh one-proxy login succeeded. The
+target's current identity was checked against its private marker, and its
+BIO text matched the original protected backup; **no writes occurred**.
+The SDK source-mapped INFO serializer, experience record extractor,
+language record extractor and INFO theme selector all successfully
+validated the actual GET response.
+
+The inspection exposed two previously missing EXPERIENCE variants:
+salary values may be native integers as well as strings, and optional
+company size may be an object selector or an empty string. The GET's
+`experiences[]` array was ordered by descending `sort` (newest first).
+The adapter now accepts either consecutive ascending or descending
+sorts, selects records by actual `sort` rather than list index, and
+verifies create/update/delete without assuming ascending display order.
+These changes have synthetic regression tests; **no new real POST,
+PUT or DELETE has been executed**.
