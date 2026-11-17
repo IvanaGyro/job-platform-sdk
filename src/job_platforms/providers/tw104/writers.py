@@ -10,6 +10,7 @@ from copy import deepcopy
 from typing import Any
 
 from job_platforms.core.errors import UnsupportedWrite
+from .info_fields import INFO_PATHS, native_info_data, info_request_body
 from .job_condition import (
     EDITABLE_PATHS as JOB_CONDITION_PATHS,
     native_job_condition,
@@ -30,6 +31,7 @@ EXPERIENCE_SENIORITY_PATHS = frozenset((
     "/experience/formData/seniority/value",
 ))
 WRITE_PATH_TO_SECTION = {
+    **{path: "info" for path in INFO_PATHS},
     **{path: "bio" for path in BIO_PATHS},
     **{path: "certificate" for path in CERTIFICATE_PATHS},
     **{path: "sidebar" for path in SIDEBAR_PATHS},
@@ -122,6 +124,8 @@ def experience_seniority_data(document: dict[str, Any]) -> dict[str, Any]:
 
 
 def section_data(document: dict[str, Any], section: str) -> dict[str, Any]:
+    if section == "info":
+        return native_info_data(document)
     if section == "bio":
         return bio_data(document)
     if section == "certificate":
@@ -137,6 +141,8 @@ def section_data(document: dict[str, Any], section: str) -> dict[str, Any]:
 
 def section_request_body(document: dict[str, Any], section: str) -> dict:
     """Preserve unaffected sibling values inside the same section."""
+    if section == "info":
+        return info_request_body(document)
     if section == "jobCondition":
         return job_condition_request_body(document)
     if section == "experience":

@@ -110,7 +110,7 @@ def create_app(
                 **TW104_CAPABILITIES.to_dict(),
                 "experimental_writable_sections": [
                     "bio", "certificate", "sidebar", "jobCondition",
-                    "experience.seniority",
+                    "experience.seniority", "info.resumeFields",
                 ],
                 "experimental_theme_sections": list(THEME_OPTION_KEYS),
                 "experimental_sort_sections": list(SORTABLE),

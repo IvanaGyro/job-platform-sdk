@@ -72,7 +72,7 @@ class BioWriterTests(unittest.IsolatedAsyncioTestCase):
     async def test_unsupported_section_rejected_before_write(self):
         client = WriterClient()
         plan = EditPlan("test123", 100, [
-            JsonPatchOperation("replace", "/info/formData/info/motto", "hi"),
+            JsonPatchOperation("replace", "/info/formData/info/cellphone", "invalid"),
         ])
         with self.assertRaises(UnsupportedWrite):
             await client.save_edit(plan)

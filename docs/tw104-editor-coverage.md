@@ -9,7 +9,7 @@ and successful real 104 writes.** Each is a separate evidence level.
 
 | Native group | Frontend operation families seen | Implementation in this PR | Live 104 write/read-back |
 |---|---|---|---|
-| `info` | PUT; related identity and optional information | Read/plan only | No |
+| `info` | PUT; related identity and optional information | Source-mapped selected resume INFO fields (experimental); account/media excluded | **No** |
 | `education` | POST, PUT, DELETE; ordering | Native record CRUD + adjacent swap sorting (experimental) | **No** |
 | `experience` | POST, PUT, DELETE; ordering, seniority | Seniority-only PUT + native record CRUD (experimental); record ordering pending | **No** |
 | `jobCondition` | PUT; separate layout/theme PUT | Source-mapped full native form serializer, experimental | **No** |
@@ -91,10 +91,10 @@ designed for other job platforms.
   selector fields. Mutations involving linked foreign certificates are
   intentionally blocked until the association API can be verified.
 - **LAYOUT:** one section theme at a time, with valid values fetched from
-  \`/profile/ajax/options\`. Unknown/uninitialized theme shapes fail closed;
+  `/profile/ajax/options`. Unknown/uninitialized theme shapes fail closed;
   media, background color and layout ordering are not covered.
 - **SKILL / EDUCATION ordering:** adjacent swap only, sent through
-  \`/profile/ajax/swapRecordBySort/{section}\`. Exact read-back checks the
+  `/profile/ajax/swapRecordBySort/{section}`. Exact read-back checks the
   permutation and all unaffected records. Arbitrary moves and sorting other
   sections require further verification.
 - Above actions are accessible in the Python SDK, experimental 104 HTTP routes
@@ -127,3 +127,18 @@ designed for other job platforms.
   idempotency key. No durability beyond a single HTTP process is claimed.
 - This revision uses **synthetic tests only** for all new operations.
   **BIO remains the only real 104 edit/write/restore-verified operation.**
+
+
+### INFO scope (2026-11-17)
+
+The adapter uses the official frontend's `c40f.postData()` for its 104
+`INFO` block. The mapped resume subfields include address, summary,
+motto, personal links, conditional military dates, traits, supplementary
+contact fields, driver/transport selectors and native display-summary
+values. The encoder preserves untouched siblings and is exercised via
+SDK and HTTP PATCH regression tests.
+
+**Excluded until separately mapped and verified:** account-level identity
+and login phone, birth date/job status, photos/cover/signature upload,
+advanced profile visual presentation and other conditional media fields.
+The full INFO editor is **not** yet implemented or live verified.

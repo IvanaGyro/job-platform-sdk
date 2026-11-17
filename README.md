@@ -131,6 +131,29 @@ tests passed; the writer is not yet live write-verified.** This is not a
 generic cross-platform education model. Adjacent ordering is available as
 a separate experimental native swap operation.
 
+### Experimental 104 INFO resume fields
+
+The existing `plan_edit()` / `save_edit()` and experimental HTTP PATCH
+support **individual replacements** for known fields under
+`/info/formData/info/{field}`,
+`/info/formData/addOn/{field}`, and
+`/info/formData/summaryDisplay`.
+
+The outgoing payload is reconstructed from the official 104 frontend
+`c40f.postData()`: it uses `blockValueList.info.info`,
+`blockValueList.info.addon`, `themeChoose` and `summaryDisplay`.
+It includes the frontend's city/category/selector conversions,
+conditional military-discharge dates, profile-link type rules, and
+optional supplemental contact/display fields. A partial patch retains
+unchanged native INFO siblings in memory and sends **one** INFO PUT.
+
+**Not writable through this adapter:** account-owned phone number,
+date of birth, login identity, job-seeking status, avatar/cover/signature
+upload or delete, and arbitrary visual theme/background changes. Unknown,
+missing or unrecognized native forms fail closed before any write.
+Like the other new writers, this INFO path is **synthetic-tested only**;
+there has been no real 104 write/read-back/restore test.
+
 ### More experimental 104-native operations
 
 These operations are implemented as separate methods, not as arbitrary JSON

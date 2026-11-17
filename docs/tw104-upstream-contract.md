@@ -285,3 +285,20 @@ private Modal directory. They are never part of the public repository.
 **None of these operations has passed real 104 write/read-back/restore
 validation.** Media uploads, record deletion, linked certifications,
 account-level information and hidden conditional controls are still outstanding.
+
+
+### Experimental INFO form adapter (synthetic only)
+
+Frontend module `c40f` sends
+`PUT /profile/ajax/resumeByBlock/info?vno=...`.
+The outgoing PUT body differs materially from a GET:
+`blockValueList.info.info` includes only selected resume fields,
+`blockValueList.info.addon` uses lowercase `addon` (the read response
+uses `addOn`), and theme/summary selectors are flattened.
+Military separation dates are conditional on status values 1 or 2.
+Identity/account and media/upload actions are not included.
+
+The SDK maps selected known INFO JSON Patch paths to a complete frontend-
+compatible native body. It rejects unknown or absent selector shapes
+instead of silently emptying their values. No real 104 INFO write has
+been performed; this is contract reconstruction with synthetic tests.
