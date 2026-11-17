@@ -39,6 +39,16 @@ def _parser() -> argparse.ArgumentParser:
     apply_cmd.add_argument("--confirm", required=True,
                            choices=["experimental-bio-write", "experimental-section-write"],
                            help="Explicitly acknowledge unverified section writers")
+    bio_action = sub.add_parser(
+        "bio-action", help="104 initial BIO POST or clear/delete (experimental)"
+    )
+    bio_action.add_argument("resume_id")
+    bio_action.add_argument("action", choices=["create", "clear"])
+    bio_action.add_argument("--changes-file", default=None,
+                            help="Private JSON chi/eng values for create only")
+    bio_action.add_argument("--if-match", required=True)
+    bio_action.add_argument("--confirm", choices=["experimental-bio-action-write"],
+                            required=True)
     record = sub.add_parser(
         "record", help="104-native record CRUD (experimental; not live write verified)"
     )
@@ -92,6 +102,18 @@ async def _run(args):
             result = await client.get_section(args.resume_id, args.section)
         elif args.command == "create":
             result = await client.create_resume()
+        elif args.command == "bio-action":
+            if (args.action == "create") != (args.changes_file is not None):
+                raise ValueError("--changes-file is required only for create")
+            fields = None
+            if args.changes_file is not None:
+                fields = json.loads(Path(args.changes_file).read_text(encoding="utf-8"))
+                if not isinstance(fields, dict):
+                    raise ValueError("BIO create needs a JSON object")
+            result = await client.mutate_bio(
+                args.resume_id, args.action, changes=fields,
+                expected_timestamp=args.if_match.strip('"'),
+            )
         elif args.command == "record":
             # Explicit 104-native operation; malformed combinations never
             # become a browser write. No generic multi-provider data model.

@@ -18,7 +18,7 @@ and successful real 104 writes.** Each is a separate evidence level.
 | `language` | POST, PUT, DELETE; local/foreign records | Native local/foreign record CRUD + adjacent local/foreign sorting (experimental); linked certificates blocked | **No** |
 | `project` | POST, PUT, DELETE; reorder; attachments | Read/plan only | No |
 | `portfolio` | POST, DELETE; attachments/upload | Read/plan only | No |
-| `bio` | POST, PUT, DELETE | Chinese and English content replacement | **Yes**, including restore |
+| `bio` | POST, PUT, DELETE | HTML PUT live-verified; first-create POST and clear DELETE experimental | **PUT only** |
 | `referrer` | POST, PUT, DELETE; reorder | Native record create/update/delete with empty-form initialization (experimental); sorting pending | **No** |
 | `sidebar` | PUT | Complete-list reorder only; metadata edits rejected | **No** |
 | `layout` | PUT | Theme selection for 11 native sections using current 104 option values (experimental) | **No** |
@@ -188,3 +188,13 @@ local and foreign collections. Drag-end emits a nested languages object
 with both foreign.sort and local.sort; the inactive group is [].
 The new SDK, CLI and HTTP route require an explicit group and preserve
 the untouched group. These operations have synthetic tests only.
+
+
+### BIO first creation and clearing (2026-11-17)
+
+Source module 8d88 sends POST with chi/eng HTML nested under
+blockValueList.bio.bio, while DELETE sends chi/eng empty strings directly
+in blockValueList.bio. Both additional operations are exposed in SDK,
+CLI and HTTP with strict state preconditions. The original BIO PUT has
+passed a live read/modify/read/restore test; POST and DELETE have
+synthetic tests only. No actual BIO deletion was attempted.

@@ -26,6 +26,7 @@ from .language_records import (
     KINDS as LANGUAGE_KINDS, language_lists, language_operation_body,
     verify_language_operation,
 )
+from .bio_actions import bio_action_body, verify_bio_action
 from .referrer_records import (
     referrer_records, referrer_operation_body, verify_referrer_operation,
 )
@@ -365,6 +366,47 @@ class Resume104Client:
             raise VerificationError(
                 "EXPERIENCE write submitted but record state could not be "
                 "verified; inspect before retrying"
+            )
+
+    async def mutate_bio(
+        self, resume_id: str | int, action: str, *,
+        expected_timestamp: int | str, changes: dict | None = None,
+    ) -> dict:
+        """Explicit 104 BIO first POST or whole-section DELETE.
+
+        Unlike the existing BIO PUT, these two operations have not yet
+        been confirmed with a live write/read-back/restore.
+        """
+        if action not in ("create", "clear"):
+            raise UnsupportedWrite("104 BIO operation must be create or clear")
+        version = self._version(resume_id)
+        async with self._write_lock:
+            before = await self.get_resume(version)
+            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+                raise ConflictError("104 resume changed before BIO operation")
+            body = bio_action_body(before, action, changes=changes)
+            await self.transport.request(
+                "POST" if action == "create" else "DELETE",
+                "/profile/ajax/resumeByBlock/bio",
+                params={"vno": version}, json_data=body,
+            )
+            for attempt in range(4):
+                try:
+                    after = await self.get_resume(version)
+                    if verify_bio_action(before, after, action, body=body):
+                        return {
+                            "resume_id": version, "section": "bio",
+                            "action": action, "persisted": True,
+                            "verified": True, "atomic": True,
+                        }
+                except Exception:
+                    raise VerificationError(
+                        "104 BIO request submitted; read-back unavailable"
+                    ) from None
+                if attempt < 3:
+                    await asyncio.sleep(0.75)
+            raise VerificationError(
+                "104 BIO native write submitted; new state not verified"
             )
 
     async def mutate_referrer(

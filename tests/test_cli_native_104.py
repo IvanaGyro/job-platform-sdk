@@ -22,6 +22,10 @@ class DummyClient:
         self.calls.append(("experience", version, action, kwargs))
         return {"verified": True}
 
+    async def mutate_bio(self, version, action, **kwargs):
+        self.calls.append(("bio-action", version, action, kwargs))
+        return {"verified": True}
+
     async def mutate_referrer(self, version, action, **kwargs):
         self.calls.append(("referrer", version, action, kwargs))
         return {"verified": True}
@@ -134,6 +138,36 @@ class CLI104Tests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(ValueError):
                 await self.execute(argv + [
                     "--if-match", "41", "--confirm", "experimental-sort-write",
+                ])
+
+    async def test_bio_create_and_clear_native_cli(self):
+        with tempfile.TemporaryDirectory() as folder:
+            file = Path(folder) / "synthetic-bio.json"
+            file.write_text(json.dumps({
+                "chi": "<p>Synthetic</p>", "eng": "<p>Test</p>",
+            }))
+            await self.execute([
+                "bio-action", "synthetic", "create", "--changes-file", str(file),
+                "--if-match", "77", "--confirm", "experimental-bio-action-write",
+            ])
+            self.assertEqual(DummyClient.calls[-1], (
+                "bio-action", "synthetic", "create",
+                {"changes": {"chi": "<p>Synthetic</p>", "eng": "<p>Test</p>"},
+                 "expected_timestamp": "77"},
+            ))
+        await self.execute([
+            "bio-action", "synthetic", "clear",
+            "--if-match", "78", "--confirm", "experimental-bio-action-write",
+        ])
+        self.assertEqual(DummyClient.calls[-1], (
+            "bio-action", "synthetic", "clear",
+            {"changes": None, "expected_timestamp": "78"},
+        ))
+        for action, extra in (("create", []), ("clear", ["--changes-file", "unused"])):
+            with self.assertRaises(ValueError):
+                await self.execute([
+                    "bio-action", "synthetic", action, *extra,
+                    "--if-match", "78", "--confirm", "experimental-bio-action-write",
                 ])
 
     async def test_invalid_record_combinations_do_not_write(self):

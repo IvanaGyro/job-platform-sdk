@@ -25,6 +25,7 @@ from job_platforms.providers.tw104.skill_records import skill_operation_body
 from job_platforms.providers.tw104.education_records import education_operation_body
 from job_platforms.providers.tw104.experience_records import experience_operation_body
 from job_platforms.providers.tw104.referrer_records import referrer_operation_body
+from job_platforms.providers.tw104.bio_actions import bio_action_body
 from job_platforms.providers.tw104.language_records import language_operation_body, KINDS as LANGUAGE_KINDS
 from job_platforms.providers.tw104.layout_theme import THEME_OPTION_KEYS, theme_body
 from job_platforms.providers.tw104.record_sort import SORTABLE, sort_body
@@ -115,6 +116,7 @@ def create_app(
                 ],
                 "experimental_theme_sections": list(THEME_OPTION_KEYS),
                 "experimental_sort_sections": list(SORTABLE),
+                "experimental_bio_actions": ["create", "clear"],
                 "experimental_record_operations": {
                     "skill": ["create", "update", "delete"],
                     "education": ["create", "update", "delete"],
@@ -918,5 +920,80 @@ def create_app(
             else:
                 record.update({"state": "succeeded", "result": result})
                 return result
+
+    async def native_bio_action(
+        resume_id: str, request: Request, action: str, *,
+        changes: dict | None, if_match: str | None,
+        idempotency_key: str | None,
+    ):
+        if not allow_experimental_writes:
+            raise HTTPException(501, "104 BIO POST/DELETE requires experimental opt-in")
+        if if_match is None:
+            raise HTTPException(428, "If-Match resumeTimestamp is required")
+        if not idempotency_key or len(idempotency_key) < 16:
+            raise HTTPException(400, "Idempotency-Key of at least 16 characters required")
+        expected = if_match.strip('"')
+        fingerprint = hashlib.sha256(json.dumps(
+            {"action": action, "changes": changes, "timestamp": expected},
+            ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        key = ("BIO_ACTION", resume_id, idempotency_key)
+        async with request.app.state.action_lock:
+            cached = request.app.state.idempotency_results.get(key)
+            if cached is not None:
+                if cached["fingerprint"] != fingerprint:
+                    raise HTTPException(409, "Idempotency-Key reused with different BIO action")
+                if cached["state"] != "succeeded":
+                    raise HTTPException(409, "BIO action outcome indeterminate; inspect before retry")
+                return cached["result"]
+            try:
+                before = await request.app.state.client.get_resume(resume_id)
+                if str(before.get("resumeTimestamp")) != expected:
+                    raise HTTPException(412, "Resume changed since caller's read")
+                bio_action_body(before, action, changes=changes)
+            except (KeyError, TypeError, ValueError, UnsupportedWrite):
+                raise HTTPException(422, "Invalid or unavailable native BIO action") from None
+            except JobPlatformError as exc:
+                translate_error(exc)
+            record = {"fingerprint": fingerprint, "state": "indeterminate"}
+            request.app.state.idempotency_results[key] = record
+            try:
+                result = await request.app.state.client.mutate_bio(
+                    resume_id, action, changes=changes,
+                    expected_timestamp=expected,
+                )
+            except JobPlatformError as exc:
+                translate_error(exc)
+            else:
+                record.update({"state": "succeeded", "result": result})
+                return result
+
+    @app.post(
+        "/v1/tw104/resumes/{resume_id}/biography",
+        dependencies=[Depends(authorize)],
+    )
+    async def first_bio(
+        resume_id: str, request: Request, changes: dict = Body(...),
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        return await native_bio_action(
+            resume_id, request, "create", changes=changes,
+            if_match=if_match, idempotency_key=idempotency_key,
+        )
+
+    @app.delete(
+        "/v1/tw104/resumes/{resume_id}/biography",
+        dependencies=[Depends(authorize)],
+    )
+    async def clear_bio(
+        resume_id: str, request: Request,
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        return await native_bio_action(
+            resume_id, request, "clear", changes=None,
+            if_match=if_match, idempotency_key=idempotency_key,
+        )
 
     return app

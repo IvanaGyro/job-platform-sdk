@@ -131,6 +131,33 @@ tests passed; the writer is not yet live write-verified.** This is not a
 generic cross-platform education model. Adjacent ordering is available as
 a separate experimental native swap operation.
 
+### Experimental BIO creation and clearing
+
+The existing 104 BIO HTML editor supports a previously live-verified PUT
+for both chi and eng HTML strings. Two separate actions are now mapped:
+
+| HTTP method | Endpoint | Action |
+|---|---|---|
+| POST | /v1/tw104/resumes/{resume_id}/biography | Create empty BIO block |
+| DELETE | /v1/tw104/resumes/{resume_id}/biography | Clear the whole BIO block |
+
+Python callers use Resume104Client.mutate_bio(..., action, ...), with
+action create or clear. The CLI supports:
+
+    job-platform bio-action VERSION_NO create --changes-file private-chi-eng.json --if-match TIMESTAMP --confirm experimental-bio-action-write
+    job-platform bio-action VERSION_NO clear --if-match TIMESTAMP --confirm experimental-bio-action-write
+
+The public frontend module 8d88 uses POST with nested BIO data,
+and DELETE with a different nonnested body. These cannot be replaced by
+the already-verified PUT structure. The SDK refuses first creation of an
+already initialized block, clearing of empty blocks, and unknown HTML
+fields. Create requires both language fields, at least one nonempty.
+
+Both new actions remain **synthetic-tested only**. They require explicit
+experimental write opt-in, version matching and HTTP idempotency. We did
+not clear or create any real 104 BIO section. A native DELETE could affect
+section presentation; verify it on an expendable test resume first.
+
 ### Experimental 104 REFERRER CRUD
 
 A 104 recommendation contact is a repeating record with five fields:

@@ -342,3 +342,18 @@ groups contains sort={from,to}, while the other contains sort=[].
 The SDK maps only adjacent swaps and verifies the other group's
 content is unchanged. The designated test resume contains only one
 record per group; no real sorting or restore has been performed.
+
+
+### Native BIO POST and DELETE (experimental)
+
+BIO creation in module 8d88 uses POST to
+/profile/ajax/resumeByBlock/bio with
+blockValueList.bio.bio={chi:HTML,eng:HTML}.
+
+Whole-block clearing uses DELETE to the same endpoint, with
+blockValueList.bio={chi:"",eng:""}.
+
+These operations differ from the previously live-tested BIO PUT.
+The SDK requires an empty form for POST, existing nonempty content
+for DELETE, and exact independent read-back. Real POST/DELETE/restore
+validation has not yet been performed.
