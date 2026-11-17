@@ -152,6 +152,16 @@ class CLI104Tests(unittest.IsolatedAsyncioTestCase):
                     "--if-match", "41", "--confirm", "experimental-sort-write",
                 ])
 
+    async def test_referrer_exactly_two_sort_cli(self):
+        await self.execute([
+            "sort", "synthetic", "referrer", "1", "2",
+            "--if-match", "41", "--confirm", "experimental-sort-write",
+        ])
+        self.assertEqual(DummyClient.calls[-1], (
+            "sort", "synthetic", "referrer", 1, 2,
+            {"expected_timestamp": "41"},
+        ))
+
     async def test_bio_create_and_clear_native_cli(self):
         with tempfile.TemporaryDirectory() as folder:
             file = Path(folder) / "synthetic-bio.json"

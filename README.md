@@ -131,6 +131,52 @@ tests passed; the writer is not yet live write-verified.** This is not a
 generic cross-platform education model. Adjacent ordering is available as
 a separate experimental native swap operation.
 
+### Offline native 104 CUSTOM text and certification connection plans
+
+The last two native 104 workflows still lack a validated populated GET
+contract and/or their exact deployed API route. They are deliberately
+implemented as **offline request planners**, not experimental network
+writers. They never start the browser or read stored credentials:
+
+- `job-platform custom-text-plan create --slot 1 --name "Portfolio notes" --html-file private-intro.html --options-file private-site-options.json`
+- `job-platform custom-text-plan update --slot 1 --name "Updated heading" --existing-form-file private-custom-form.json`
+- `job-platform custom-text-plan delete --slot 1`
+- `job-platform certificate-link-plan connect --ids-file private-cert-ids.json`
+- `job-platform certificate-link-plan disconnect --record-id 123`
+- `job-platform certificate-link-plan disconnect-other`
+
+The first command takes an options JSON object containing
+`optionsCustomTheme`, as returned by the 104 editor. CUSTOM uses
+numbered slots `custom1`–`custom6`. The official frontend modules
+4228/5255 map **CustomThemeText=3**, strip UI-only duration fields,
+normalize its media to NONE=0, and convert selectedTheme to an integer.
+Only one text-only content item with conservative HTML tags is supported
+here. Any media-containing or non-text CUSTOM update fails closed.
+
+The certification association planner is independent from global
+certification CRUD: frontend module 779c sends
+`{"certIds":[...]}` for `certificationConnect/put`, and has separate
+`delete` and `deleteOther` actions. Their public frontend action
+names are mapped, but live endpoint URL, account-level ID semantics,
+read-back and restore have not been verified.
+
+Both planners return `persisted:false` and `network_sent:false`;
+no authentication or write happens. **Do not send the generated
+request body directly** until the target 104 version, source path
+and native read-back are independently confirmed. These features are
+not counted as complete resume editor writes.
+
+### REFERRER two-record ordering
+
+The official f5d8 frontend hardcodes
+`blockValueList.referrer.referrers.sort={from:2,to:1}`.
+The existing source-mapped adjacent-sort SDK/HTTP/CLI now accepts
+REFERRER **only when exactly two distinct records exist**. It does
+not generalize to three or more records because the website action
+itself ignores the requested drag positions. No real REFERRER sort
+was executed; synthetic tests validate the exact POST body and
+independent read-back.
+
 ### Experimental 104 CERTIFICATE block initialization / text clearing
 
 The real test resume has an empty CERTIFICATE formData. Its public

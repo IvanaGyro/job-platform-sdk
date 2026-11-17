@@ -19,10 +19,10 @@ and successful real 104 writes.** Each is a separate evidence level.
 | `project` | POST, PUT, DELETE; reorder; attachments | Source-mapped **no-media** first-create/CRUD and adjacent reorder (experimental); media pending | **No** |
 | `portfolio` | POST, DELETE; attachments/upload; reorder | Link-only multipart POST (LINK=2), one-record DELETE, adjacent reorder experimental; file uploads/previews pending | **No** |
 | `bio` | POST, PUT, DELETE | HTML PUT live-verified; first-create POST and clear DELETE experimental | **PUT only** |
-| `referrer` | POST, PUT, DELETE; reorder | Native record create/update/delete with empty-form initialization (experimental); sorting pending | **No** |
+| `referrer` | POST, PUT, DELETE; reorder | Native record CRUD, empty-form first-create, **exactly-two-record** hardcoded adjacent swap (experimental) | **No** |
 | `sidebar` | PUT | Complete-list reorder only; metadata edits rejected | **No** |
 | `layout` | PUT | Theme selection for 11 native sections using current 104 option values (experimental) | **No** |
-| `custom` | POST, PUT, DELETE | Not implemented | No |
+| `custom` | POST, PUT, DELETE | Offline TEXT=3 create/update/delete request serializer and CLI; **no remote write** | No |
 | `under18` | POST, PUT | Not implemented | No |
 
 For source details see [104 upstream contract](tw104-upstream-contract.md).
@@ -66,8 +66,9 @@ every possible UI control.
    project, portfolio, certificate connections, media, and remaining ordering; validate every supported JSON Patch path before network I/O.
 3. Live-test each source-mapped operation on the designated test resume,
    using private backups and exact read-back/restore where reversible.
-4. Extend the synthetic Python SDK, HTTP API and CLI test matrix; harden durable
-   idempotency, remote-conflict reconciliation and login recovery.
+4. Extend the synthetic Python SDK, HTTP API and CLI test matrix; harden
+   remote-conflict reconciliation and login recovery. SQLite and persistent
+   idempotency are out of scope for disposable execution.
 
 Current definitions:
 
@@ -260,3 +261,49 @@ The Python SDK, CLI and HTTP lifecycle APIs have synthetic regression
 coverage only, with If-Match, in-memory Idempotency-Key, no blind retry
 and exact read-back checks. Real initialization and restore are still
 unverified.
+
+
+### REFERRER two-record swap (2026-11-17)
+
+Editor action f5d8.SORT hardcodes
+blockValueList.referrer.referrers.sort={from:2,to:1} and ignores its
+input. The sort adapter accepts exactly two records, either adjacent
+direction, and rejects any other length. Existing SDK, CLI and HTTP
+sort routes now recognize the source-defined REFERRER action.
+Synthetic read-back must show an exact swap with no sibling changes.
+The actual test resume's REFERRER formData was empty, so there is
+no live two-record sort or restore confirmation.
+
+### CUSTOM TEXT source-level only (2026-11-17)
+
+Modules 4228, 5255 and 6330 establish five CUSTOM themes; TEXT has
+value 3. CUSTOM contains numbered dynamic slots custom1..custom6
+(up to six), with one or more content items depending on theme.
+The postData() transformation strips UI-only duration
+index/durationGroup, rewrites the isInProgress flag, and converts
+file[] to native media; for TEXT=3 the file becomes NONE=0.
+The safe text planner only supports one content item, a title and
+a limited set of HTML tags, no media uploads and no populated
+GET shape assumptions. It source-maps:
+- POST/PUT body blockValueList.custom.custom plus themeChoose;
+- DELETE body blockValueList.custom.custom.sort=[SLOT].
+
+Offline CLI command custom-text-plan creates these request shapes
+from private local input files. It neither authenticates nor writes
+to 104. The native populated CUSTOM GET after first creation remains
+unobserved and there is no remote CUSTOM mutation yet.
+
+### CERTIFICATE association source-level only (2026-11-17)
+
+Separate 779c frontend Vuex actions use
+api/certificationConnect/put with {certIds:[IDs]},
+api/certificationConnect/delete with an ID, and
+api/certificationConnect/deleteOther with the current resume.
+These are **not** the same as account-global
+api/certifications/{get,post,put,delete} operations.
+
+The new certificate-link-plan CLI and Python functions only
+serialize action names and safe typed argument shapes. They do not
+construct an unverified URL or initiate any remote mutation.
+Real association/disassociation and independent read-back
+must be established before making these executable.

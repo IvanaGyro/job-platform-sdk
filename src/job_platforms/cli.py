@@ -8,6 +8,13 @@ import sys
 from pathlib import Path
 
 from job_platforms.providers.tw104 import AuthConfig, FreshBrowserSession, Resume104Client
+from job_platforms.providers.tw104.custom_text_contract import (
+    custom_text_create_body, custom_text_update_body, custom_delete_body,
+)
+from job_platforms.providers.tw104.certificate_connection_contract import (
+    certificate_connect_plan, certificate_disconnect_plan,
+    certificate_other_text_disconnect_plan,
+)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -17,6 +24,25 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--headless", action="store_true",
                         help="Unsupported by some 104 anti-bot checks")
     sub = parser.add_subparsers(dest="command", required=True)
+    cert_plan = sub.add_parser(
+        "certificate-link-plan",
+        help="Offline 104 certification association request planning; no write",
+    )
+    cert_plan.add_argument(
+        "action", choices=["connect", "disconnect", "disconnect-other"],
+    )
+    cert_plan.add_argument("--ids-file", default=None)
+    cert_plan.add_argument("--record-id", type=int, default=None)
+    custom_plan = sub.add_parser(
+        "custom-text-plan",
+        help="Offline source-mapped CUSTOM TEXT=3 request planning; never sends a write",
+    )
+    custom_plan.add_argument("action", choices=["create", "update", "delete"])
+    custom_plan.add_argument("--slot", type=int, required=True)
+    custom_plan.add_argument("--name", default=None)
+    custom_plan.add_argument("--html-file", default=None)
+    custom_plan.add_argument("--options-file", default=None)
+    custom_plan.add_argument("--existing-form-file", default=None)
     sub.add_parser("probe", help="Authentication and resume count; no personal values")
     sub.add_parser("list", help="Print private resume summaries as JSON")
     get = sub.add_parser("get", help="Print a private resume as JSON")
@@ -85,7 +111,7 @@ def _parser() -> argparse.ArgumentParser:
     theme.add_argument("--confirm", choices=["experimental-theme-write"], required=True)
     ordering = sub.add_parser("sort", help="104 adjacent record move (experimental)")
     ordering.add_argument("resume_id")
-    ordering.add_argument("section", choices=["education", "skill", "language", "project", "portfolio"])
+    ordering.add_argument("section", choices=["education", "skill", "language", "project", "portfolio", "referrer"])
     ordering.add_argument("--kind", choices=["local", "foreign"], default=None,
                           help="Required only for LANGUAGE record sorting")
     ordering.add_argument("from_position", type=int)
@@ -96,6 +122,68 @@ def _parser() -> argparse.ArgumentParser:
 
 
 async def _run(args):
+    if args.command == "certificate-link-plan":
+        if args.action == "connect":
+            if args.ids_file is None or args.record_id is not None:
+                raise ValueError("Connect requires --ids-file only")
+            ids = json.loads(Path(args.ids_file).read_text(encoding="utf-8"))
+            operation = certificate_connect_plan(ids)
+        elif args.action == "disconnect":
+            if args.record_id is None or args.ids_file is not None:
+                raise ValueError("Disconnect requires --record-id only")
+            operation = certificate_disconnect_plan(args.record_id)
+        else:
+            if args.record_id is not None or args.ids_file is not None:
+                raise ValueError("Disconnect-other takes no identifier")
+            operation = certificate_other_text_disconnect_plan()
+        print(json.dumps({
+            "section": "certificate", "operation": args.action,
+            "persisted": False, "network_sent": False,
+            **operation,
+        }, ensure_ascii=False, indent=2))
+        return
+    if args.command == "custom-text-plan":
+        # Deliberately offline. No login/session/remote write or state persists.
+        name, html, options, existing = (
+            args.name, args.html_file, args.options_file,
+            args.existing_form_file,
+        )
+        if args.action == "create":
+            if not name or not html or not options or existing is not None:
+                raise ValueError("CUSTOM create requires name, html, options only")
+            body = custom_text_create_body(
+                slot=args.slot, name=name,
+                introduction_html=Path(html).read_text(encoding="utf-8"),
+                theme_options=json.loads(Path(options).read_text(encoding="utf-8")),
+            )
+        elif args.action == "update":
+            if not existing or options is not None or (name is None and html is None):
+                raise ValueError("CUSTOM update needs prior native form and changed fields")
+            form = json.loads(Path(existing).read_text(encoding="utf-8"))
+            if (
+                not isinstance(form, dict)
+                or not isinstance(form.get("custom"), dict)
+                or form["custom"].get("sort") != args.slot
+            ):
+                raise ValueError("CUSTOM form slot does not match requested target")
+            body = custom_text_update_body(
+                form, name=name,
+                introduction_html=(
+                    Path(html).read_text(encoding="utf-8")
+                    if html is not None else None
+                ),
+            )
+        else:
+            if name is not None or html is not None or options is not None or existing is not None:
+                raise ValueError("CUSTOM delete only accepts slot")
+            body = custom_delete_body(slot=args.slot)
+        print(json.dumps({
+            "section": "custom", "action": args.action,
+            "slot": args.slot, "persisted": False,
+            "network_sent": False, "verified_against_live_get": False,
+            "body": body,
+        }, ensure_ascii=False, indent=2))
+        return
     cfg = AuthConfig.from_env()
     cfg.headless = args.headless
     async with FreshBrowserSession(cfg) as session:

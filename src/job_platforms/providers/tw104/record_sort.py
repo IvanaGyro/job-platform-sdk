@@ -1,7 +1,8 @@
 """104 adjacent record sorting through the native swapRecordBySort API.
 
 Frontend actions a41b (SKILL), 8ea9 (EDUCATION), 96e2 (LANGUAGE),
-1d22 (PROJECT), and 44aa (PORTFOLIO).
+1d22 (PROJECT), 44aa (PORTFOLIO), and f5d8 (REFERRER,
+exactly 2 entries only; editor hardcodes from=2,to=1).
 For LANGUAGE, its sortable groups are independent and the UI supplies
 both foreign and local sort branches (the inactive branch contains []).
 Only *adjacent* moves are implemented until non-adjacent swap-vs-insertion
@@ -18,11 +19,12 @@ from .language_records import KINDS, language_lists
 from .project_records import project_records
 from .portfolio_records import portfolio_records
 from .skill_records import skill_list
+from .referrer_records import referrer_records
 
 SORTABLE = {
     "education": "educations", "skill": "skills",
     "language": "languages", "project": "projects",
-    "portfolio": "portfolios",
+    "portfolio": "portfolios", "referrer": "referrers",
 }
 
 
@@ -41,6 +43,13 @@ def _records(doc: dict, section: str, kind: str | None) -> list:
         return project_records(doc)
     if section == "portfolio":
         return portfolio_records(doc)
+    if section == "referrer":
+        records = referrer_records(doc)
+        # Official editor f5d8.SORT always sends from=2,to=1,
+        # ignoring the proposed sort payload. Do NOT generalize to N>2.
+        if len(records) != 2:
+            raise UnsupportedWrite("104 REFERRER sort supported only for exactly 2 entries")
+        return records
     raise UnsupportedWrite("104 sortable section not source-mapped")
 
 
@@ -64,7 +73,10 @@ def sort_body(
     # Independent read-back cannot distinguish two otherwise identical rows.
     if _without_sort(records[from_position - 1]) == _without_sort(records[to_position - 1]):
         raise UnsupportedWrite("104 sort cannot verify indistinguishable records")
-    move = {"from": from_position, "to": to_position}
+    move = (
+        {"from": 2, "to": 1} if section == "referrer"
+        else {"from": from_position, "to": to_position}
+    )
     if section == "language":
         # 104 UI dragEnd() sends both buckets with an empty sort list in
         # the inactive language group, not a single group.

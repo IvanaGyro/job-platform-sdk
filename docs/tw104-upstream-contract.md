@@ -433,3 +433,47 @@ certifications API (account-global records) and certificationConnect
 (resume/record associations). The current adapter intentionally blocks
 clearing any populated association list. Both lifecycle operations
 are synthetic-tested only and were not executed on the live test resume.
+
+
+### REFERRER sort is a hard-coded pair swap
+
+The site's public module f5d8.SORT sends the literal payload:
+
+    blockValueList.referrer.referrers.sort={from:2,to:1}
+
+It does not use the passed drag position. The adapter consequently
+enables only the exactly-two-record branch and verifies both full
+records swapped, without modifying any other form data.
+
+### CUSTOM theme and no-media TEXT request planning
+
+Public frontend module 5255 lists CUSTOM theme constants:
+1=CLASSIC, 2=BANNER, 3=TEXT, 4=IMAGE, 5=MAGAZINE.
+Module 4228.postData() converts
+{custom:{name,sort,content:[...]},themeChoose:{selectedTheme:{value:3}}}
+into blockValueList.custom with the numeric selected theme.
+The TEXT branch forcibly maps file to a single
+{type:0,content:"",ext:""} object; normalizes month selectors and
+removes UI-only duration fields. Module 6330 normalizes populated
+formData to an editable view model, but no real populated CUSTOM
+GET has been inspected.
+
+The source-mapped serializer supports exactly one text-only content
+and only the TEXT theme. Its separate DELETE operation uses
+blockValueList.custom.custom.sort=[DYNAMIC_SLOT] for custom1..custom6.
+No CUSTOM POST/PUT/DELETE network path is enabled in the SDK yet.
+The offline planner is available through the Python module and CLI.
+
+### Certificate association actions are separate from record CRUD
+
+Public frontend module 779c dispatches:
+- SET_CERTIFICATION_CONNECT: api/certificationConnect/put
+  with data {certIds:IDS} and resume vno;
+- DELETE_CERTIFICATION_CONNECT: api/certificationConnect/delete
+  with a record id and resume vno;
+- DELETE_CERTIFICATION_OTHER: api/certificationConnect/deleteOther
+  with the resume vno.
+
+Exact deployed URLs and real reference/ID shapes are not yet verified.
+The SDK offers non-writing source-level planners for these actions,
+with positive integer IDs, no duplicates, and no mutations.
