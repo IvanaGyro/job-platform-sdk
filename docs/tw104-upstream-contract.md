@@ -316,3 +316,19 @@ size selectors to their `value`.
 This was **read-only** validation, with no experience mutation.
 Record creation and deletion may renumber positions, so the SDK does
 not infer an array index from a 104 record's 1-based `sort` number.
+
+
+### REFERRER native record requests (source-mapped, not live verified)
+
+The public frontend module f5d8 issues POST or PUT to
+/profile/ajax/resumeByBlock/referrer?vno=VERSION, sending the object
+blockValueList.referrer with a one-element referrers array and
+themeChoose.selectedTheme. The company field is the UI company selector's
+text value. For DELETE, the object is
+blockValueList.referrer.referrers.sort=[POSITION].
+
+An authenticated read-only GET found referrer.formData={} on the designated
+test resume. The current /profile/ajax/options has two referrer themes;
+the editor uses its first one for a first POST. The new native writer
+supports this branch without hard-coding an option ID. Real writes and
+restoration remain unverified.

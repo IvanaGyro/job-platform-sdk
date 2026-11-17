@@ -131,6 +131,41 @@ tests passed; the writer is not yet live write-verified.** This is not a
 generic cross-platform education model. Adjacent ordering is available as
 a separate experimental native swap operation.
 
+### Experimental 104 REFERRER CRUD
+
+A 104 recommendation contact is a repeating record with five fields:
+name, company, position, email and tel. Updates and deletes address the
+current 1-based upstream sort value, not an array index. The 104-specific
+Python method is Resume104Client.mutate_referrer(), and the optional
+experimental HTTP endpoints are:
+
+| Method | Endpoint | Action |
+|---|---|---|
+| POST | /v1/tw104/resumes/{resume_id}/referrers | Add one referrer |
+| PUT | /v1/tw104/resumes/{resume_id}/referrers/{position} | Update fields |
+| DELETE | /v1/tw104/resumes/{resume_id}/referrers/{position} | Delete record |
+
+The CLI exposes job-platform record VERSION_NO referrer ACTION with its
+usual confirmation, prior resumeTimestamp and private JSON changes file.
+All writes require experimental opt-in, an API bearer token, If-Match and
+Idempotency-Key for HTTP, and independent read-back. An ambiguous remote
+write is not retried automatically.
+
+The official frontend module f5d8 sends distinct POST/PUT/DELETE requests,
+and converts the UI company selector to text in the native wire payload.
+For first creation into empty formData the SDK reads the first
+optionsReferrerTheme from the current 104 options endpoint, instead of
+guessing a default numerical theme.
+
+A fresh authenticated **read-only** check confirmed an empty referrer
+formData on the designated test resume, two theme options, and five
+field maximum lengths (name 30, company 35, position 20, email 50, tel 50).
+The writer enforces those limits and requires at least one contact method.
+This adapter and its HTTP routes are **synthetic-tested only**: no real
+104 referrer has been added, modified or deleted. The first POST and
+last DELETE are not live verified. Do not use real people's contact data
+as fixtures or log them.
+
 ### Experimental 104 INFO resume fields
 
 The existing `plan_edit()` / `save_edit()` and experimental HTTP PATCH

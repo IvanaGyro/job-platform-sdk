@@ -22,6 +22,10 @@ class DummyClient:
         self.calls.append(("experience", version, action, kwargs))
         return {"verified": True}
 
+    async def mutate_referrer(self, version, action, **kwargs):
+        self.calls.append(("referrer", version, action, kwargs))
+        return {"verified": True}
+
     async def mutate_language(self, version, kind, action, **kwargs):
         self.calls.append(("language", version, kind, action, kwargs))
         return {"verified": True}
@@ -86,6 +90,16 @@ class CLI104Tests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(DummyClient.calls[-1][:4], (
                 "language", "synthetic", "foreign", "delete",
             ))
+
+    async def test_referrer_native_cli_dispatch(self):
+        await self.execute([
+            "record", "synthetic", "referrer", "delete", "--position", "2",
+            "--if-match", "99", "--confirm", "experimental-record-write",
+        ])
+        self.assertEqual(DummyClient.calls[-1], (
+            "referrer", "synthetic", "delete",
+            {"expected_timestamp": "99", "changes": None, "position": 2}
+        ))
 
     async def test_theme_and_sort_native_dispatch(self):
         await self.execute([

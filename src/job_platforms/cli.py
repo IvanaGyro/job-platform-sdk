@@ -43,7 +43,7 @@ def _parser() -> argparse.ArgumentParser:
         "record", help="104-native record CRUD (experimental; not live write verified)"
     )
     record.add_argument("resume_id")
-    record.add_argument("section", choices=["skill", "education", "experience", "language"])
+    record.add_argument("section", choices=["skill", "education", "experience", "language", "referrer"])
     record.add_argument("action", choices=["create", "update", "delete"])
     record.add_argument("--kind", choices=["local", "foreign"], default=None,
                         help="Required only for LANGUAGE records")

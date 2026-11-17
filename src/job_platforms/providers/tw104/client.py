@@ -26,6 +26,9 @@ from .language_records import (
     KINDS as LANGUAGE_KINDS, language_lists, language_operation_body,
     verify_language_operation,
 )
+from .referrer_records import (
+    referrer_records, referrer_operation_body, verify_referrer_operation,
+)
 from .experience_records import (
     experience_list, experience_operation_body, verify_experience_operation,
 )
@@ -361,6 +364,75 @@ class Resume104Client:
                     await asyncio.sleep(0.75)
             raise VerificationError(
                 "EXPERIENCE write submitted but record state could not be "
+                "verified; inspect before retrying"
+            )
+
+    async def mutate_referrer(
+        self,
+        resume_id: str | int,
+        action: str,
+        *,
+        expected_timestamp: int | str,
+        changes: dict | None = None,
+        position: int | None = None,
+    ) -> dict:
+        """Source-mapped 104 REFERRER record POST/PUT/DELETE.
+
+        Each position is the current 1-based sort value. Unrecognized source
+        shapes and stale resume versions are rejected before writing.
+        """
+        if action not in ("create", "update", "delete"):
+            raise UnsupportedWrite("Unsupported 104 REFERRER action")
+        version = self._version(resume_id)
+        async with self._write_lock:
+            before = await self.get_resume(version)
+            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+                raise ConflictError("104 resume changed before referrer operation")
+            form = before.get("referrer", {}).get("formData")
+            if not isinstance(form, dict):
+                raise UnsupportedWrite("104 REFERRER native formData missing")
+            options = None
+            if action == "create" and not form:
+                options = self._data(
+                    await self.transport.get_json("/profile/ajax/options")
+                )
+            body = referrer_operation_body(
+                before, action, changes=changes, position=position,
+                options=options,
+            )
+            referrer_records(before)
+            method = {"create": "POST", "update": "PUT", "delete": "DELETE"}[action]
+            await self.transport.request(
+                method,
+                "/profile/ajax/resumeByBlock/referrer",
+                params={"vno": version}, json_data=body,
+            )
+            for attempt in range(4):
+                try:
+                    after = await self.get_resume(version)
+                    if verify_referrer_operation(
+                        before, after, action, body=body, position=position
+                    ):
+                        return {
+                            "resume_id": version,
+                            "action": action,
+                            "section": "referrer",
+                            "persisted": True,
+                            "verified": True,
+                            "atomic": True,
+                            "position": (
+                                len(referrer_records(after)) if action == "create"
+                                else position
+                            ),
+                        }
+                except Exception:
+                    raise VerificationError(
+                        "REFERRER request submitted; read-back unavailable"
+                    ) from None
+                if attempt < 3:
+                    await asyncio.sleep(0.75)
+            raise VerificationError(
+                "REFERRER write submitted but record state could not be "
                 "verified; inspect before retrying"
             )
 

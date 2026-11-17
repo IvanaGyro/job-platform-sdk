@@ -24,6 +24,7 @@ from job_platforms.providers.tw104 import AuthConfig, FreshBrowserSession, Resum
 from job_platforms.providers.tw104.skill_records import skill_operation_body
 from job_platforms.providers.tw104.education_records import education_operation_body
 from job_platforms.providers.tw104.experience_records import experience_operation_body
+from job_platforms.providers.tw104.referrer_records import referrer_operation_body
 from job_platforms.providers.tw104.language_records import language_operation_body, KINDS as LANGUAGE_KINDS
 from job_platforms.providers.tw104.layout_theme import THEME_OPTION_KEYS, theme_body
 from job_platforms.providers.tw104.record_sort import SORTABLE, sort_body
@@ -118,6 +119,7 @@ def create_app(
                     "skill": ["create", "update", "delete"],
                     "education": ["create", "update", "delete"],
                     "experience": ["create", "update", "delete"],
+                    "referrer": ["create", "update", "delete"],
                     "language.local": ["create", "update", "delete"],
                     "language.foreign": ["create", "update", "delete"],
                 },
@@ -578,6 +580,118 @@ def create_app(
         idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     ):
         return await experience_operation_http(
+            resume_id, request, "delete", changes=None, position=position,
+            if_match=if_match, idempotency_key=idempotency_key,
+        )
+
+    async def referrer_operation_http(
+        resume_id: str, request: Request, action: str, *,
+        changes: dict | None, position: int | None,
+        if_match: str | None, idempotency_key: str | None,
+    ):
+        """104-specific REFERRER CRUD, not a cross-provider data model."""
+        if not allow_experimental_writes:
+            raise HTTPException(501, "104 REFERRER writes require explicit opt-in")
+        if if_match is None:
+            raise HTTPException(428, "If-Match: <resumeTimestamp> is required")
+        if not idempotency_key or len(idempotency_key) < 16:
+            raise HTTPException(400, "Idempotency-Key of at least 16 characters required")
+        expected = if_match.strip('"')
+        fingerprint = hashlib.sha256(
+            json.dumps(
+                {"action": action, "position": position, "changes": changes,
+                 "timestamp": expected},
+                ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        key = ("REFERRER", resume_id, idempotency_key)
+        async with request.app.state.action_lock:
+            cached = request.app.state.idempotency_results.get(key)
+            if cached is not None:
+                if cached["fingerprint"] != fingerprint:
+                    raise HTTPException(409, "Idempotency-Key reused with different payload")
+                if cached["state"] != "succeeded":
+                    raise HTTPException(
+                        409, "REFERRER write outcome indeterminate; inspect before retrying"
+                    )
+                return cached["result"]
+            try:
+                before = await request.app.state.client.get_resume(resume_id)
+                if str(before.get("resumeTimestamp")) != expected:
+                    raise HTTPException(412, "Resume changed since caller's read")
+                form = before.get("referrer", {}).get("formData")
+                if not isinstance(form, dict):
+                    raise UnsupportedWrite("Missing REFERRER native form")
+                options = None
+                if action == "create" and not form:
+                    options = request.app.state.client._data(
+                        await request.app.state.client.transport.get_json(
+                            "/profile/ajax/options"
+                        )
+                    )
+                referrer_operation_body(
+                    before, action, changes=changes, position=position,
+                    options=options,
+                )
+            except (ValueError, KeyError, TypeError, IndexError, UnsupportedWrite):
+                raise HTTPException(
+                    422, "Invalid REFERRER fields or record position"
+                ) from None
+            except JobPlatformError as exc:
+                translate_error(exc)
+            record = {"fingerprint": fingerprint, "state": "indeterminate"}
+            request.app.state.idempotency_results[key] = record
+            try:
+                result = await request.app.state.client.mutate_referrer(
+                    resume_id, action, changes=changes, position=position,
+                    expected_timestamp=expected,
+                )
+            except JobPlatformError as exc:
+                translate_error(exc)
+            else:
+                record.update({"state": "succeeded", "result": result})
+                return result
+
+    @app.post(
+        "/v1/tw104/resumes/{resume_id}/referrers",
+        dependencies=[Depends(authorize)],
+    )
+    async def create_referrer(
+        resume_id: str, request: Request,
+        changes: dict = Body(...),
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        return await referrer_operation_http(
+            resume_id, request, "create", changes=changes, position=None,
+            if_match=if_match, idempotency_key=idempotency_key,
+        )
+
+    @app.put(
+        "/v1/tw104/resumes/{resume_id}/referrers/{position}",
+        dependencies=[Depends(authorize)],
+    )
+    async def update_referrer(
+        resume_id: str, position: int, request: Request,
+        changes: dict = Body(...),
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        return await referrer_operation_http(
+            resume_id, request, "update", changes=changes, position=position,
+            if_match=if_match, idempotency_key=idempotency_key,
+        )
+
+    @app.delete(
+        "/v1/tw104/resumes/{resume_id}/referrers/{position}",
+        dependencies=[Depends(authorize)],
+    )
+    async def delete_referrer(
+        resume_id: str, position: int, request: Request,
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        return await referrer_operation_http(
             resume_id, request, "delete", changes=None, position=position,
             if_match=if_match, idempotency_key=idempotency_key,
         )

@@ -19,7 +19,7 @@ and successful real 104 writes.** Each is a separate evidence level.
 | `project` | POST, PUT, DELETE; reorder; attachments | Read/plan only | No |
 | `portfolio` | POST, DELETE; attachments/upload | Read/plan only | No |
 | `bio` | POST, PUT, DELETE | Chinese and English content replacement | **Yes**, including restore |
-| `referrer` | POST, PUT, DELETE | Read/plan only | No |
+| `referrer` | POST, PUT, DELETE; reorder | Native record create/update/delete with empty-form initialization (experimental); sorting pending | **No** |
 | `sidebar` | PUT | Complete-list reorder only; metadata edits rejected | **No** |
 | `layout` | PUT | Theme selection for 11 native sections using current 104 option values (experimental) | **No** |
 | `custom` | POST, PUT, DELETE | Not implemented | No |
@@ -162,3 +162,20 @@ sorts, selects records by actual `sort` rather than list index, and
 verifies create/update/delete without assuming ascending display order.
 These changes have synthetic regression tests; **no new real POST,
 PUT or DELETE has been executed**.
+
+
+### REFERRER coverage (2026-11-17)
+
+The frontend's f5d8 module provides native per-record CRUD and a separate
+swapRecordBySort operation. The record fields are name, company, position,
+email, tel and sort. Initial GET on the designated test resume returned
+an empty referrer formData; the current site's first referrer theme is
+selected for a first POST. A real read-only /profile/ajax/inputField
+confirmed maximum characters 30/35/20/50/50 and the options endpoint
+reported two available referrer themes. The encoder is synthetic-tested
+with field length, record-identity, no-overwrite, optimistic concurrency
+and HTTP idempotency regression cases.
+
+Missing: real populated GET shape, first POST/read-back/restore, all UI
+conditional contact-visibility options, and sorting. No real contacts or
+credentials are in the public repository.
