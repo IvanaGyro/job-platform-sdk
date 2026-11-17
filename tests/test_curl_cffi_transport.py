@@ -1,6 +1,8 @@
 """Synthetic curl_cffi transport tests: no real credentials, proxy or network."""
 import unittest
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
+from unittest.mock import patch
+import sys
 from job_platforms.core.errors import (
     AuthenticationRequired, UnsupportedWrite, UpstreamError, VerificationError,
 )
@@ -131,13 +133,32 @@ class CurlTransportTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             CurlCffiTransport.from_storage_state(
                 state,proxy_url="",user_agent="synthetic",session_factory=factory)
-        t=CurlCffiTransport.from_storage_state(
-            state,proxy_url="http://user:pass@proxy.invalid:9999",
-            user_agent="synthetic",session_factory=factory)
+        # A synthetic fake for the *optional* curl_cffi extra keeps the
+        # base-package CI able to exercise cookie scope and proxy wiring.
+        class FakeCookies:
+            def __init__(self):
+                self.jar = []
+            def set(self, name, value, domain="", path="/", secure=False):
+                self.jar.append(SimpleNamespace(
+                    name=name, value=value, domain=domain,
+                    path=path, secure=secure,
+                ))
+        fake_module = ModuleType("curl_cffi.requests")
+        fake_module.Cookies = FakeCookies
+        fake_module.AsyncSession = factory
+        fake_parent = ModuleType("curl_cffi")
+        fake_parent.__path__ = []
+        with patch.dict(sys.modules, {
+            "curl_cffi": fake_parent,
+            "curl_cffi.requests": fake_module,
+        }):
+            t=CurlCffiTransport.from_storage_state(
+                state,proxy_url="http://user:pass@proxy.invalid:9999",
+                user_agent="synthetic",session_factory=factory)
         self.assertEqual(captured["impersonate"],"chrome146")
         self.assertEqual(captured["proxy"],"http://user:pass@proxy.invalid:9999")
         self.assertFalse(captured["trust_env"])
-        self.assertEqual(len(list(captured["cookies"].jar)),1)
+        self.assertEqual(len(captured["cookies"].jar),1)
         await t.aclose()
 
 if __name__ == "__main__":
