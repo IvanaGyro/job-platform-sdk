@@ -26,6 +26,18 @@ class Recorder(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(answer)
 
+    def do_GET(self):
+        cookie = self.headers.get("Cookie", "")
+        self.server.cookies_seen.append(cookie)
+        answer = b'{"data":{"formData":{"overview":[]}}}'
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(answer)))
+        self.send_header("104-profile-ver", "synthetic-read-version")
+        self.send_header("Set-Cookie", "synthetic-session=rotated; Path=/; HttpOnly")
+        self.end_headers()
+        self.wfile.write(answer)
+
     def log_message(self, fmt, *args):
         pass
 
@@ -36,6 +48,7 @@ class CurlWireTests(unittest.IsolatedAsyncioTestCase):
         from curl_cffi.requests import AsyncSession
         self.http = ThreadingHTTPServer(("127.0.0.1", 0), Recorder)
         self.http.records = []
+        self.http.cookies_seen = []
         self.thread = Thread(target=self.http.serve_forever, daemon=True)
         self.thread.start()
         session = AsyncSession(impersonate="chrome146", trust_env=False)
@@ -45,7 +58,9 @@ class CurlWireTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.transport.aclose()
-        self.http.shutdown()
+        # HTTPServer.shutdown() blocks until serve_forever exits. Keep it
+        # off the event-loop thread so async tests do not block for 0.5 s.
+        await asyncio.to_thread(self.http.shutdown)
         await asyncio.to_thread(self.thread.join, 3)
         self.http.server_close()
 
@@ -59,6 +74,17 @@ class CurlWireTests(unittest.IsolatedAsyncioTestCase):
         return {part.get_param("name", header="Content-Disposition"):
                 (part.get_filename(), part.get_payload(decode=True))
                 for part in message.iter_parts()}
+
+    async def test_real_http_cookie_rotation_and_version_updates(self):
+        before = await self.transport.get_json("/profile/ajax/overview")
+        self.assertEqual(before["data"]["formData"]["overview"], [])
+        self.assertEqual(self.transport._profile_version, "synthetic-read-version")
+        second = await self.transport.get_json("/profile/ajax/overview")
+        self.assertEqual(second["data"]["formData"]["overview"], [])
+        self.assertEqual(len(self.http.cookies_seen), 2)
+        self.assertEqual(self.http.cookies_seen[0], "")
+        self.assertIn("synthetic-session=rotated", self.http.cookies_seen[1])
+        # Real local HTTP Set-Cookie updated curl_cffi's in-memory Cookie jar.
 
     async def test_multipart_with_file_and_text_field(self):
         content = b"%PDF-1.4\n%synthetic\n%%EOF\n"

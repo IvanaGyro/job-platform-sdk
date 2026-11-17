@@ -11,7 +11,9 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlencode, urlsplit
 
-from job_platforms.core.errors import AuthenticationRequired, UpstreamError
+from job_platforms.core.errors import (
+    AuthenticationRequired, ConflictError, UpstreamError, VerificationError,
+)
 
 
 @dataclass
@@ -136,8 +138,7 @@ class BrowserTransport:
         async with self._lock:
             if urlsplit(self.page.url).hostname != "pda.104.com.tw":
                 raise AuthenticationRequired("Browser is not on authenticated My104")
-            if method in ("POST", "PUT", "DELETE") and not self._profile_version:
-                from job_platforms.core.errors import VerificationError
+            if method != "GET" and not self._profile_version:
                 raise VerificationError(
                     "104-profile-ver was not observed on a prior GET response; "
                     "write request not submitted"
@@ -149,7 +150,7 @@ class BrowserTransport:
                         throw Error('Cross-origin request prohibited');
                     }
                     const headers = {Accept: 'application/json, text/plain, */*'};
-                    if (['PUT','POST','DELETE'].includes(arg.method)) {
+                    if (['PUT','POST','PATCH','DELETE'].includes(arg.method)) {
                         headers['104-profile-ver'] = arg.profile_version;
                     }
                     let body;
@@ -210,11 +211,30 @@ class BrowserTransport:
             )
             if response.get("profile_version"):
                 self._profile_version = response["profile_version"]
-        if response["status"] in (401, 403):
-            raise AuthenticationRequired("104 browser authentication expired")
-        if not 200 <= response["status"] < 300 or response["data"] is None:
+        status = response["status"]
+        write = method != "GET"
+        if write and status in (409, 412):
+            raise ConflictError("104 rejected write with revision/conflict response")
+        if status in (401, 403):
+            if write:
+                raise VerificationError(
+                    "104 browser write received authentication rejection; "
+                    "inspect before retrying"
+                )
+            raise AuthenticationRequired("104 browser session rejected")
+        if write and (status == 429 or status >= 500):
+            raise VerificationError(
+                "104 browser write returned a transient/server error; "
+                "inspect before retrying"
+            )
+        if write and response["data"] is None and 200 <= status < 300:
+            raise VerificationError(
+                "104 browser write returned non-JSON or malformed JSON; "
+                "inspect before retrying"
+            )
+        if not 200 <= status < 300 or response["data"] is None:
             # Do not include query parameters or response bodies in errors.
-            raise UpstreamError(urlsplit(path).path, response["status"])
+            raise UpstreamError(urlsplit(path).path, status)
         return BrowserResponse(
             status=response["status"],
             content_type=response["content_type"],

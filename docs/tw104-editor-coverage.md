@@ -9,25 +9,44 @@ and successful real 104 writes.** Each is a separate evidence level.
 
 | Native group | Frontend operation families seen | Implementation in this PR | Live 104 write/read-back |
 |---|---|---|---|
-| `info` | PUT; related identity and optional information | Source-mapped selected resume INFO fields (experimental); account/media excluded | **No** |
-| `education` | POST, PUT, DELETE; ordering | Native record CRUD + adjacent swap sorting (experimental) | **No** |
-| `experience` | POST, PUT, DELETE; ordering, seniority | Seniority-only PUT + native record CRUD (experimental); record ordering pending | **No** |
-| `jobCondition` | PUT; separate layout/theme PUT | Source-mapped full native form serializer, experimental | **No** |
-| `skill` | POST, PUT, DELETE; ordering | Source-mapped record CRUD + adjacent swap sorting (experimental) | **No** |
+| `info` | PUT; related identity and optional information | Source-mapped selected resume INFO fields (experimental); account/media excluded | **Motto PUT/read-back/exact restore**; remaining fields incomplete |
+| `education` | POST, PUT, DELETE; ordering | Native record CRUD + adjacent swap sorting (experimental) | **One UPDATE restored**; CREATE/DELETE unverified |
+| `experience` | POST, PUT, DELETE; ordering, seniority | Seniority-only PUT + native record CRUD (experimental); record ordering pending | **One description UPDATE restored**; CREATE/DELETE unverified |
+| `jobCondition` | PUT; separate layout/theme PUT | Source-mapped full native form serializer, experimental | **preferJobContent PUT/read-back/exact restore**; other fields unverified |
+| `skill` | POST, PUT, DELETE; ordering | Source-mapped record CRUD + adjacent swap sorting (experimental) | **CRUD restored**; sort/theme unverified |
 | `certificate` | PUT, DELETE; certification connections | Existing text PUT plus first-empty PUT and guarded clear; global associations excluded | **SDK initialize + clear verified and restored live** |
-| `language` | POST, PUT, DELETE; local/foreign records | Native local/foreign record CRUD + adjacent local/foreign sorting (experimental); linked certificates blocked | **No** |
+| `language` | POST, PUT, DELETE; local/foreign records | Native local/foreign record CRUD + adjacent local/foreign sorting (experimental); linked certificates blocked | **One local + one foreign field UPDATE restored**; CREATE/DELETE unverified |
 | `project` | POST, PUT, DELETE; reorder; attachments | No-media CRUD and adjacent reorder; media pending | **SDK create, update and delete verified live and restored**; sorting synthetic |
-| `portfolio` | POST, DELETE; attachments/upload; reorder | LINK=2 POST, FILE=1 bounded binary POST, one-record DELETE, adjacent reorder; preview/conversion pending | **SDK LINK/FILE create-read-delete and two-entry adjacent swap/reverse live verified**; preview/non-adjacent sort untested |
+| `portfolio` | POST, DELETE; attachments/upload; reorder | LINK=2 POST, FILE=1 bounded binary POST, one-record DELETE, adjacent reorder; preview/conversion pending | **Browser and curl_cffi LINK/PDF CRUD restored; 2/3-entry insertion order verified**; preview/checksum/blob lifecycle unverified |
 | `bio` | POST, PUT, DELETE | HTML PUT live-verified; first-create POST and clear DELETE experimental | **PUT only** |
-| `referrer` | POST, PUT, DELETE; reorder | Native record CRUD, empty-form first-create, exactly-two-record hardcoded adjacent swap | **SDK create/update/delete live tested and restored**; sort pending |
-| `sidebar` | PUT | Complete-list reorder only; metadata edits rejected | **No** |
-| `layout` | PUT | Theme selection for 11 native sections using current 104 option values (experimental) | **No** |
+| `referrer` | POST, PUT, DELETE; reorder | Native record CRUD, empty-form first-create, exactly-two-record hardcoded adjacent swap | **CRUD restored**; sort unverified |
+| `sidebar` | PUT | Complete-list reorder only; metadata edits rejected | **One adjacent swap PUT and exact restore** |
+| `layout` | PUT | Theme selection for 11 native sections using current 104 option values (experimental) | **Unverified**; attempted theme PUT inconclusive, later GET verified original unchanged |
 | `custom` | POST, PUT, DELETE | **SDK TEXT=3 CRUD live**; CLASSIC/BANNER raw native CRUD live; IMAGE=4 synthetic PNG native create/delete live; MAGAZINE incomplete | TEXT real; others partial |
 | `under18` | POST, PUT | Optional native section/schema **read-only**; no remote writer | No |
 
 For source details see [104 upstream contract](tw104-upstream-contract.md).
 Some frontend functions call additional endpoints not in `resumeByBlock`, such
 as certificate association, media uploads, and record sort operations.
+
+## Latest evidence — 2026-11-18
+
+The user-authorized test resume completed independently read-verified and
+reversible proxy-bound HTTP writes for BIO PUT, PORTFOLIO LINK POST/DELETE,
+generated PDF FILE POST/DELETE, JOB_CONDITION text PUT, INFO motto PUT, and
+SIDEBAR adjacent reorder PUT. The original BIO/INFO/JOB_CONDITION forms,
+SIDEBAR order and PORTFOLIO display identities were restored. Private
+credentials, backups and real resume content remain outside the repository.
+**A verified field does not imply an entire section is complete.**
+
+LAYOUT PUT was not verified; a separate authenticated read-only comparison
+confirmed no change against its original private backup. EDUCATION
+CREATE/DELETE attempts stopped during login without any write; the earlier
+EDUCATION UPDATE evidence is independent.
+
+HTTP 409/412 conflict and ambiguous-write handling have synthetic tests.
+Local `Set-Cookie` rotation passed a loopback wire test. Server-side
+104 stale-version rejection and real cookie rotation remain unverified.
 
 ## Known native field families
 

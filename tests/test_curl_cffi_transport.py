@@ -4,7 +4,8 @@ from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 import sys
 from job_platforms.core.errors import (
-    AuthenticationRequired, UnsupportedWrite, UpstreamError, VerificationError,
+    AuthenticationRequired, ConflictError, UnsupportedWrite,
+    UpstreamError, VerificationError,
 )
 from job_platforms.providers.tw104.http_transport import CurlCffiTransport
 from job_platforms.providers.tw104.transport import BrowserUpload
@@ -161,6 +162,71 @@ class CurlTransportTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(captured["trust_env"])
         self.assertEqual(len(captured["cookies"].jar),1)
         await t.aclose()
+
+    async def test_write_conflict_statuses_are_explicit_and_not_retried(self):
+        for status in (409, 412):
+            with self.subTest(status=status):
+                t, session = self.transport(
+                    [Reply(version="synthetic-v1"), Reply(status=status)],
+                    allow_writes=True,
+                )
+                await t.get_json("/profile/ajax/overview")
+                with self.assertRaises(ConflictError):
+                    await t.put_json("/profile/ajax/resumeByBlock/info",
+                                     {"synthetic": True})
+                self.assertEqual(len(session.calls), 2)
+
+    async def test_uncertain_write_http_failures_never_look_like_success(self):
+        cases = [
+            Reply(status=401),
+            Reply(status=403),
+            Reply(status=302),
+            Reply(status=429),
+            Reply(status=500),
+            Reply(content_type="text/html"),
+            Reply(data={"data": {}}, content_type="application/octet-stream"),
+        ]
+        for response in cases:
+            with self.subTest(status=response.status_code,
+                              content_type=response.headers["content-type"]):
+                t, session = self.transport(
+                    [Reply(version="v1"), response], allow_writes=True,
+                )
+                await t.get_json("/profile/ajax/overview")
+                with self.assertRaises(VerificationError):
+                    await t.request(
+                        "POST", "/profile/ajax/resumeByBlock/project",
+                        json_data={"synthetic": 1},
+                    )
+                self.assertEqual(len(session.calls), 2)
+                self.assertEqual(t._profile_version, "v1")
+
+    async def test_invalid_json_after_write_requires_manual_reconciliation(self):
+        class MalformedReply(Reply):
+            def json(self):
+                raise ValueError("raw private payload must not leak")
+        t, session = self.transport([
+            Reply(version="v1"),
+            MalformedReply(version="v2"),
+        ], allow_writes=True)
+        await t.get_json("/profile/ajax/overview")
+        with self.assertRaises(VerificationError) as err:
+            await t.put_json("/profile/ajax/resumeByBlock/bio", {})
+        self.assertNotIn("private payload", str(err.exception))
+        self.assertEqual(t._profile_version, "v2")
+        self.assertEqual(len(session.calls), 2)
+
+    async def test_missing_json_after_write_never_triggers_implicit_retry(self):
+        class EmptyReply(Reply):
+            def json(self):
+                return None
+        t, session = self.transport([
+            Reply(version="v1"), EmptyReply(),
+        ], allow_writes=True)
+        await t.get_json("/profile/ajax/overview")
+        with self.assertRaises(VerificationError):
+            await t.put_json("/profile/ajax/resumeByBlock/bio", {})
+        self.assertEqual(len(session.calls), 2)
 
     async def test_multipart_uses_curlmime_and_closes_native_resource(self):
         class FakeMime:

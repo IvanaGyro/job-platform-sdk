@@ -58,9 +58,13 @@ unattended production resume without a private backup and independent GET.
   field and file bytes. These loopback checks are separate from the live
   authenticated 104 write/restore tests below. No automatic retry occurs;
   ambiguous network failures during writes raise `VerificationError`.
-- A 401, 403 or redirect is an authentication/network-risk failure, but a
-  403 does **not** prove an expired cookie. A 2xx HTML response or malformed
-  JSON is rejected, not treated as a successful API result.
+- For GET, a 401, 403 or redirect indicates an authentication/network-risk
+  failure; a 403 does **not** prove an expired cookie. For writes, 401/403,
+  redirects, 429, 5xx, and 2xx non-JSON or malformed JSON raise an
+  **uncertain-write** verification error; never resubmit without fresh GET.
+  HTTP 409/412 become explicit conflict errors, while other 4xx retain
+  sanitized upstream errors. BrowserTransport has matching safeguards.
+  These conflict codes are synthetic-tested but **not confirmed on 104**.
 - An authenticated browser session is still needed to obtain cookies;
   reuse without the original proxy remains **unverified/blocked** by the
   previous A/B network tests.
@@ -76,10 +80,12 @@ unattended production resume without a private backup and independent GET.
 - **Synthetic unit tests:** cookie-domain scoping, proxy binding, read
   decoding, 401/403/redirect/non-JSON handling, header version propagation,
   write gate, form encoding, `CurlMime` cleanup and uncertain-write non-retry.
-- **Local HTTP transport test:** `ThreadingHTTPServer` parses actual multipart
-  bodies for both text-only LINK and synthetic PDF FILE including native
-  version headers. This test is conditional on the optional `curl_cffi`
-  dependency; the base CI skips it if the extra is not installed.
+- **Local HTTP wire tests:** `ThreadingHTTPServer` parses multipart LINK
+  and synthetic PDF FILE with revision headers. A loopback `Set-Cookie`
+  response is automatically carried to the next HTTP request, verifying
+  in-memory session rotation. Optional `curl_cffi` is required; base CI
+  skips these tests without the extra. **Real 104 cookie rotation remains
+  unverified.**
 - **Earlier private live observation (not this implementation):** Chrome 146
   `curl_cffi` + **original login proxy** + session cookies returned HTTP 200
   resume-overview JSON; the same request directly returned 403.
@@ -109,6 +115,22 @@ unattended production resume without a private backup and independent GET.
   HTTP sessions before mutation, and kept private original backups. Their
   success does not validate remaining 104 fields, conflict recovery, file
   conversion or session-cookie rotation.
+- **Live JOB_CONDITION and INFO PUT (2026-11-18):** two independent
+  authenticated curl_cffi sessions preflighted the same timestamp and
+  original form. The native strings `jobCondition.preferJobContent` and
+  `info.motto` were each PUT, independently GET-verified, and restored to
+  their **exact original full formData**. The SDK rejected stale
+  `resumeTimestamp` edit plans without submitting them; this is **not**
+  evidence of upstream rejection of an outdated `104-profile-ver`.
+- **Live SIDEBAR reorder PUT (2026-11-18):** one adjacent swap among eight
+  items passed two independent preflight GETs, independent read-back and
+  exact original record-order restoration. Metadata edits remain unsupported.
+- **LAYOUT theme PUT unverified:** one experiment returned
+  `VerificationError`. Later independent authenticated read-only
+  reconciliation confirmed the selected theme **and all related fields**
+  exactly matched the private pre-test backup, with no lingering change.
+- **EDUCATION CREATE/DELETE unverified:** attempts stopped during login
+  before any backup or write. Prior EDUCATION UPDATE verification is separate.
 - **Intermittent transport issue:** with the same login Proxy #4 and valid
   Chromium session, curl code 7 (connection failure before any HTTP status)
   appeared at times for **both** synchronous and asynchronous curl variants,

@@ -8,7 +8,8 @@ import asyncio
 from typing import Any
 from urllib.parse import urlencode, urlsplit
 from job_platforms.core.errors import (
-    AuthenticationRequired, UnsupportedWrite, UpstreamError, VerificationError,
+    AuthenticationRequired, ConflictError, UnsupportedWrite,
+    UpstreamError, VerificationError,
 )
 from .transport import BrowserResponse, BrowserTransport, BrowserUpload
 
@@ -116,6 +117,8 @@ class CurlCffiTransport:
         if write and not self._allow_writes:
             raise UnsupportedWrite("104 HTTP writes require explicit opt-in")
         async with self._lock:
+            if self._closed:
+                raise AuthenticationRequired("104 HTTP transport closed")
             if write and not self._profile_version:
                 raise VerificationError("104-profile-ver not observed on GET; not submitted")
             headers = {}
@@ -167,24 +170,52 @@ class CurlCffiTransport:
                 if mime is not None:
                     mime.close()
             status = response.status_code
+            # A 409/412 is an explicit concurrency refusal, never a success.
+            # 104's specific conflict status codes are not yet live-proven.
+            if write and status in (409, 412):
+                raise ConflictError(
+                    "104 rejected write with revision/conflict response"
+                )
             if status in (401, 403) or 300 <= status < 400:
+                if write:
+                    raise VerificationError(
+                        "104 write received auth or redirect response; "
+                        "inspect before retrying"
+                    )
                 raise AuthenticationRequired(
                     "104 rejected HTTP session: login or IP/network risk"
                 )
             if not 200 <= status < 300:
-                raise UpstreamError(urlsplit(path).path, status)
-            content_type = response.headers.get("content-type", "").split(";")[0].lower()
-            if content_type != "application/json" and not content_type.endswith("+json"):
-                raise UpstreamError(urlsplit(path).path, status)
-            try:
-                data = response.json()
-            except (ValueError, TypeError):
-                raise UpstreamError(urlsplit(path).path, status) from None
-            if data is None:
+                if write and (status == 429 or status >= 500):
+                    raise VerificationError(
+                        "104 write returned a transient/server error; "
+                        "inspect before retrying"
+                    )
                 raise UpstreamError(urlsplit(path).path, status)
             version = response.headers.get("104-profile-ver")
             if version:
                 self._profile_version = version
+            content_type = response.headers.get("content-type", "").split(";")[0].lower()
+            if content_type != "application/json" and not content_type.endswith("+json"):
+                if write:
+                    raise VerificationError(
+                        "104 write returned non-JSON; inspect before retrying"
+                    )
+                raise UpstreamError(urlsplit(path).path, status)
+            try:
+                data = response.json()
+            except (ValueError, TypeError):
+                if write:
+                    raise VerificationError(
+                        "104 write returned malformed JSON; inspect before retrying"
+                    ) from None
+                raise UpstreamError(urlsplit(path).path, status) from None
+            if data is None:
+                if write:
+                    raise VerificationError(
+                        "104 write response omitted JSON; inspect before retrying"
+                    )
+                raise UpstreamError(urlsplit(path).path, status)
             return BrowserResponse(status=status, content_type=content_type, data=data)
 
     async def get_json(self, path: str, *, params: dict | None = None) -> Any:
