@@ -70,7 +70,17 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         async with FreshBrowserSession(config) as session:
-            app.state.client = Resume104Client(session.page)
+            transport = os.getenv("JOB_PLATFORM_104_TRANSPORT", "browser")
+            if transport == "browser":
+                app.state.client = Resume104Client(session.page)
+            else:
+                app.state.client = await session.resume_client(
+                    transport=transport,
+                    allow_http_writes=(
+                        allow_experimental_writes
+                        and os.getenv("JOB_PLATFORM_104_CFFI_ENABLE_WRITES") == "1"
+                    ),
+                )
             app.state.action_lock = asyncio.Lock()
             app.state.idempotency_results = {}
             yield

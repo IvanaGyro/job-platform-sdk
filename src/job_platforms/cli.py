@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import mimetypes
+import os
 import asyncio
 import json
 import sys
@@ -24,6 +25,11 @@ def _parser() -> argparse.ArgumentParser:
                         help="Implemented job platform provider")
     parser.add_argument("--headless", action="store_true",
                         help="Unsupported by some 104 anti-bot checks")
+    parser.add_argument(
+        "--transport", choices=("browser", "curl_cffi"),
+        default=os.getenv("JOB_PLATFORM_104_TRANSPORT", "browser"),
+        help="104 API backend; curl_cffi reuses browser login cookies and proxy",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
     cert_plan = sub.add_parser(
         "certificate-link-plan",
@@ -236,7 +242,15 @@ async def _run(args):
     cfg = AuthConfig.from_env()
     cfg.headless = args.headless
     async with FreshBrowserSession(cfg) as session:
-        client = Resume104Client(session.page)
+        if args.transport == "browser":
+            client = Resume104Client(session.page)
+        else:
+            client = await session.resume_client(
+                transport=args.transport,
+                allow_http_writes=(
+                    os.getenv("JOB_PLATFORM_104_CFFI_ENABLE_WRITES") == "1"
+                ),
+            )
         if args.command == "probe":
             result = {"authenticated": True,
                       "resume_count": len(await client.list_resumes())}

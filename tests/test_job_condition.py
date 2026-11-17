@@ -104,6 +104,18 @@ class JobConditionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(data["remoteWork"], 2)
         self.assertEqual(data["preferJobTitle"], "Engineer")
 
+    def test_live_native_get_title_can_be_scalar_text(self):
+        doc = deepcopy(BASE)
+        doc["jobCondition"]["formData"]["jobCondition"]["preferJobTitle"] = (
+            "Synthetic native GET title"
+        )
+        body = job_condition_request_body(doc)
+        self.assertEqual(
+            body["blockValueList"]["jobCondition"]["jobCondition"][
+                "preferJobTitle"
+            ], "Synthetic native GET title"
+        )
+
     def test_salary_selection_two_is_not_custom(self):
         doc = deepcopy(BASE)
         value = doc["jobCondition"]["formData"]["jobCondition"]
@@ -151,7 +163,7 @@ class JobConditionTests(unittest.IsolatedAsyncioTestCase):
                 elif action == "not_array":
                     f["preferJobType"] = {}
                 elif action == "not_title":
-                    f["preferJobTitle"] = "A job title"
+                    f["preferJobTitle"] = {"value": "Unexpected"}
                 elif action == "not_text":
                     f["preferJobContent"] = {"html": "unexpected"}
                 with self.assertRaises(UnsupportedWrite):

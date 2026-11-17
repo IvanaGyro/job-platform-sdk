@@ -730,3 +730,9 @@ It sends text-only multipart fields inside the authenticated browser
 and validates independent native read-back. The original in-process
 HTTP idempotency and opt-in protections apply. There is no SQLite or
 persistent state requirement for disposable SDK use.
+
+### Optional hybrid 104 HTTP transport
+
+[104 hybrid browser/HTTP transport](docs/tw104-hybrid-transport.md) documents the opt-in curl_cffi adapter, proxy-bound cookie handoff,
+experimental write safeguards, and verification status. The default remains
+the browser transport; the HTTP adapter needs `pip install '.[curl]'`.

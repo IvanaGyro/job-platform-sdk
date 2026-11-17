@@ -34,7 +34,7 @@ class BrowserUpload:
 
     def validate(self) -> None:
         if (
-            self.field_name != "attachment"
+            self.field_name not in {"attachment", "convertPreviewThumbnail"}
             or not isinstance(self.filename, str)
             or not self.filename
             or len(self.filename) > 120
@@ -110,7 +110,7 @@ class BrowserTransport:
         if multipart_fields is not None and (
             method != "POST"
             or not isinstance(multipart_fields, dict)
-            or not multipart_fields
+            or (not multipart_fields and multipart_upload is None)
             or any(not isinstance(k, str) or not isinstance(v, str)
                    for k, v in multipart_fields.items())
         ):
@@ -121,6 +121,15 @@ class BrowserTransport:
             ) or not isinstance(multipart_upload, BrowserUpload):
                 raise ValueError("Binary attachment requires multipart POST")
             multipart_upload.validate()
+            if multipart_upload.field_name == "convertPreviewThumbnail" and (
+                path != "/api/resumes/files/convert-preview-thumbnail"
+                or multipart_fields
+            ):
+                raise ValueError("104 preview conversion accepts only a conversion File")
+            if multipart_upload.field_name == "attachment" and (
+                path != "/profile/ajax/resumeByBlock/portfolio"
+            ):
+                raise ValueError("104 resume attachment path is invalid")
         path = self._path(path)
         if params:
             path += ("&" if "?" in path else "?") + urlencode(params, doseq=True)

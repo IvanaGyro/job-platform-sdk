@@ -11,7 +11,7 @@ import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, quote
 
 from patchright.async_api import async_playwright
 
@@ -188,6 +188,8 @@ class FreshBrowserSession:
         self._pw = None
         self._context = None
         self._profile = None
+        self._proxy_url = None
+        self._http_transports = []
 
     async def __aenter__(self):
         self._pw = await async_playwright().start()
@@ -199,6 +201,10 @@ class FreshBrowserSession:
             raise
 
     async def __aexit__(self, *_):
+        for transport in self._http_transports:
+            await transport.aclose()
+        self._http_transports.clear()
+        self._proxy_url = None
         if self._context is not None:
             await self._context.close()
             self._context = None
@@ -275,6 +281,10 @@ class FreshBrowserSession:
             self._profile = profile
             self.page = page
             self.proxy_index = index
+            self._proxy_url = (
+                f"http://{quote(username, safe='')}:{quote(password, safe='')}"
+                f"@{host}:{port}"
+            )
             break
         else:
             raise AuthenticationRequired("Could not establish a fresh 104 login session")
@@ -324,3 +334,33 @@ class FreshBrowserSession:
             state.parent.mkdir(parents=True, exist_ok=True)
             await self._context.storage_state(path=str(state))
             state.chmod(0o600)
+
+    async def http_transport(self, *, allow_writes: bool = False):
+        """Move live browser cookies into curl_cffi on original login proxy.
+
+        The browser stays available as fallback. The transport is closed with
+        this FreshBrowserSession, and neither state nor proxy is persisted.
+        """
+        if self._context is None or self._proxy_url is None or self.page is None:
+            raise AuthenticationRequired("104 login required before HTTP handoff")
+        from .http_transport import CurlCffiTransport
+        state = await self._context.storage_state()
+        user_agent = await self.page.evaluate("navigator.userAgent")
+        transport = CurlCffiTransport.from_storage_state(
+            state, proxy_url=self._proxy_url, user_agent=user_agent,
+            allow_writes=allow_writes,
+        )
+        self._http_transports.append(transport)
+        return transport
+
+    async def resume_client(
+        self, *, transport: str = "browser", allow_http_writes: bool = False,
+    ):
+        """Create a resume client with interchangeable browser / HTTP backend."""
+        from .client import Resume104Client
+        if transport == "browser":
+            return Resume104Client(self.page)
+        if transport == "curl_cffi":
+            http = await self.http_transport(allow_writes=allow_http_writes)
+            return Resume104Client(self.page, transport=http)
+        raise ValueError("104 transport must be browser or curl_cffi")

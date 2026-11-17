@@ -181,10 +181,17 @@ def job_condition_request_body(document: dict[str, Any]) -> dict[str, Any]:
         0 if value["remoteWork"] is None or value["remoteWork"] == "" or value["remoteWork"] == {}
         else _value(value["remoteWork"], "remoteWork")
     )
-    title = _require_object(value["preferJobTitle"], "preferJobTitle")
-    if not isinstance(title.get("text"), str):
-        raise UnsupportedWrite("104 JOB_CONDITION preferJobTitle.text must be a string")
-    out["preferJobTitle"] = title["text"]
+    title = value["preferJobTitle"]
+    # Real 104 GET 2026-11-17 returns a native string here, while
+    # frontend editable view may wrap the title in {text: ...}.
+    # Both normalize to a string in postData.
+    if isinstance(title, str):
+        out["preferJobTitle"] = title
+    else:
+        title = _require_object(title, "preferJobTitle")
+        if not isinstance(title.get("text"), str):
+            raise UnsupportedWrite("104 JOB_CONDITION preferJobTitle.text must be a string")
+        out["preferJobTitle"] = title["text"]
     return {
         "blockValueList": {
             "jobCondition": {

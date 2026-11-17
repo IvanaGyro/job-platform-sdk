@@ -72,9 +72,11 @@ class Resume104Client:
         "referrer", "sidebar", "under18",
     ) + CUSTOM_SLOTS
 
-    def __init__(self, page: Any):
+    def __init__(self, page: Any = None, *, transport: Any = None):
+        if page is None and transport is None:
+            raise ValueError("104 requires a browser page or ready transport")
         self.page = page
-        self.transport = BrowserTransport(page)
+        self.transport = transport if transport is not None else BrowserTransport(page)
         self._write_lock = asyncio.Lock()
 
     @staticmethod
@@ -771,6 +773,44 @@ class Resume104Client:
             raise VerificationError(
                 "104 PORTFOLIO uploaded file; stable record not verified"
             )
+
+    async def request_portfolio_conversion(
+        self, resume_id: str | int, *, expected_timestamp: int | str,
+        filename: str, content_type: str, content: bytes,
+    ) -> dict:
+        """Submit one file to official BFF conversion, without a retry.
+
+        This endpoint is distinct from attaching a file to PORTFOLIO.
+        A 2xx response means acceptance only, not completed previews,
+        persistent resume edits, or backend blob removal.
+        """
+        version=self._version(resume_id)
+        item=BrowserUpload(
+            field_name="convertPreviewThumbnail",
+            filename=filename,content_type=content_type,content=content,
+        )
+        item.validate()
+        async with self._write_lock:
+            before=await self.get_resume(version)
+            if str(before.get("resumeTimestamp"))!=str(expected_timestamp):
+                raise ConflictError("104 resume changed before conversion request")
+            response=await self.transport.request(
+                "POST","/api/resumes/files/convert-preview-thumbnail",
+                multipart_fields={},multipart_upload=item,
+            )
+            raw=self._data(response.data)
+            # Do not expose signed/opaque service URLs or generated IDs
+            # in CLI/HTTP by default; callers can separately inspect
+            # their authenticated conversion/status workflow.
+            return {
+                "resume_id":version,"section":"portfolio",
+                "action":"request-conversion",
+                "submitted":True,"server_accepted":True,
+                "preview_verified":False,
+                "created_resume_attachment":False,
+                "conversion_response_fields":sorted(raw),
+                "temporary_backend_blob_cleanup_unverified":True,
+            }
 
     async def get_portfolio_conversion_status(
         self, resume_id: str | int, *, position: int,
