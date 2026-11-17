@@ -1067,6 +1067,10 @@ class Resume104Client:
 
     async def create_resume(self) -> dict:
         """Create one actual resume; do not blindly retry ambiguous failures."""
+        if self.page is None:
+            raise UnsupportedWrite(
+                "104 resume creation requires browser UI; use browser transport"
+            )
         old_list = await self.list_resumes()
         before = {str(item.get("versionNo")) for item in old_list}
         await self.page.goto(

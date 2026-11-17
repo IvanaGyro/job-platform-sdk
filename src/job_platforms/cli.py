@@ -26,7 +26,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--headless", action="store_true",
                         help="Unsupported by some 104 anti-bot checks")
     parser.add_argument(
-        "--transport", choices=("browser", "curl_cffi"),
+        "--transport", choices=("browser", "curl_cffi", "curl_cffi_detached"),
         default=os.getenv("JOB_PLATFORM_104_TRANSPORT", "browser"),
         help="104 API backend; curl_cffi reuses browser login cookies and proxy",
     )

@@ -25,6 +25,18 @@ CLI: `job-platform --transport curl_cffi list`, or set
 Install optional Python dependency with `pip install '.[curl]'`.
 Default `browser` remains the fallback.
 
+Optional `--transport curl_cffi_detached` transfers cookies and **closes
+Chromium immediately after login**, freeing browser resources while retaining
+the proxy-bound HTTP session. This is a deliberate tradeoff: browser fallback
+and browser-only new-resume creation are unavailable until a new login session.
+The option is not the default, and HTTP writes remain separately opt-in.
+A private same-session trial found synchronous curl, asynchronous curl,
+and the SDK adapter all returned HTTP 200 JSON after Chromium closed.
+The opt-in detached mode also completed one **real, reversible 104 BIO PUT**
+with two independent HTTP Session reads and exact restoration of original
+BIO form values. This does **not** establish that browser resource contention
+caused the earlier connection failures, nor validate any other write section.
+
 HTTP transport **writes are disabled** unless
 `JOB_PLATFORM_104_CFFI_ENABLE_WRITES=1` is explicitly set. For the localhost
 HTTP service, this is in addition to the existing
@@ -74,8 +86,18 @@ unattended production resume without a private backup and independent GET.
   The requested resume version was confirmed, and a `104-profile-ver`
   header was observed by the HTTP transport after native GET requests.
   Signed media tokens and full-field equality were **not** checked.
-- **New transport writes:** only synthetic-tested. A real reversible BIO
-  PUT/read-back/restore smoke test is separate and must not be marked
-  complete unless the private test log confirms it.
+- **New transport writes:** **one authenticated BIO PUT** with a unique
+  synthetic marker passed a private preflight, independent second HTTP
+  Session read-back, and exact restoration/read-back after Chromium was
+  detached (2026-11-18). The private test backup was saved before writing.
+  This proves only that operation, not POST, DELETE, multipart, conditional
+  controls, or conflict recovery. Other HTTP write paths remain synthetic.
+- **Intermittent transport issue:** with the same login Proxy #4 and valid
+  Chromium session, curl code 7 (connection failure before any HTTP status)
+  appeared at times for **both** synchronous and asynchronous curl variants,
+  including the SDK; other sessions returned 200 for all. Both variants
+  could reach a public TLS test endpoint through the same proxy. Resource
+  contention, network routing, and risk-based filtering remain unproven
+  explanations. Do not silently retry a write when its outcome is unknown.
 - These observations do not prove that matching JA4 alone determines
   upstream authorization, or that a proxy-free connection is viable.

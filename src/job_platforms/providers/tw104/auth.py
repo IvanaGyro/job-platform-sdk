@@ -335,11 +335,15 @@ class FreshBrowserSession:
             await self._context.storage_state(path=str(state))
             state.chmod(0o600)
 
-    async def http_transport(self, *, allow_writes: bool = False):
-        """Move live browser cookies into curl_cffi on original login proxy.
+    async def http_transport(
+        self, *, allow_writes: bool = False, close_browser: bool = False,
+    ):
+        """Move 104 cookies into curl_cffi on the original login proxy.
 
-        The browser stays available as fallback. The transport is closed with
-        this FreshBrowserSession, and neither state nor proxy is persisted.
+        By default the browser stays available for comparison and fallback.
+        Optional close_browser releases browser resources once cookies have
+        been transferred; subsequent browser-only operations are unavailable.
+        All HTTP sessions close with FreshBrowserSession.
         """
         if self._context is None or self._proxy_url is None or self.page is None:
             raise AuthenticationRequired("104 login required before HTTP handoff")
@@ -351,6 +355,18 @@ class FreshBrowserSession:
             allow_writes=allow_writes,
         )
         self._http_transports.append(transport)
+        if close_browser:
+            # The chosen HTTP session keeps its own cookies/proxy. Free
+            # Chromium only after the handoff was constructed successfully.
+            await self._context.close()
+            self._context = None
+            self.page = None
+            if self._profile is not None:
+                self._profile.cleanup()
+                self._profile = None
+            if self._pw is not None:
+                await self._pw.stop()
+                self._pw = None
         return transport
 
     async def resume_client(
@@ -360,7 +376,15 @@ class FreshBrowserSession:
         from .client import Resume104Client
         if transport == "browser":
             return Resume104Client(self.page)
-        if transport == "curl_cffi":
-            http = await self.http_transport(allow_writes=allow_http_writes)
-            return Resume104Client(self.page, transport=http)
-        raise ValueError("104 transport must be browser or curl_cffi")
+        if transport in ("curl_cffi", "curl_cffi_detached"):
+            detached = transport == "curl_cffi_detached"
+            http = await self.http_transport(
+                allow_writes=allow_http_writes,
+                close_browser=detached,
+            )
+            return Resume104Client(
+                None if detached else self.page, transport=http,
+            )
+        raise ValueError(
+            "104 transport must be browser, curl_cffi or curl_cffi_detached"
+        )
