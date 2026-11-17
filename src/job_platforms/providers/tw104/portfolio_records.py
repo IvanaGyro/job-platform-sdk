@@ -109,3 +109,94 @@ def verify_portfolio_delete(
     actual = [without_sort(r) for r in new]
     # Preserve relative order even when site reassigns sort numbers.
     return actual == expected
+
+
+def portfolio_link_fields(
+    doc: dict, changes: dict, *, options: dict | None = None,
+) -> dict[str, str]:
+    """Source-map frontend 44aa's multipart LINK=2 insertion, no file bytes.
+
+    Attachment-file uploads, thumbnail conversion and modification remain
+    separate, unimplemented operations.
+    """
+    from urllib.parse import urlsplit
+
+    records = portfolio_records(doc)
+    if len(records) >= 6:
+        raise UnsupportedWrite("104 PORTFOLIO has reached its maximum entry count")
+    if not isinstance(changes, dict) or set(changes) != {
+        "name", "attachName", "url",
+    }:
+        raise UnsupportedWrite("104 PORTFOLIO link requires name, attachName, url")
+    name, attach_name, link = (
+        changes["name"], changes["attachName"], changes["url"],
+    )
+    for field, value in (("name", name), ("attachName", attach_name)):
+        if not isinstance(value, str) or not value.strip() or len(value) > 120:
+            raise UnsupportedWrite(f"104 PORTFOLIO invalid link {field}")
+    if not isinstance(link, str) or len(link) > 200:
+        raise UnsupportedWrite("104 PORTFOLIO link URL too long")
+    parsed = urlsplit(link)
+    if parsed.scheme.lower() not in ("http", "https") or not parsed.netloc:
+        raise UnsupportedWrite("104 PORTFOLIO URL must be http(s)")
+    form = doc["portfolio"]["formData"]
+    if form:
+        theme = form["themeChoose"]["selectedTheme"]["value"]
+    else:
+        themes = options.get("optionsPortfolioTheme") if isinstance(options, dict) else None
+        if not isinstance(themes, list) or not themes:
+            raise UnsupportedWrite("104 PORTFOLIO first link needs current site themes")
+        entry = themes[0]
+        if not isinstance(entry, dict):
+            raise UnsupportedWrite("104 PORTFOLIO initial theme invalid")
+        theme = entry.get("value")
+    if isinstance(theme, bool) or not isinstance(theme, int) or theme < 1:
+        raise UnsupportedWrite("104 PORTFOLIO theme value invalid")
+    # 401c: FILE=1, LINK=2. 44aa.CREATE uses FormData, NOT JSON.
+    # No Content-Type is set manually; the browser chooses its boundary.
+    return {
+        "blockValueList[portfolio][themeChoose][selectedTheme]": str(theme),
+        "blockValueList[portfolio][name]": name,
+        "blockValueList[portfolio][attachType]": "2",
+        "blockValueList[portfolio][attach][name]": attach_name,
+        "blockValueList[portfolio][attach][url]": link,
+    }
+
+
+def verify_portfolio_link_create(
+    before: dict, after: dict, *, fields: dict[str, str],
+) -> bool:
+    old, new = portfolio_records(before), portfolio_records(after)
+    if len(new) != len(old) + 1:
+        return False
+    old_form = before["portfolio"]["formData"]
+    new_form = after["portfolio"]["formData"]
+    if old_form and old_form["themeChoose"] != new_form.get("themeChoose"):
+        return False
+    from collections import Counter
+    import json
+    def bag(rows):
+        return Counter(json.dumps(
+            {k: v for k, v in row.items() if k != "sort"},
+            ensure_ascii=False, sort_keys=True,
+        ) for row in rows)
+    added = bag(new) - bag(old)
+    if sum(added.values()) != 1:
+        return False
+    added_signature = next(iter(added))
+    added_record = next(
+        (row for row in new if json.dumps(
+            {k: v for k, v in row.items() if k != "sort"},
+            ensure_ascii=False, sort_keys=True,
+        ) == added_signature),
+        None,
+    )
+    if added_record is None:
+        return False
+    attach = added_record["attach"]
+    return (
+        added_record["name"] == fields["blockValueList[portfolio][name]"]
+        and str(added_record["attachType"]["value"]) == "2"
+        and attach["name"] == fields["blockValueList[portfolio][attach][name]"]
+        and attach["url"] == fields["blockValueList[portfolio][attach][url]"]
+    )

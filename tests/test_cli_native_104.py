@@ -195,6 +195,23 @@ class CLI104Tests(unittest.IsolatedAsyncioTestCase):
                     "name": "Synthetic Project", "introduction": "<p>Test</p>"
                 }, "position": 1},
             ))
+        with tempfile.TemporaryDirectory() as folder:
+            link = Path(folder) / "synthetic-link.json"
+            fields = {
+                "name": "Synthetic Portfolio Link",
+                "attachName": "Example",
+                "url": "https://example.invalid",
+            }
+            link.write_text(json.dumps(fields), encoding="utf-8")
+            await self.execute([
+                "record", "synthetic", "portfolio", "create",
+                "--changes-file", str(link),
+                "--if-match", "100", "--confirm", "experimental-record-write",
+            ])
+            self.assertEqual(DummyClient.calls[-1], (
+                "portfolio", "synthetic", "create",
+                {"expected_timestamp": "100", "changes": fields, "position": None},
+            ))
         await self.execute([
             "record", "synthetic", "portfolio", "delete", "--position", "2",
             "--if-match", "101", "--confirm", "experimental-record-write",

@@ -7,6 +7,7 @@ from job_platforms.core.errors import ConflictError, UnsupportedWrite, Verificat
 from job_platforms.providers.tw104.client import Resume104Client
 from job_platforms.providers.tw104.portfolio_records import (
     portfolio_records, portfolio_delete_body, verify_portfolio_delete,
+    portfolio_link_fields, verify_portfolio_link_create,
 )
 from job_platforms.providers.tw104.record_sort import sort_body, verify_sort
 
@@ -39,26 +40,68 @@ EMPTY = {
 }
 
 
+LINK = {
+    "name": "Synthetic Project Link",
+    "attachName": "Example link",
+    "url": "https://example.invalid/showcase",
+}
+OPTIONS = {"optionsPortfolioTheme": [{"text": "List", "value": 1}]}
+
+
 class Transport:
     def __init__(self, owner, *, ambiguous=False):
         self.owner = owner
         self.calls = []
         self.ambiguous = ambiguous
 
-    async def request(self, method, path, *, params, json_data):
-        assert method=="DELETE"
-        assert path=="/profile/ajax/resumeByBlock/portfolio"
-        assert params=={"vno":"synthetic"}
-        self.calls.append((method,deepcopy(json_data)))
-        position=json_data["blockValueList"]["portfolio"]["sort"][0]
+    async def get_json(self, path):
+        assert path == "/profile/ajax/options"
+        return {"data": deepcopy(OPTIONS)}
+
+    async def request(
+        self, method, path, *, params, json_data=None,
+        multipart_fields=None,
+    ):
+        assert path == "/profile/ajax/resumeByBlock/portfolio"
+        assert params == {"vno": "synthetic"}
+        self.calls.append((method, deepcopy(
+            multipart_fields if multipart_fields is not None else json_data
+        )))
         form=self.owner.doc["portfolio"]["formData"]
-        form["portfolios"][:]=[
-            x for x in form["portfolios"] if x["sort"]!=position
-        ]
-        for i,r in enumerate(form["portfolios"],1):
-            r["sort"]=i
-        if not form["portfolios"]:
-            self.owner.doc["portfolio"]["formData"]={}
+        if method == "POST":
+            assert json_data is None
+            assert multipart_fields is not None
+            if not form:
+                form["portfolios"]=[]
+                form["themeChoose"]={"selectedTheme":{
+                    "text":"List","value":1,"name":"PortfolioThemeList",
+                }}
+            link=multipart_fields
+            form["portfolios"].append({
+                "name": link["blockValueList[portfolio][name]"],
+                "attach": {
+                    "name":link["blockValueList[portfolio][attach][name]"],
+                    "status":0,
+                    "url":link["blockValueList[portfolio][attach][url]"],
+                    "fileId":"",
+                    "thumbnailFileId":"",
+                    "src":"",
+                    "crawler":False,
+                },
+                "attachType":{"text":"Link","value":2},
+                "sort":len(form["portfolios"])+1,
+            })
+        elif method == "DELETE":
+            position=json_data["blockValueList"]["portfolio"]["sort"][0]
+            form["portfolios"][:]=[
+                x for x in form["portfolios"] if x["sort"]!=position
+            ]
+            for i,r in enumerate(form["portfolios"],1):
+                r["sort"]=i
+            if not form["portfolios"]:
+                self.owner.doc["portfolio"]["formData"]={}
+        else:
+            raise AssertionError(method)
         self.owner.doc["resumeTimestamp"]+=1
         if self.ambiguous:
             raise VerificationError("Synthetic response lost")
@@ -100,6 +143,55 @@ class PortfolioTests(unittest.IsolatedAsyncioTestCase):
             portfolio_delete_body(EMPTY,position=1)
         with self.assertRaises(UnsupportedWrite):
             portfolio_delete_body(POPULATED,position=True)
+
+    def test_native_multipart_link_contract(self):
+        fields=portfolio_link_fields(POPULATED, LINK)
+        self.assertEqual(fields, {
+            "blockValueList[portfolio][themeChoose][selectedTheme]":"1",
+            "blockValueList[portfolio][name]":"Synthetic Project Link",
+            "blockValueList[portfolio][attachType]":"2",
+            "blockValueList[portfolio][attach][name]":"Example link",
+            "blockValueList[portfolio][attach][url]":
+                "https://example.invalid/showcase",
+        })
+        with self.assertRaises(UnsupportedWrite):
+            portfolio_link_fields(EMPTY,LINK)
+        self.assertEqual(
+            portfolio_link_fields(EMPTY,LINK,options=OPTIONS),
+            fields,
+        )
+        for payload in (
+            {**LINK, "url":"javascript:alert(1)"},
+            {**LINK, "name":"A"*121},
+            {**LINK, "upload": "secret"},
+            {**LINK, "url":"https://example.invalid/"+"a"*220},
+        ):
+            with self.subTest(payload=list(payload)),self.assertRaises(UnsupportedWrite):
+                portfolio_link_fields(POPULATED,payload)
+
+    async def test_link_create_preserves_other_attachments(self):
+        client=Client()
+        before=await client.get_resume("synthetic")
+        result=await client.mutate_portfolio(
+            "synthetic","create",changes=LINK,expected_timestamp=100,
+        )
+        self.assertTrue(result["verified"])
+        self.assertEqual(result["position"],3)
+        self.assertEqual(len(client.transport.calls),1)
+        self.assertEqual(client.transport.calls[0][0],"POST")
+        self.assertTrue(verify_portfolio_link_create(
+            before,client.doc,
+            fields=portfolio_link_fields(before,LINK),
+        ))
+
+    async def test_link_first_create_into_empty(self):
+        client=Client(EMPTY)
+        result=await client.mutate_portfolio(
+            "synthetic","create",changes=LINK,expected_timestamp=100,
+        )
+        self.assertTrue(result["verified"])
+        self.assertEqual(len(client.doc["portfolio"]["formData"]["portfolios"]),1)
+        self.assertEqual(client.doc["portfolio"]["formData"]["portfolios"][0]["attachType"]["value"],2)
 
     def test_source_sort_contract(self):
         self.assertEqual(

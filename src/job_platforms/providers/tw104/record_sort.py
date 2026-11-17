@@ -1,6 +1,7 @@
 """104 adjacent record sorting through the native swapRecordBySort API.
 
-Frontend actions a41b (SKILL), 8ea9 (EDUCATION), 96e2 (LANGUAGE).
+Frontend actions a41b (SKILL), 8ea9 (EDUCATION), 96e2 (LANGUAGE),
+1d22 (PROJECT), and 44aa (PORTFOLIO).
 For LANGUAGE, its sortable groups are independent and the UI supplies
 both foreign and local sort branches (the inactive branch contains []).
 Only *adjacent* moves are implemented until non-adjacent swap-vs-insertion

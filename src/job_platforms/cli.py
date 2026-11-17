@@ -130,8 +130,8 @@ async def _run(args):
                 changes = json.loads(Path(args.changes_file).read_text(encoding="utf-8"))
                 if not isinstance(changes, dict):
                     raise ValueError("Native changes file must be a JSON object")
-            if args.section == "portfolio" and args.action != "delete":
-                raise ValueError("PORTFOLIO file/link creation uses a different multipart API")
+            if args.section == "portfolio" and args.action == "update":
+                raise ValueError("PORTFOLIO record replacement not yet supported")
             operation = getattr(client, f"mutate_{args.section}")
             params = {
                 "expected_timestamp": args.if_match.strip('"'),

@@ -390,6 +390,29 @@ The real read-only GET response includes portfolio.formData.portfolios
 with name, attach, attachType and sort. The attachment contains
 name, status, url, fileId, thumbnailFileId, src and crawler.
 
-**Not yet implemented:** POST multipart/form-data of attachment,
+**Not yet implemented:** POST multipart/form-data of binary file attachment,
 generation of file previews and website link thumbnails, attachment
 replacement and full lifecycle, as well as real write/restore tests.
+
+
+### PORTFOLIO LINK=2 multipart fields (source-mapped)
+
+The public editor's module 44aa and constants module 401c define a
+link-only POST using FormData (LINK value 2) to
+/profile/ajax/resumeByBlock/portfolio:
+
+    blockValueList[portfolio][themeChoose][selectedTheme] = N
+    blockValueList[portfolio][name] = ITEM_NAME
+    blockValueList[portfolio][attachType] = 2
+    blockValueList[portfolio][attach][name] = LINK_NAME
+    blockValueList[portfolio][attach][url] = HTTPS_URL
+
+The same-origin browser constructs the multipart boundary; its
+104-profile-ver header must have come from an authenticated GET.
+No file bytes, src key, upload signature, preview request or thumbnail
+conversion is sent through this link-only path. Existing PORTFOLIO
+siblings must be preserved; async preview metadata for the new record
+is not relied upon for confirmation.
+
+Binary file uploads, replacement, and preview/thumbnail processing
+are still unimplemented. No real 104 link was posted in this session.

@@ -152,6 +152,7 @@ The experimental HTTP endpoints are:
 | POST | /v1/tw104/resumes/{resume_id}/projects | Create a no-media project |
 | PUT | /v1/tw104/resumes/{resume_id}/projects/{position} | Update existing no-media project |
 | DELETE | /v1/tw104/resumes/{resume_id}/projects/{position} | Delete one project |
+| POST | /v1/tw104/resumes/{resume_id}/portfolios | Add a link-only portfolio item using FormData |
 | DELETE | /v1/tw104/resumes/{resume_id}/portfolios/{position} | Delete one portfolio entry |
 | PUT | /v1/tw104/resumes/{resume_id}/sort/project | Adjacent project swap |
 | PUT | /v1/tw104/resumes/{resume_id}/sort/portfolio | Adjacent portfolio swap |
@@ -172,15 +173,22 @@ initial theme from the current optionsProjectTheme, not a fixed value.
 name 120 characters, introduction HTML 4000 and url 200.
 
 The PORTFOLIO entry GET shape was checked with a real, **read-only**
-104 response (one existing attachment). Deletion uses the native
+104 response (one existing attachment). Link-only creation uses a
+browser-built FormData (no binary file) and the native LINK=2
+attachment type from module 401c. It requires name, attachName and
+url (an http/https URL), with an existing or site-default portfolio
+theme. The POST form contains five entries, including the nested
+attach name and URL; browser-provided multipart boundaries are used.
+Deletion uses the native
 blockValueList.portfolio.sort list, **not** the PROJECT or REFERRER
 delete shape. A deletion can permanently remove an uploaded attachment
 from the 104 service; do not run it without an independent private
-backup. File/link addition uses a separate multipart upload and,
-for some formats, thumbnail/preview processing: this is still TODO.
+backup. File **upload** uses a separate binary multipart request and, for
+some formats, thumbnail/preview processing: this remains TODO.
+Link-only additions do not upload local files or fetch remote thumbnails.
 
 **These new write/sort actions have synthetic tests only.** No remote
-PROJECT or PORTFOLIO writes, deletions or uploads have been performed.
+PROJECT or PORTFOLIO writes, deletions, links or uploads have been performed.
 Before production use, first-create POST, native GET, update, delete
 and restore must be individually verified on a safe test resume.
 
@@ -459,3 +467,18 @@ the CLI example is:
 
 Only adjacent moves are source-mapped, with exact read-back checks.
 Arbitrary-distance sorting and live writes remain unverified.
+
+
+#### CLI: add a portfolio link
+
+Create a local JSON file (do not commit it) with the three fields
+name, attachName and url, then run:
+
+    job-platform record VERSION_NO portfolio create --changes-file private-link.json --if-match TIMESTAMP --confirm experimental-record-write
+
+For PORTFOLIO, this create action accepts only a link URL; file uploads
+and replacement of existing attachments are deliberately rejected.
+It sends text-only multipart fields inside the authenticated browser
+and validates independent native read-back. The original in-process
+HTTP idempotency and opt-in protections apply. There is no SQLite or
+persistent state requirement for disposable SDK use.

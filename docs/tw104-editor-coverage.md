@@ -17,7 +17,7 @@ and successful real 104 writes.** Each is a separate evidence level.
 | `certificate` | PUT, DELETE; separate certification connections | Existing certificates/others PUT only, experimental | **No** (test formData empty) |
 | `language` | POST, PUT, DELETE; local/foreign records | Native local/foreign record CRUD + adjacent local/foreign sorting (experimental); linked certificates blocked | **No** |
 | `project` | POST, PUT, DELETE; reorder; attachments | Source-mapped **no-media** first-create/CRUD and adjacent reorder (experimental); media pending | **No** |
-| `portfolio` | POST, DELETE; attachments/upload; reorder | Source-mapped one-record DELETE and adjacent reorder (experimental); multipart upload/preview pending | **No** |
+| `portfolio` | POST, DELETE; attachments/upload; reorder | Link-only multipart POST (LINK=2), one-record DELETE, adjacent reorder experimental; file uploads/previews pending | **No** |
 | `bio` | POST, PUT, DELETE | HTML PUT live-verified; first-create POST and clear DELETE experimental | **PUT only** |
 | `referrer` | POST, PUT, DELETE; reorder | Native record create/update/delete with empty-form initialization (experimental); sorting pending | **No** |
 | `sidebar` | PUT | Complete-list reorder only; metadata edits rejected | **No** |
@@ -217,11 +217,29 @@ first POST initializes an empty form with the site-provided theme.
 The encoder intentionally disallows uploading or overwriting media,
 and cannot yet guarantee real populated GET compatibility. One-record
 PORTFOLIO delete follows module 44aa; its payload contains
-blockValueList.portfolio.sort as a list. The separate multipart POST,
-file conversion and asynchronous thumbnail workflow remain missing.
+blockValueList.portfolio.sort as a list. The link-only multipart POST now constructs FormData in the same-origin
+authenticated browser. Binary file upload, conversion and asynchronous
+thumbnail generation remain missing.
 
 PROJECT and PORTFOLIO adjacent sorting use swapRecordBySort and
 independent sibling-preserving read-back. Non-adjacent sorting remains
 unsupported until its move-vs-swap semantics are verified. All new
 write/sort operations are **synthetic-only**; no remote mutations
 were made to the real resume or attachment.
+
+
+### PORTFOLIO link-only multipart POST (2026-11-17)
+
+The browser transport now supports text-only multipart FormData with the
+same 104-profile-ver header as other mutations. The link-only frontend
+path is module 44aa, with attachment type LINK=2 from 401c. The five
+form keys are the selected portfolio theme, item name, attachType,
+attach.name and attach.url. A no-attachment-file guard prevents this
+route from uploading files or overwriting existing attachments.
+
+For initial empty formData, the first site optionsPortfolioTheme is used;
+for a populated form, the existing selectedTheme is preserved.
+The returned new record must match the requested link, while all prior
+attachment records remain unchanged on read-back. The HTTP endpoint
+retains opt-in, If-Match and in-process Idempotency-Key protection.
+Only synthetic HTTP/CLI/browser transport tests have been performed.

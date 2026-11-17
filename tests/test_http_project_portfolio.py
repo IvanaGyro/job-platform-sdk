@@ -11,7 +11,10 @@ from test_project_records import (
     Client as ProjectClient, CHANGES as PROJECT_CHANGES,
     POPULATED as PROJECT_POPULATED,
 )
-from test_portfolio_records import Client as PortfolioClient, POPULATED as PORTFOLIO_POPULATED
+from test_portfolio_records import (
+    Client as PortfolioClient, POPULATED as PORTFOLIO_POPULATED,
+    LINK as PORTFOLIO_LINK,
+)
 
 TOKEN = "synthetic-project-portfolio-api-token-001"
 P = "/v1/tw104/resumes/synthetic"
@@ -111,6 +114,43 @@ class HttpProjectPortfolioTests(unittest.IsolatedAsyncioTestCase):
             (200, 200, 409),
         )
         self.assertEqual(len(self.app.state.client.transport.calls), 1)
+
+    async def test_portfolio_link_post_with_multipart_replay_and_collision(self):
+        self.app.state.client = PortfolioClient()
+        headers = self.headers(key="portfolio-link-create-key-000001")
+        first = await self.http.post(
+            P + "/portfolios", json=PORTFOLIO_LINK, headers=headers,
+        )
+        replay = await self.http.post(
+            P + "/portfolios", json=PORTFOLIO_LINK, headers=headers,
+        )
+        mismatch = await self.http.post(
+            P + "/portfolios",
+            json={**PORTFOLIO_LINK, "name": "Another"},
+            headers=headers,
+        )
+        self.assertEqual(
+            (first.status_code, replay.status_code, mismatch.status_code),
+            (200, 200, 409),
+        )
+        self.assertEqual(
+            self.app.state.client.transport.calls[0][0], "POST",
+        )
+        self.assertEqual(len(self.app.state.client.transport.calls), 1)
+
+    async def test_portfolio_link_invalid_payload_does_not_mutate(self):
+        self.app.state.client = PortfolioClient()
+        invalid = await self.http.post(
+            P + "/portfolios",
+            json={**PORTFOLIO_LINK, "url": "file:///etc/passwd"},
+            headers=self.headers(key="portfolio-link-invalid-key-00001"),
+        )
+        stale = await self.http.post(
+            P + "/portfolios", json=PORTFOLIO_LINK,
+            headers=self.headers("99", "portfolio-link-stale-key-00001"),
+        )
+        self.assertEqual((invalid.status_code, stale.status_code), (422, 412))
+        self.assertEqual(self.app.state.client.transport.calls, [])
 
     async def test_portfolio_delete_bad_index_is_422(self):
         self.app.state.client = PortfolioClient()

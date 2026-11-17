@@ -26,7 +26,9 @@ from job_platforms.providers.tw104.education_records import education_operation_
 from job_platforms.providers.tw104.experience_records import experience_operation_body
 from job_platforms.providers.tw104.referrer_records import referrer_operation_body
 from job_platforms.providers.tw104.project_records import project_operation_body
-from job_platforms.providers.tw104.portfolio_records import portfolio_delete_body
+from job_platforms.providers.tw104.portfolio_records import (
+    portfolio_delete_body, portfolio_link_fields,
+)
 from job_platforms.providers.tw104.bio_actions import bio_action_body
 from job_platforms.providers.tw104.language_records import language_operation_body, KINDS as LANGUAGE_KINDS
 from job_platforms.providers.tw104.layout_theme import THEME_OPTION_KEYS, theme_body
@@ -125,7 +127,7 @@ def create_app(
                     "experience": ["create", "update", "delete"],
                     "referrer": ["create", "update", "delete"],
                     "project": ["create", "update", "delete"],
-                    "portfolio": ["delete"],
+                    "portfolio": ["create-link", "delete"],
                     "language.local": ["create", "update", "delete"],
                     "language.foreign": ["create", "update", "delete"],
                 },
@@ -814,22 +816,24 @@ def create_app(
             if_match=if_match, idempotency_key=idempotency_key,
         )
 
-    async def portfolio_delete_http(
-        resume_id: str, request: Request, *, position: int,
+    async def portfolio_operation_http(
+        resume_id: str, request: Request, *, action: str,
+        position: int | None, changes: dict | None,
         if_match: str | None, idempotency_key: str | None,
     ):
         if not allow_experimental_writes:
-            raise HTTPException(501, "104 PORTFOLIO delete requires experimental opt-in")
+            raise HTTPException(501, "104 PORTFOLIO create/delete requires experimental opt-in")
         if if_match is None:
             raise HTTPException(428, "If-Match resumeTimestamp is required")
         if not idempotency_key or len(idempotency_key) < 16:
             raise HTTPException(400, "Idempotency-Key of at least 16 characters required")
         expected = if_match.strip('"')
         fingerprint = hashlib.sha256(json.dumps(
-            {"position": position, "timestamp": expected},
+            {"action": action, "position": position,
+             "changes": changes, "timestamp": expected},
             sort_keys=True, ensure_ascii=False, separators=(",", ":"),
         ).encode("utf-8")).hexdigest()
-        key = ("PORTFOLIO_DELETE", resume_id, idempotency_key)
+        key = ("PORTFOLIO", resume_id, idempotency_key)
         async with request.app.state.action_lock:
             cached = request.app.state.idempotency_results.get(key)
             if cached is not None:
@@ -842,7 +846,24 @@ def create_app(
                 before = await request.app.state.client.get_resume(resume_id)
                 if str(before.get("resumeTimestamp")) != expected:
                     raise HTTPException(412, "Resume changed since caller's read")
-                portfolio_delete_body(before, position=position)
+                if action == "create":
+                    if position is not None:
+                        raise UnsupportedWrite("104 PORTFOLIO create has no position")
+                    form = before.get("portfolio", {}).get("formData")
+                    if not isinstance(form, dict):
+                        raise UnsupportedWrite("104 PORTFOLIO form missing")
+                    options = None
+                    if not form:
+                        options = request.app.state.client._data(
+                            await request.app.state.client.transport.get_json(
+                                "/profile/ajax/options"
+                            )
+                        )
+                    portfolio_link_fields(before, changes, options=options)
+                else:
+                    if changes is not None:
+                        raise UnsupportedWrite("104 PORTFOLIO delete has no fields")
+                    portfolio_delete_body(before, position=position)
             except (ValueError, KeyError, TypeError, IndexError, UnsupportedWrite):
                 raise HTTPException(422, "Invalid PORTFOLIO record position") from None
             except JobPlatformError as exc:
@@ -851,7 +872,7 @@ def create_app(
             request.app.state.idempotency_results[key] = record
             try:
                 result = await request.app.state.client.mutate_portfolio(
-                    resume_id, "delete", position=position,
+                    resume_id, action, position=position, changes=changes,
                     expected_timestamp=expected,
                 )
             except JobPlatformError as exc:
@@ -859,6 +880,21 @@ def create_app(
             else:
                 record.update({"state": "succeeded", "result": result})
                 return result
+
+    @app.post(
+        "/v1/tw104/resumes/{resume_id}/portfolios",
+        dependencies=[Depends(authorize)],
+    )
+    async def create_portfolio_link(
+        resume_id: str, request: Request, changes: dict = Body(...),
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        return await portfolio_operation_http(
+            resume_id, request, action="create", position=None,
+            changes=changes, if_match=if_match,
+            idempotency_key=idempotency_key,
+        )
 
     @app.delete(
         "/v1/tw104/resumes/{resume_id}/portfolios/{position}",
@@ -869,9 +905,9 @@ def create_app(
         if_match: str | None = Header(default=None, alias="If-Match"),
         idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     ):
-        return await portfolio_delete_http(
-            resume_id, request, position=position, if_match=if_match,
-            idempotency_key=idempotency_key,
+        return await portfolio_operation_http(
+            resume_id, request, action="delete", position=position,
+            changes=None, if_match=if_match, idempotency_key=idempotency_key,
         )
 
     async def language_operation_http(

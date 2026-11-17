@@ -32,6 +32,7 @@ from .project_records import (
 )
 from .portfolio_records import (
     portfolio_records, portfolio_delete_body, verify_portfolio_delete,
+    portfolio_link_fields, verify_portfolio_link_create,
 )
 from .referrer_records import (
     referrer_records, referrer_operation_body, verify_referrer_operation,
@@ -559,36 +560,72 @@ class Resume104Client:
         changes: dict | None = None,
         position: int | None = None,
     ) -> dict:
-        """Source-mapped 104 PORTFOLIO DELETE. Uploads not supported here."""
-        if action != "delete" or changes is not None:
-            raise UnsupportedWrite("104 PORTFOLIO native adapter only supports delete")
+        """104 PORTFOLIO link-only POST or single-record DELETE.
+
+        Link creation uses browser FormData with no file payload. Other
+        attachments require unimplemented upload/conversion workflows.
+        """
+        if action not in ("create", "delete"):
+            raise UnsupportedWrite("104 PORTFOLIO only supports link create/delete")
         version = self._version(resume_id)
         async with self._write_lock:
             before = await self.get_resume(version)
             if str(before.get("resumeTimestamp")) != str(expected_timestamp):
-                raise ConflictError("104 resume changed before portfolio delete")
-            body = portfolio_delete_body(before, position=position)
-            await self.transport.request(
-                "DELETE", "/profile/ajax/resumeByBlock/portfolio",
-                params={"vno": version}, json_data=body,
-            )
+                raise ConflictError("104 resume changed before portfolio operation")
+            if action == "create":
+                if position is not None:
+                    raise UnsupportedWrite("104 PORTFOLIO create accepts no position")
+                form = before.get("portfolio", {}).get("formData")
+                if not isinstance(form, dict):
+                    raise UnsupportedWrite("104 PORTFOLIO formData unavailable")
+                options = None
+                if not form:
+                    options = self._data(
+                        await self.transport.get_json("/profile/ajax/options")
+                    )
+                fields = portfolio_link_fields(before, changes, options=options)
+                await self.transport.request(
+                    "POST", "/profile/ajax/resumeByBlock/portfolio",
+                    params={"vno": version}, multipart_fields=fields,
+                )
+            else:
+                if changes is not None:
+                    raise UnsupportedWrite("104 PORTFOLIO delete has no body")
+                body = portfolio_delete_body(before, position=position)
+                await self.transport.request(
+                    "DELETE", "/profile/ajax/resumeByBlock/portfolio",
+                    params={"vno": version}, json_data=body,
+                )
             for attempt in range(4):
                 try:
                     after = await self.get_resume(version)
-                    if verify_portfolio_delete(before, after, position=position):
+                    valid = (
+                        verify_portfolio_link_create(
+                            before, after, fields=fields
+                        )
+                        if action == "create"
+                        else verify_portfolio_delete(
+                            before, after, position=position
+                        )
+                    )
+                    if valid:
                         return {
                             "resume_id": version, "section": "portfolio",
-                            "action": action, "position": position,
+                            "action": action,
+                            "position": (
+                                len(portfolio_records(after))
+                                if action == "create" else position
+                            ),
                             "persisted": True, "verified": True, "atomic": True,
                         }
                 except Exception:
                     raise VerificationError(
-                        "104 PORTFOLIO request submitted; read-back unavailable"
+                        "104 PORTFOLIO submitted; read-back unavailable"
                     ) from None
                 if attempt < 3:
                     await asyncio.sleep(0.75)
             raise VerificationError(
-                "104 PORTFOLIO delete submitted but exact result not verified"
+                "104 PORTFOLIO submitted but exact result not verified"
             )
 
     async def mutate_language(

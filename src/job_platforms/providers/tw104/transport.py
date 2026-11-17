@@ -47,12 +47,23 @@ class BrowserTransport:
         params: dict | None = None,
         json_data: Any = None,
         form_data: dict | None = None,
+        multipart_fields: dict[str, str] | None = None,
     ) -> BrowserResponse:
         method = method.upper()
         if method not in {"GET", "POST", "PUT", "PATCH", "DELETE"}:
             raise ValueError("Unsupported HTTP method")
-        if json_data is not None and form_data is not None:
-            raise ValueError("Choose form or JSON body")
+        if sum(x is not None for x in (
+            json_data, form_data, multipart_fields,
+        )) > 1:
+            raise ValueError("Choose exactly one HTTP request body type")
+        if multipart_fields is not None and (
+            method != "POST"
+            or not isinstance(multipart_fields, dict)
+            or not multipart_fields
+            or any(not isinstance(k, str) or not isinstance(v, str)
+                   for k, v in multipart_fields.items())
+        ):
+            raise ValueError("104 multipart fields require POST and text values")
         path = self._path(path)
         if params:
             path += ("&" if "?" in path else "?") + urlencode(params, doseq=True)
@@ -84,6 +95,14 @@ class BrowserTransport:
                             'application/x-www-form-urlencoded;charset=UTF-8';
                         body = new URLSearchParams(arg.form).toString();
                     }
+                    if (arg.multipart !== null) {
+                        // Browser sets the multipart/form-data boundary itself.
+                        // Never manually supply a Content-Type with FormData.
+                        body = new FormData();
+                        for (const [key, value] of Object.entries(arg.multipart)) {
+                            body.append(key, value);
+                        }
+                    }
                     const r = await fetch(url, {
                         method: arg.method, headers, body,
                         credentials: 'include', redirect: 'follow'
@@ -99,6 +118,7 @@ class BrowserTransport:
                 }""",
                 {"path": path, "method": method,
                  "json": json_data, "form": form_data,
+                 "multipart": multipart_fields,
                  "profile_version": self._profile_version},
             )
             if response.get("profile_version"):
