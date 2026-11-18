@@ -237,8 +237,13 @@ The frontend converts:
 Create omits `sort`, while update uses the existing 1-based position. The
 SDK refuses unknown/missing native fields and compares unchanged sibling
 records after the write. Sorting itself uses `swapRecordBySort` and is
-not implemented. **Contract and HTTP tests are synthetic, not real 104
-read-after-write verification**.
+not implemented. **EDUCATION POST, UPDATE and DELETE have now passed
+authenticated live read-after-write and exact restoration on a designated
+test resume** (the POST and DELETE also passed an independent curl_cffi
+second-session GET). One real domestic-school POST returned region={}
+and schoolId=0, which are normalized to the unchanged, foreign=[] wire form.
+Empty region with any foreign flags remains rejected as ambiguous.
+This is evidence for the tested fields, not every selector or sort behavior.
 
 ### Non-atomic multi-section edits
 
@@ -265,7 +270,7 @@ Private live-test scripts and any original personal-data backups remain in a
 private Modal directory. They are never part of the public repository.
 
 
-### New source-mapped 104 operations (synthetic only)
+### Source-mapped 104 operations (mixed live/synthetic evidence)
 
 - EXPERIENCE record CRUD: `/profile/ajax/resumeByBlock/experience`,
   with POST/PUT/DELETE and the frontend's salaried/part-time payload branch.
@@ -282,9 +287,12 @@ private Modal directory. They are never part of the public repository.
   with `blockValueList.{section}.{records}.sort={from,to}`.
   Non-adjacent moves remain unsupported pending verified semantics.
 
-**None of these operations has passed real 104 write/read-back/restore
-validation.** Media uploads, record deletion, linked certifications,
-account-level information and hidden conditional controls are still outstanding.
+**These individual operation families have mixed evidence levels.**
+EDUCATION CRUD, selected INFO/JOB_CONDITION/SIDEBAR writes and
+**JOB_CONDITION LAYOUT theme PUT/restore** have live round-trip proof.
+Other LAYOUT sections and most other variants do not. Other account-level
+fields, certificate links, media preview and hidden conditional controls
+remain outstanding.
 
 
 ### Experimental INFO form adapter (synthetic only)

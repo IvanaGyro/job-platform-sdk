@@ -112,6 +112,73 @@ class ThemeTests(unittest.IsolatedAsyncioTestCase):
         after["skill"]["formData"]["skills"].append({"name": "Unexpected"})
         self.assertFalse(verify_theme_write(BASE, after, "skill", 2))
 
+    def test_rotating_file_tokens_are_not_unrelated_resume_edits(self):
+        # Real 104 generated four different token/URL fields on two GETs,
+        # even though no write occurred. Only FILE records may ignore them.
+        before = deepcopy(BASE)
+        before["portfolio"] = {"formData": {
+            "themeChoose": {"selectedTheme": {"text": "List", "value": 1}},
+            "portfolios": [{
+                "name": "Synthetic portfolio",
+                "attach": {
+                    "name": "synthetic.pdf", "status": 1,
+                    "url": "https://example.invalid/opaque-A",
+                    "fileId": "opaque-A", "thumbnailFileId": "thumbnail-A",
+                    "src": "https://example.invalid/source-A", "crawler": False,
+                },
+                "attachType": {"text": "File", "value": 1}, "sort": 1,
+            }],
+        }}
+        after = deepcopy(before)
+        after["skill"]["formData"]["themeChoose"]["selectedTheme"] = {
+            "text": "Card", "name": "Card", "value": 2,
+        }
+        attachment = after["portfolio"]["formData"]["portfolios"][0]["attach"]
+        for name in ("url", "fileId", "thumbnailFileId", "src"):
+            attachment[name] += "-rotated"
+        self.assertTrue(verify_theme_write(before, after, "skill", 2))
+        # Preserve every other user-visible field, not only portfolio name.
+        for part, change in (
+            ("name", "different-filename.pdf"),
+            ("status", 2),
+            ("crawler", True),
+        ):
+            with self.subTest(field=part):
+                wrong = deepcopy(after)
+                wrong["portfolio"]["formData"]["portfolios"][0]["attach"][part] = change
+                self.assertFalse(verify_theme_write(before, wrong, "skill", 2))
+        wrong = deepcopy(after)
+        wrong["portfolio"]["formData"]["portfolios"][0]["name"] = "Replaced portfolio"
+        self.assertFalse(verify_theme_write(before, wrong, "skill", 2))
+        wrong = deepcopy(after)
+        wrong["portfolio"]["formData"]["portfolios"][0]["sort"] = 2
+        self.assertFalse(verify_theme_write(before, wrong, "skill", 2))
+        wrong = deepcopy(after)
+        del wrong["education"]
+        self.assertFalse(verify_theme_write(before, wrong, "skill", 2))
+
+    def test_link_destination_url_never_ignored(self):
+        before = deepcopy(BASE)
+        before["portfolio"] = {"formData": {
+            "themeChoose": {"selectedTheme": {"text": "List", "value": 1}},
+            "portfolios": [{
+                "name": "Synthetic link",
+                "attach": {
+                    "name": "site", "status": 1,
+                    "url": "https://example.invalid/original",
+                    "fileId": "", "thumbnailFileId": "",
+                    "src": "", "crawler": False,
+                },
+                "attachType": {"text": "Link", "value": 2}, "sort": 1,
+            }],
+        }}
+        after = deepcopy(before)
+        after["skill"]["formData"]["themeChoose"]["selectedTheme"]["value"] = 2
+        after["portfolio"]["formData"]["portfolios"][0]["attach"]["url"] = (
+            "https://example.invalid/changed"
+        )
+        self.assertFalse(verify_theme_write(before, after, "skill", 2))
+
     async def test_http_request_replay_invalid_and_opt_in(self):
         app = create_app(
             AuthConfig("unused", "unused"), api_token=TOKEN,

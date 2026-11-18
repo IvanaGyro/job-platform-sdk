@@ -10,7 +10,7 @@ and successful real 104 writes.** Each is a separate evidence level.
 | Native group | Frontend operation families seen | Implementation in this PR | Live 104 write/read-back |
 |---|---|---|---|
 | `info` | PUT; related identity and optional information | Source-mapped selected resume INFO fields (experimental); account/media excluded | **Motto PUT/read-back/exact restore**; remaining fields incomplete |
-| `education` | POST, PUT, DELETE; ordering | Native record CRUD + adjacent swap sorting (experimental) | **One UPDATE restored**; CREATE/DELETE unverified |
+| `education` | POST, PUT, DELETE; ordering | Native record CRUD + adjacent swap sorting; domestic GET region normalization | **SDK CREATE/DELETE verified via two HTTP sessions and exact restore; UPDATE previously restored**; sorting unverified |
 | `experience` | POST, PUT, DELETE; ordering, seniority | Seniority-only PUT + native record CRUD (experimental); record ordering pending | **One description UPDATE restored**; CREATE/DELETE unverified |
 | `jobCondition` | PUT; separate layout/theme PUT | Source-mapped full native form serializer, experimental | **preferJobContent PUT/read-back/exact restore**; other fields unverified |
 | `skill` | POST, PUT, DELETE; ordering | Source-mapped record CRUD + adjacent swap sorting (experimental) | **CRUD restored**; sort/theme unverified |
@@ -21,7 +21,7 @@ and successful real 104 writes.** Each is a separate evidence level.
 | `bio` | POST, PUT, DELETE | HTML PUT live-verified; first-create POST and clear DELETE experimental | **PUT only** |
 | `referrer` | POST, PUT, DELETE; reorder | Native record CRUD, empty-form first-create, exactly-two-record hardcoded adjacent swap | **CRUD restored**; sort unverified |
 | `sidebar` | PUT | Complete-list reorder only; metadata edits rejected | **One adjacent swap PUT and exact restore** |
-| `layout` | PUT | Theme selection for 11 native sections using current 104 option values (experimental) | **Unverified**; attempted theme PUT inconclusive, later GET verified original unchanged |
+| `layout` | PUT | Per-section themes using current 104 options; FILE token-safe verifier | **JOB_CONDITION theme PUT and restore via SDK verified**; other themes/sections unverified |
 | `custom` | POST, PUT, DELETE | **SDK TEXT=3 CRUD live**; CLASSIC/BANNER raw native CRUD live; IMAGE=4 synthetic PNG native create/delete live; MAGAZINE incomplete | TEXT real; others partial |
 | `under18` | POST, PUT | Optional native section/schema **read-only**; no remote writer | No |
 
@@ -39,10 +39,25 @@ SIDEBAR order and PORTFOLIO display identities were restored. Private
 credentials, backups and real resume content remain outside the repository.
 **A verified field does not imply an entire section is complete.**
 
-LAYOUT PUT was not verified; a separate authenticated read-only comparison
-confirmed no change against its original private backup. EDUCATION
-CREATE/DELETE attempts stopped during login without any write; the earlier
-EDUCATION UPDATE evidence is independent.
+The first detached HTTP LAYOUT attempt was inconclusive; a follow-up
+authenticated GET confirmed its private backup was unchanged. A subsequent
+browser PUT did change JOB_CONDITION's selected theme, but verification
+initially failed because unrelated PORTFOLIO FILE access URLs rotate on every
+GET. A **read-only double GET** identified only four volatile FILE fields:
+fileId, thumbnailFileId, src and url. The verifier now masks exactly those
+FILE access fields, never LINK destination URLs or user-editable names and
+metadata. The live SDK then **switched and restored JOB_CONDITION's theme**,
+verifying the exact original section after restoration. Other section themes
+are unverified.
+
+Subsequent EDUCATION testing revealed and fixed a normalization gap:
+a successful POST may return an empty region selector for a domestic school
+and schoolId=0. The SDK now accepts exactly that empty-region case if the
+foreign flags are empty, while still refusing ambiguous foreign geography.
+It successfully recreated, independently verified and deleted the uniquely
+named synthetic row. A second HTTP session confirmed the original two
+education rows and full formData were restored. Earlier UPDATE evidence
+is independent.
 
 HTTP 409/412 conflict and ambiguous-write handling have synthetic tests.
 Local `Set-Cookie` rotation passed a loopback wire test. Server-side

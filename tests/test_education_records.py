@@ -101,6 +101,76 @@ class EducationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(post["foreign"], [])
         self.assertEqual(doc, BASE)
 
+    def test_real_104_created_domestic_school_region_is_empty_selector(self):
+        # Recorded 104 behavior (synthetic reconstruction, no personal data):
+        # POST can persist a school while GET gives region={} and schoolId=0.
+        # Neither value is serialized directly into the outgoing region.
+        before = deepcopy(BASE)
+        requested = deepcopy(ROW)
+        requested["name"] = "One new synthetic domestic school"
+        requested["schoolId"] = ""
+        changes = {k: v for k, v in requested.items() if k != "sort"}
+        body = education_operation_body(before, "create", changes=changes)
+        after = deepcopy(before)
+        observed = deepcopy(requested)
+        observed["region"] = {}
+        observed["schoolId"] = 0
+        observed["sort"] = 2
+        after["education"]["formData"]["educations"].append(observed)
+        after["resumeTimestamp"] += 1
+        self.assertEqual(len(education_list(after)), 2)
+        self.assertEqual(education_wire_record(observed)["foreign"], [])
+        self.assertEqual(education_wire_record(observed)["schoolId"], "")
+        self.assertTrue(verify_education_operation(
+            before, after, "create", body=body, position=None
+        ))
+        # Once accepted as a native GET record, it can also be deleted by
+        # the SDK rather than requiring a private raw-HTTP recovery script.
+        self.assertEqual(
+            education_operation_body(after, "delete", position=2),
+            {"blockValueList": {"education": {"educations": {"sort": [2]}}}},
+        )
+
+    def test_creation_cannot_silently_change_education_theme(self):
+        before = deepcopy(BASE)
+        candidate = deepcopy(ROW)
+        candidate["schoolId"] = ""
+        candidate["name"] = "Another synthetic school"
+        body = education_operation_body(
+            before, "create",
+            changes={k: v for k, v in candidate.items() if k != "sort"},
+        )
+        after = deepcopy(before)
+        observed = deepcopy(candidate)
+        observed["sort"] = 2
+        observed["region"] = {}
+        after["education"]["formData"]["educations"].append(observed)
+        after["education"]["formData"]["themeChoose"]["selectedTheme"]["value"] = 2
+        self.assertFalse(verify_education_operation(
+            before, after, "create", body=body, position=None
+        ))
+        after = deepcopy(before)
+        after["education"]["formData"]["educations"].append(observed)
+        after["education"]["formData"]["unexpectedMetadata"] = "synthetic"
+        self.assertFalse(verify_education_operation(
+            before, after, "create", body=body, position=None
+        ))
+
+    def test_empty_domestic_region_does_not_hide_foreign_or_unknown_values(self):
+        for invalid_region, foreign in (
+            ({}, [{"no": 7001053000}]),
+            (None, []),
+            ("", []),
+            ([], []),
+        ):
+            with self.subTest(region=type(invalid_region).__name__,
+                              foreign=bool(foreign)):
+                doc = deepcopy(BASE)
+                doc["education"]["formData"]["educations"][0]["region"] = invalid_region
+                doc["education"]["formData"]["educations"][0]["foreign"] = foreign
+                with self.assertRaises(UnsupportedWrite):
+                    education_list(doc)
+
     def test_general_school_and_foreign_region_branches(self):
         row = deepcopy(ROW)
         row["highest"]["value"] = 11

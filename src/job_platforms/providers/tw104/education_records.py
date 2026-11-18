@@ -3,7 +3,9 @@
 Derived from the site's Vuex EDUCATION store, not a cross-platform model.
 Record fields are the *native GET shape*; the serializer converts them into
 the frontend's POST/PUT payload with scalar selectors and department IDs.
-No real write verification yet; unknown structures are rejected.
+Live EDUCATION POST and DELETE were independently verified on a designated
+test resume after normalizing a server-returned empty domestic region.
+Unknown/ambiguous structures are still rejected.
 """
 from __future__ import annotations
 
@@ -58,8 +60,20 @@ def education_record(value: Any) -> dict:
     if not isinstance(value["name"], str) or not value["name"].strip():
         raise UnsupportedWrite("104 EDUCATION school name is required")
     _scalar(value["schoolId"], "schoolId", nullable=True)
-    for key in ("highest", "status", "region"):
+    for key in ("highest", "status"):
         _selected(value[key], key)
+    # Real 104 GET after creating a domestic school may return region={}
+    # even when the submitted form carried a valid domestic region.
+    # The region selector is NOT sent on the wire; the encoder sends
+    # only foreign flags inferred from that selector. An empty region is
+    # safe to normalize only if there are no foreign flags.
+    if value["region"] == {}:
+        if value["foreign"] != []:
+            raise UnsupportedWrite(
+                "104 EDUCATION empty region with foreign flags is ambiguous"
+            )
+    else:
+        _selected(value["region"], "region")
     _selected(value["inSchoolStatus"], "inSchoolStatus", nullable=True)
     if (isinstance(value["sort"], bool) or
             not isinstance(value["sort"], int) or value["sort"] < 1):
@@ -114,7 +128,7 @@ def education_wire_record(value: dict) -> dict:
         depts=[{"name": record["departments"][0]["name"], "type": []}]
     duration=record["duration"]
     status=_selected(record["status"], "status")
-    region=_selected(record["region"], "region")
+    region=_selected(record["region"], "region", nullable=True)
     in_school=(
         _selected(record["inSchoolStatus"], "inSchoolStatus", nullable=True)
         if str(status)==str(STILL_IN_SCHOOL_STATUS) else ""
@@ -181,6 +195,15 @@ def verify_education_operation(before: dict, after: dict, action: str, *,
                                body: dict, position: int | None) -> bool:
     old=education_list(before)
     new=education_list(after)
+    # A record mutation must not silently reset section display settings.
+    before_form = before["education"]["formData"]
+    after_form = after["education"]["formData"]
+    if (
+        set(before_form) != {"educations", "themeChoose"}
+        or set(after_form) != {"educations", "themeChoose"}
+        or before_form["themeChoose"] != after_form["themeChoose"]
+    ):
+        return False
     if action == "create":
         if len(new)!=len(old)+1 or [_without_sort(x) for x in new[:-1]] != [_without_sort(x) for x in old]:
             return False

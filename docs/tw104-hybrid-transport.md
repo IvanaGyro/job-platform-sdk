@@ -125,12 +125,27 @@ unattended production resume without a private backup and independent GET.
 - **Live SIDEBAR reorder PUT (2026-11-18):** one adjacent swap among eight
   items passed two independent preflight GETs, independent read-back and
   exact original record-order restoration. Metadata edits remain unsupported.
-- **LAYOUT theme PUT unverified:** one experiment returned
-  `VerificationError`. Later independent authenticated read-only
-  reconciliation confirmed the selected theme **and all related fields**
-  exactly matched the private pre-test backup, with no lingering change.
-- **EDUCATION CREATE/DELETE unverified:** attempts stopped during login
-  before any backup or write. Prior EDUCATION UPDATE verification is separate.
+- **LAYOUT JOB_CONDITION theme PUT and exact restoration (2026-11-18):**
+  an initial detached HTTP attempt was inconclusive and independently
+  confirmed unchanged. A browser PUT then **did change the theme**, but
+  the SDK falsely returned `VerificationError` because its global verifier
+  expected byte-identical unrelated PORTFOLIO FILE tokens. Two unchanged
+  consecutive 104 GETs showed fileId, thumbnailFileId, src and url rotate.
+  The verifier now excludes exactly those fields for FILE=1, **never** LINK
+  destinations, names, status or other resume fields. A subsequent browser
+  SDK test successfully changed and restored JOB_CONDITION's theme with
+  real read-back and exact original section restoration. The other ten
+  section themes remain unverified.
+- **Live EDUCATION POST/DELETE and SDK correction (2026-11-18):**
+  an authorized synthetic school was successfully created via the detached
+  HTTP transport, but the original SDK GET validator rejected the server's
+  empty domestic region selector. A private raw DELETE recovered only the
+  unique test record and independently proved the exact original form.
+  After a narrow serializer fix, the **SDK itself** successfully repeated
+  create, independent second-session read-back, delete and exact restoration.
+  Tests also reject empty region when foreign codes are present. The
+  full EDUCATION list and theme were preserved. Other EDUCATION options
+  and reorder operations remain unverified.
 - **Intermittent transport issue:** with the same login Proxy #4 and valid
   Chromium session, curl code 7 (connection failure before any HTTP status)
   appeared at times for **both** synchronous and asynchronous curl variants,
