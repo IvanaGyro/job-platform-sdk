@@ -81,15 +81,20 @@ designated disposable 104 test resume, a real EXPERIENCE POST persisted one
 uniquely named synthetic fifth record; its upstream `companyVisibility`
 became `true` despite a submitted `false`. The old SDK rejected deletion
 because it assumed a monotonic GET array, but a later GET returned the valid
-sort-key permutation `[4, 5, 3, 2, 1]`. A parser fix is now staged. The
-synthetic item was **not restored** by the end of that session.
+sort-key permutation `[4, 5, 3, 2, 1]`. The sort-key parser has since
+been fixed. The synthetic item has **still not been restored**.
 
 The original 4 EXPERIENCE records and section metadata were independently
 confirmed unchanged in a private diagnostic snapshot. Private backups and
 recovery scripts are retained in the original Modal workspace outside Git.
-The original proxies #4 and #2 subsequently failed even unauthenticated
-connectivity tests (curl code 7); **do not repeatedly attempt login** while
-the proxy transport is unavailable. When connectivity is restored, make one
+The original proxies subsequently failed even unauthenticated
+connectivity tests (curl code 7). The newer ten-proxy list contained two
+previously authenticated proxies, but **all ten** failed unauthenticated
+public TLS/104 connectivity checks in the 2026-11-18 continuation.
+**Do not repeatedly attempt login** while the proxy transport is
+unavailable. Consult the `prelogin_diagnostics` stage/status/Cloudflare
+evidence; a browser navigation error is not an observed HTTP 403.
+When connectivity is restored, make one
 authorized login, independent read-back on two transports, identify exactly
 one synthetic record by its unique marker *and sort value* (not array index),
 compare the original four against the private backup, delete only the

@@ -19,6 +19,75 @@ from job_platforms.core.errors import AuthenticationRequired
 from .transport import BrowserTransport
 
 
+@dataclass(frozen=True)
+class PreloginDiagnostic:
+    """Secret-free diagnostic for one proxy's *pre-account* login checks.
+
+    `cloudflare` describes response evidence, not who caused a 403.
+    It must never contain a URL, host, cookie, credential or response body.
+    """
+    proxy_index: int
+    stage: str
+    reason: str
+    http_status: int | None = None
+    cloudflare: str = "unconfirmed"
+    network_error: str | None = None
+
+    def summary(self) -> str:
+        status = (f" status={self.http_status}" if self.http_status is not None else "")
+        net = (f" net={self.network_error}" if self.network_error is not None else "")
+        return (
+            f"proxy#{self.proxy_index} stage={self.stage} "
+            f"reason={self.reason}{status}{net} cf={self.cloudflare}"
+        )
+
+
+class _PreloginFailure(Exception):
+    def __init__(
+        self, reason: str, status: int | None = None,
+        cloudflare: str = "unconfirmed",
+    ):
+        self.reason = reason
+        self.status = status
+        self.cloudflare = cloudflare
+        super().__init__(reason)
+
+
+def _browser_network_error(exc: Exception) -> str | None:
+    """Extract only Chromium's fixed-format error code, never its raw trace.
+
+    Chromium exception messages may contain unredacted proxy URLs, tokens,
+    or full request paths. Only an uppercase machine error token is safe.
+    """
+    matched = re.search(r"\bnet::(ERR_[A-Z0-9_]{2,60})\b", str(exc))
+    return matched.group(1) if matched else None
+
+
+def _cloudflare_signal(headers: dict[str, str] | None) -> str:
+    """Distinguish an explicit CF challenge from CF edge headers.
+
+    A cf-ray on a 403 proves Cloudflare was in the response path, not
+    that Cloudflare (rather than 104) decided to return 403.
+    """
+    headers = {str(k).lower(): str(v).lower() for k, v in (headers or {}).items()}
+    if headers.get("cf-mitigated") == "challenge":
+        return "challenge"
+    if "cloudflare" in headers.get("server", "") or headers.get("cf-ray"):
+        return "edge_headers"
+    return "unconfirmed"
+
+
+def _reject_prelogin_http_response(response):
+    """Fail on an explicitly observed navigation HTTP error."""
+    if response is None:
+        raise _PreloginFailure("navigation_no_response")
+    cf = _cloudflare_signal(response.headers)
+    if cf == "challenge":
+        raise _PreloginFailure("cloudflare_challenge", response.status, cf)
+    if response.status >= 400:
+        raise _PreloginFailure("http_error", response.status, cf)
+
+
 @dataclass
 class AuthConfig:
     credentials_file: str
@@ -190,6 +259,7 @@ class FreshBrowserSession:
         self._profile = None
         self._proxy_url = None
         self._http_transports = []
+        self.prelogin_diagnostics: list[PreloginDiagnostic] = []
 
     async def __aenter__(self):
         self._pw = await async_playwright().start()
@@ -218,15 +288,25 @@ class FreshBrowserSession:
     async def open(self):
         creds = _credentials(self.config.credentials_file)
         proxy_lines = Path(self.config.proxy_file).read_text().splitlines()
+        self.prelogin_diagnostics.clear()
         for index in self.config.proxy_priority:
             if not 1 <= index <= len(proxy_lines):
+                self.prelogin_diagnostics.append(
+                    PreloginDiagnostic(index, "proxy_config", "invalid_index")
+                )
                 continue
             parts = proxy_lines[index - 1].split(":", 3)
-            if len(parts) != 4:
+            if len(parts) != 4 or any(not x for x in parts):
+                self.prelogin_diagnostics.append(
+                    PreloginDiagnostic(index, "proxy_config", "invalid_format")
+                )
                 continue
             host, port, username, password = parts
             profile = tempfile.TemporaryDirectory(prefix="job-platform-104-")
             browser = None
+            stage = "chromium_launch"
+            # Capture HTTP 403 evidence even when navigation throws.
+            observed_errors: list[tuple[str, int, str]] = []
             try:
                 browser = await self._pw.chromium.launch_persistent_context(
                     user_data_dir=profile.name,
@@ -240,39 +320,114 @@ class FreshBrowserSession:
                     args=["--no-sandbox", "--disable-dev-shm-usage"],
                 )
                 page = browser.pages[0] if browser.pages else await browser.new_page()
-                await page.goto(
+
+                def observe_response(response):
+                    # Never record request URLs, response bodies or headers.
+                    # Keep only the numeric HTTP status and CF signal on
+                    # the two known 104 authentication domains.
+                    if (
+                        urlsplit(response.url).hostname in (
+                            "pda.104.com.tw", "signin.104.com.tw"
+                        )
+                        and response.status in (403, 429, 503)
+                    ):
+                        observed_errors.append((
+                            stage, response.status,
+                            _cloudflare_signal(response.headers),
+                        ))
+
+                page.on("response", observe_response)
+
+                stage = "pda_entry_navigation"
+                response = await page.goto(
                     "https://pda.104.com.tw/work/peruseRecord/",
                     wait_until="domcontentloaded", timeout=24000,
                 )
+                _reject_prelogin_http_response(response)
                 await page.wait_for_timeout(1800)
+                stage = "pda_profile_navigation"
                 if await page.locator("input#identity:visible").count() != 1:
-                    await page.goto(
+                    response = await page.goto(
                         "https://pda.104.com.tw/profile",
                         wait_until="domcontentloaded", timeout=24000,
                     )
+                    _reject_prelogin_http_response(response)
                     await page.wait_for_timeout(3500)
+                stage = "signin_navigation"
                 if await page.locator("input#identity:visible").count() != 1:
-                    await page.goto(
+                    response = await page.goto(
                         "https://signin.104.com.tw/",
                         wait_until="domcontentloaded", timeout=24000,
                     )
+                    _reject_prelogin_http_response(response)
                     await page.wait_for_timeout(2400)
+                stage = "signin_hostname"
                 if urlsplit(page.url).hostname != "signin.104.com.tw":
-                    raise AuthenticationRequired("No 104 sign-in form")
+                    raise _PreloginFailure("unexpected_login_host")
+                stage = "signin_form"
                 if await page.locator("input#identity:visible").count() != 1:
-                    raise AuthenticationRequired("No account field")
+                    raise _PreloginFailure("missing_identity_input")
+                stage = "login_init"
                 status = await page.evaluate(
                     """async () => {
                         const response = await fetch('/v1/api/login/init', {
                             credentials:'include',
                             headers:{Accept:'application/json, text/plain, */*'}
                         });
-                        return response.status;
+                        return {
+                            status: response.status,
+                            cloudflare: response.headers.get('cf-mitigated') === 'challenge'
+                                ? 'challenge'
+                                : (response.headers.get('cf-ray') ||
+                                   (response.headers.get('server') || '').toLowerCase()
+                                    .includes('cloudflare'))
+                                ? 'edge_headers' : 'unconfirmed'
+                        };
                     }"""
                 )
-                if status != 200:
-                    raise AuthenticationRequired("104 login initialization failed")
-            except Exception:
+                if (
+                    not isinstance(status, dict)
+                    or status.get("status") != 200
+                    or status.get("cloudflare") == "challenge"
+                ):
+                    code = status.get("status") if isinstance(status, dict) else None
+                    cf = status.get("cloudflare", "unconfirmed") if isinstance(status, dict) else "unconfirmed"
+                    if code is not None and (not isinstance(code, int) or isinstance(code, bool)):
+                        code = None
+                    # The listener may also have seen a CF-specific header
+                    # that fetch() could not expose to JS.
+                    if code is not None and cf == "unconfirmed":
+                        cf = next(
+                            (signal for phase, c, signal in reversed(observed_errors)
+                             if phase == stage and c == code and signal != "unconfirmed"),
+                            cf,
+                        )
+                    raise _PreloginFailure("login_init_http_error", code, cf)
+            except Exception as exc:
+                if isinstance(exc, _PreloginFailure):
+                    reason, code, cf = exc.reason, exc.status, exc.cloudflare
+                else:
+                    # Never include raw exception messages: Playwright
+                    # errors can contain proxy URLs and credential material.
+                    reason, code, cf = type(exc).__name__, None, "unconfirmed"
+                network_error = (
+                    None if isinstance(exc, _PreloginFailure)
+                    else _browser_network_error(exc)
+                )
+                if code is None:
+                    # Prefer direct observed response evidence to a generic
+                    # Playwright exception during the SAME stage.
+                    observed = next(
+                        ((c, signal) for phase, c, signal in reversed(observed_errors)
+                         if phase == stage), None,
+                    )
+                    if observed is not None:
+                        code, cf = observed
+                self.prelogin_diagnostics.append(
+                    PreloginDiagnostic(
+                        index, stage, reason, code, cf, network_error
+                    )
+                )
                 if browser is not None:
                     await browser.close()
                 profile.cleanup()
@@ -287,7 +442,13 @@ class FreshBrowserSession:
             )
             break
         else:
-            raise AuthenticationRequired("Could not establish a fresh 104 login session")
+            safe_details = "; ".join(
+                item.summary() for item in self.prelogin_diagnostics
+            )
+            raise AuthenticationRequired(
+                "Could not establish a fresh 104 login session"
+                + (f": {safe_details}" if safe_details else "")
+            )
 
         account = await _visible(self.page.locator("input#identity:visible"))
         next_button = await _visible(

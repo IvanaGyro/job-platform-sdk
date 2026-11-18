@@ -18,6 +18,47 @@ same-origin requests. An opt-in `CurlCffiTransport` instead uses `curl_cffi`
 Both implementations share the `Resume104Client` method surface, so the
 client can read overview, resumeByBlock and options through either transport.
 
+## Diagnostic stages for 104 browser sign-in
+
+`FreshBrowserSession.open()` now retains a bounded, **sanitized**
+`prelogin_diagnostics` list with one `PreloginDiagnostic` per failed proxy
+attempt and includes summaries in the final `AuthenticationRequired`
+message when no proxy reaches the account step. No raw Playwright trace,
+proxy URL, cookie, account data, URL query or response body is logged.
+
+- `proxy_config`: missing index or malformed `host:port:user:password` line.
+- `chromium_launch`: Chromium failed to start with this proxy.
+- `pda_entry_navigation` and `pda_profile_navigation`: the 104
+  entry/profile request failed before the sign-in form was reached.
+- `signin_navigation` / `signin_hostname`: sign-in page network error,
+  unexpected destination or observed HTTP error.
+- `signin_form`: the expected `input#identity` field is missing.
+- `login_init`: the same-origin `/v1/api/login/init` request failed.
+- `reason` is a stable, sanitized failure code; `status` is included
+  **only** when the browser actually observed a numeric HTTP response.
+  Chromium `net::ERR_*` codes are extracted from Playwright exceptions
+  into `net=...`, but the exception text is never included.
+
+For example, diagnostic output can look like:
+
+```text
+proxy#3 stage=signin_navigation reason=http_error status=403 cf=edge_headers
+proxy#4 stage=pda_entry_navigation reason=Error net=ERR_TUNNEL_CONNECTION_FAILED cf=unconfirmed
+proxy#5 stage=login_init reason=login_init_http_error status=403 cf=challenge
+```
+
+These lines are **illustrations, not observed upstream test results**.
+`cf=challenge` requires `cf-mitigated: challenge`, even if the HTTP
+status is 200; `cf=edge_headers` means Cloudflare response headers
+were present, **not** that Cloudflare itself caused the status.
+`cf=unconfirmed` means the browser has no such evidence, not that
+Cloudflare was absent. A 403 from the origin is distinct from a failed
+Proxy CONNECT / navigation (`net::ERR_*`) that produced no HTTP status.
+
+This diagnostic only describes the **pre-account phase**; a later account,
+password, MFA or resume-access failure may still have a separate root cause.
+No raw response headers, cookies, or private values should be printed.
+
 ## Selecting a backend
 
 CLI: `job-platform --transport curl_cffi list`, or set
@@ -74,6 +115,20 @@ unattended production resume without a private backup and independent GET.
 - Signed media URLs, native response bodies and session secrets are never
   logged by the transport. Private integration test evidence remains outside
   this public repository.
+
+### Proxy connectivity status at 2026-11-18 continuation
+
+Earlier authorized tests completed full 104 sign-in via two proxies
+in the new private ten-proxy list. During this continuation, those two
+connections failed at `pda_entry_navigation` with a sanitized
+`reason=Error` and no observed HTTP 403. Independently, **all ten**
+proxies in the new list failed unauthenticated requests to both a
+public TLS diagnostic site and the 104 login page with curl error 7.
+Therefore **no usable current transport** was established, no
+Cloudflare 403 was proven, and no EXPERIENCE DELETE was submitted.
+The synthetic EXPERIENCE record still needs exact restoration.
+Avoid repeating logins until a proxy passes the unauthenticated
+connectivity check.
 
 ## Test evidence
 
