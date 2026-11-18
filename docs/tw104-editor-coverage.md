@@ -11,11 +11,11 @@ and successful real 104 writes.** Each is a separate evidence level.
 |---|---|---|---|
 | `info` | PUT; related identity and optional information | Source-mapped selected resume INFO fields (experimental); account/media excluded | **Motto PUT/read-back/exact restore**; remaining fields incomplete |
 | `education` | POST, PUT, DELETE; ordering | Native record CRUD + adjacent swap sorting; domestic GET region normalization | **SDK CREATE/DELETE verified via two HTTP sessions and exact restore; UPDATE previously restored**; sorting unverified |
-| `experience` | POST, PUT, DELETE; ordering, seniority | Seniority-only PUT + native record CRUD (experimental); record ordering pending | **One description UPDATE restored**; CREATE/DELETE unverified |
+| `experience` | POST, PUT, DELETE; ordering, seniority | Native record CRUD now accepts non-monotonic GET sort permutations; strict companyVisibility verification | **One UPDATE restored**; POST persisted a synthetic row but changed companyVisibility (unverified); cleanup pending due proxy outage; DELETE remains unverified |
 | `jobCondition` | PUT; separate layout/theme PUT | Source-mapped full native form serializer, experimental | **preferJobContent PUT/read-back/exact restore**; other fields unverified |
 | `skill` | POST, PUT, DELETE; ordering | Source-mapped record CRUD + adjacent swap sorting (experimental) | **CRUD restored**; sort/theme unverified |
 | `certificate` | PUT, DELETE; certification connections | Existing text PUT plus first-empty PUT and guarded clear; global associations excluded | **SDK initialize + clear verified and restored live** |
-| `language` | POST, PUT, DELETE; local/foreign records | Native local/foreign record CRUD + adjacent local/foreign sorting (experimental); linked certificates blocked | **One local + one foreign field UPDATE restored**; CREATE/DELETE unverified |
+| `language` | POST, PUT, DELETE; local/foreign records | Native local/foreign record CRUD + adjacent local/foreign sorting (experimental); linked certificates blocked | **Local CREATE/DELETE verified and exactly restored with one login and two HTTP sessions**; local/foreign UPDATE previously restored; FOREIGN CREATE/DELETE unverified |
 | `project` | POST, PUT, DELETE; reorder; attachments | No-media CRUD and adjacent reorder; media pending | **SDK create, update and delete verified live and restored**; sorting synthetic |
 | `portfolio` | POST, DELETE; attachments/upload; reorder | LINK=2 POST, FILE=1 bounded binary POST, one-record DELETE, adjacent reorder; preview/conversion pending | **Browser and curl_cffi LINK/PDF CRUD restored; 2/3-entry insertion order verified**; preview/checksum/blob lifecycle unverified |
 | `bio` | POST, PUT, DELETE | HTML PUT live-verified; first-create POST and clear DELETE experimental | **PUT only** |
@@ -58,6 +58,37 @@ It successfully recreated, independently verified and deleted the uniquely
 named synthetic row. A second HTTP session confirmed the original two
 education rows and full formData were restored. Earlier UPDATE evidence
 is independent.
+
+### Live test continuation — 2026-11-18
+
+- LANGUAGE local: one browser login was transferred to two independently
+  created, original-proxy-bound curl_cffi sessions. A unique, site-option-
+  sourced second local-language record was created, independently GET-verified
+  and SDK-deleted. An independent GET confirmed the exact original LANGUAGE
+  formData; both SDK calls reported verified=true.
+- EXPERIENCE: a synthetic fifth record **did persist** after a POST,
+  but the server returned companyVisibility=true for a request containing
+  false. SDK deliberately raised VerificationError instead of treating the
+  mismatch as successful. A subsequent GET placed sort=5 in the *second*
+  array position, yielding [4,5,3,2,1] instead of descending order. The
+  original four rows and section metadata were unchanged. The record
+  reader now accepts **any permutation** of unique, contiguous sort IDs,
+  rather than using array order as record identity.
+- **Pending cleanup:** the unique synthetic EXPERIENCE test record has
+  **not** yet been removed. A safe SDK DELETE attempt was rejected
+  before mutation by the old list-shape validator. After correcting that
+  validator, an authentication attempt failed. Both configured original
+  proxies (#4 and #2) then failed unauthenticated connectivity to
+  public web sites with curl connection error 7; further login attempts
+  were stopped. A private original section backup and a diagnostic snapshot
+  are retained. The synthetic record **must be reconciled and removed**
+  once the authorized original transport is reachable, before any more
+  EXPERIENCE or other mutable live testing.
+- Treat the server's companyVisibility coercion as a **real mismatch**,
+  not an accepted normalization. Future tests must not silently replace
+  false with true or claim this field is verified. Only the test record
+  is eligible for the future guarded deletion; unrelated user records
+  must remain untouched.
 
 HTTP 409/412 conflict and ambiguous-write handling have synthetic tests.
 Local `Set-Cookie` rotation passed a loopback wire test. Server-side

@@ -205,6 +205,76 @@ class ExperienceTests(unittest.IsolatedAsyncioTestCase):
             before, deleted, "delete", body=delete_body, position=1
         ))
 
+    def test_real_104_nonmonotonic_order_keeps_unique_sort_identity(self):
+        # An authenticated GET after creating sort=5 returned
+        # [4,5,3,2,1] (with the new row in position 2).
+        # This is a safe reorder, not a corrupt/missing sort list.
+        original = deepcopy(BASE)
+        rows = []
+        for pos in range(4, 0, -1):
+            item = deepcopy(ROW)
+            item["sort"] = pos
+            item["companyName"] = f"Synthetic original {pos}"
+            rows.append(item)
+        original["experience"]["formData"]["experiences"] = rows
+        after_create = deepcopy(original)
+        added = deepcopy(ROW)
+        added["sort"] = 5
+        added["companyName"] = "SDK Synthetic Company unique"
+        after_create["experience"]["formData"]["experiences"].insert(1, added)
+        self.assertEqual(
+            [x["sort"] for x in experience_list(after_create)],
+            [4, 5, 3, 2, 1],
+        )
+        self.assertEqual(
+            experience_operation_body(
+                after_create, "delete", position=5
+            ),
+            {"blockValueList": {"experience": {
+                "experiences": {"sort": [5]}
+            }}},
+        )
+        self.assertTrue(verify_experience_operation(
+            after_create, original, "delete",
+            body=experience_operation_body(after_create, "delete", position=5),
+            position=5,
+        ))
+        for invalid in ([4, 4, 3, 2, 1], [4, 7, 3, 2, 1]):
+            with self.subTest(sort=invalid):
+                bad = deepcopy(after_create)
+                for item, sort in zip(
+                    bad["experience"]["formData"]["experiences"], invalid
+                ):
+                    item["sort"] = sort
+                with self.assertRaises(UnsupportedWrite):
+                    experience_list(bad)
+
+    def test_remote_company_visibility_coercion_rejects_false_success(self):
+        # A real 104 POST changed the submitted companyVisibility=False to
+        # True on the returned synthetic row. SDK must not report verified.
+        before = deepcopy(BASE)
+        requested = {
+            k: deepcopy(v) for k, v in ROW.items()
+            if k not in ("logo", "sort")
+        }
+        requested["companyName"] = "SDK Synthetic Company marker"
+        requested["companyVisibility"] = False
+        submitted = experience_operation_body(before, "create", changes=requested)
+        persisted = deepcopy(before)
+        added = deepcopy(ROW)
+        added["sort"] = 2
+        added["companyName"] = requested["companyName"]
+        added["companyVisibility"] = True
+        persisted["experience"]["formData"]["experiences"].insert(0, added)
+        self.assertFalse(verify_experience_operation(
+            before, persisted, "create", body=submitted, position=None
+        ))
+        requested["companyVisibility"] = True
+        accepted = experience_operation_body(before, "create", changes=requested)
+        self.assertTrue(verify_experience_operation(
+            before, persisted, "create", body=accepted, position=None
+        ))
+
     async def test_update_create_delete_and_readback(self):
         client = Client()
         changed = await client.mutate_experience(

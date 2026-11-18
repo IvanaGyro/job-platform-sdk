@@ -146,6 +146,21 @@ unattended production resume without a private backup and independent GET.
   Tests also reject empty region when foreign codes are present. The
   full EDUCATION list and theme were preserved. Other EDUCATION options
   and reorder operations remain unverified.
+- **Single-login multi-operation batch (2026-11-18):** one
+  FreshBrowserSession authenticated the designated test resume once.
+  Two separate curl_cffi transports derived from that same login
+  completed independent, safe preflight and read-back; Chromium
+  was closed after the handoff. LANGUAGE local SDK create/delete
+  was verified, then the exact original formData restored.
+  EXPERIENCE POST also created a synthetic fifth record but reported
+  a mismatch: companyVisibility=false was stored as true, so SDK
+  verification failed. A later GET ordered the records
+  [4,5,3,2,1]. The parser has been fixed to accept contiguous
+  sort-key permutations. **The EXPERIENCE synthetic row still
+  requires cleanup**: the initial DELETE was rejected by the old
+  parser, and later recovery login failed. Both known proxies (#4,
+  #2) failed unauthenticated public GETs with curl code 7. Do not
+  repeat sign-ins or claim restoration until independent verification.
 - **Intermittent transport issue:** with the same login Proxy #4 and valid
   Chromium session, curl code 7 (connection failure before any HTTP status)
   appeared at times for **both** synchronous and asynchronous curl variants,

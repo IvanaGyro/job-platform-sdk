@@ -74,6 +74,29 @@ async with FreshBrowserSession(AuthConfig.from_env()) as session:
 - Respect the user's instruction to keep PRs open until explicitly asked to
   merge. Complete 104 coverage before adding Cake, Yourator or Greenhouse.
 
+## Active 104 integration-test recovery (2026-11-18)
+
+**Do not start further mutable live tests until this is resolved.** On the
+designated disposable 104 test resume, a real EXPERIENCE POST persisted one
+uniquely named synthetic fifth record; its upstream `companyVisibility`
+became `true` despite a submitted `false`. The old SDK rejected deletion
+because it assumed a monotonic GET array, but a later GET returned the valid
+sort-key permutation `[4, 5, 3, 2, 1]`. A parser fix is now staged. The
+synthetic item was **not restored** by the end of that session.
+
+The original 4 EXPERIENCE records and section metadata were independently
+confirmed unchanged in a private diagnostic snapshot. Private backups and
+recovery scripts are retained in the original Modal workspace outside Git.
+The original proxies #4 and #2 subsequently failed even unauthenticated
+connectivity tests (curl code 7); **do not repeatedly attempt login** while
+the proxy transport is unavailable. When connectivity is restored, make one
+authorized login, independent read-back on two transports, identify exactly
+one synthetic record by its unique marker *and sort value* (not array index),
+compare the original four against the private backup, delete only the
+synthetic record using a fresh timestamp, and independently verify complete
+restoration. Stop on any ambiguous state or result. The user has not
+authorized modifying other entries.
+
 In short: **authenticate once per planned live batch, reuse the session for
 many operations, refresh document state when needed, and reauthenticate only
 when there is a concrete reason.**

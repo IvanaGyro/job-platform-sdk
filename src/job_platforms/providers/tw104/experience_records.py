@@ -1,8 +1,10 @@
 """104-native EXPERIENCE record CRUD (source-mapped, not live-write verified).
 
 104 editor frontend: module f30d, postData(), /resumeByBlock/experience.
-This intentionally handles exactly the recorded GET shape. Unknown fields,
-selector variants and unsafe changes fail before an upstream mutation.
+It rejects unknown fields and selector variants, but accepts any ordering
+of distinct, contiguous server sort keys. A real POST persisted one synthetic
+record but 104 coerced companyVisibility=false to true; this remains an
+unverified CREATE because the resulting value differs from the request.
 """
 from __future__ import annotations
 
@@ -120,13 +122,15 @@ def experience_list(document: dict) -> list[dict]:
     if not isinstance(records, list):
         raise UnsupportedWrite("104 EXPERIENCE records must be an array")
     rows = [experience_record(item) for item in records]
-    # A real 104 GET returned [4,3,2,1]: newest-first / descending.
-    # Both sequential orientations are supported, but mixed/sparse
-    # identifiers still fail closed until their semantics are verified.
+    # The site's GET may reorder array positions independently of the
+    # server-side sort keys. Live 104 observations included both
+    # [4,3,2,1] and [4,5,3,2,1] after adding record sort=5.
+    # Record operations target sort, NEVER the Python list index.
+    # Reject duplicates, gaps and unexpected keys, but accept any
+    # permutation of the exact contiguous 1-based identifier set.
     observed = [x["sort"] for x in rows]
-    ascending = list(range(1, len(rows) + 1))
-    if observed != ascending and observed != ascending[::-1]:
-        raise UnsupportedWrite("104 EXPERIENCE sorts are not sequential in either direction")
+    if sorted(observed) != list(range(1, len(rows) + 1)):
+        raise UnsupportedWrite("104 EXPERIENCE sort identifiers are not a unique contiguous set")
     return rows
 
 

@@ -276,6 +276,17 @@ private Modal directory. They are never part of the public repository.
   with POST/PUT/DELETE and the frontend's salaried/part-time payload branch.
   Unlike the independently mapped seniority PUT, a record CRUD request
   addresses only the selected experience row.
+- EXPERIENCE: authenticated POST of a synthetic fifth record was
+  observed to persist, but companyVisibility=false became true, so
+  the SDK's exact-value verifier correctly **did not** claim success.
+  A later GET returned sort IDs in order [4,5,3,2,1] instead of a
+  monotonic array. Use unique, contiguous sort IDs as record identifiers,
+  never array indices; duplicate/gapped sort IDs remain unsupported.
+  The synthetic record remains **pending cleanup** while both original
+  proxy connections are unavailable. No live DELETE success is claimed.
+- LANGUAGE local: one authenticated SDK POST/DELETE cycle passed two
+  independent original-proxy HTTP-session GETs and exact original full
+  formData restoration. FOREIGN POST/DELETE is not yet verified.
 - LANGUAGE record CRUD: `/profile/ajax/resumeByBlock/language`,
   with distinct `languages.local` and `languages.foreign` payloads.
   Linked certificates remain unsupported.
