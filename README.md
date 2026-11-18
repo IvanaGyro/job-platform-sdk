@@ -4,6 +4,11 @@ An unofficial, extensible Python SDK, CLI and optional HTTP API for managing job
 
 **Status: alpha.** The initial working provider is [104 Job Bank](https://www.104.com.tw/) in Taiwan. Providers for **Cake**, **Yourator**, and **Greenhouse** are planned, but **not implemented**.
 
+**For coding agents:** Read [AGENTS.md](AGENTS.md) before development.
+In particular, reuse an authenticated 104 browser/HTTP session across a
+planned batch of API calls and tests; do not repeatedly log in unless
+authentication has expired or a new browser-only context is genuinely needed.
+
 ## Provider capabilities
 
 | Capability | 104 | Cake | Yourator | Greenhouse |
