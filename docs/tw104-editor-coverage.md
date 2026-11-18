@@ -11,7 +11,7 @@ and successful real 104 writes.** Each is a separate evidence level.
 |---|---|---|---|
 | `info` | PUT; related identity and optional information | Source-mapped selected resume INFO fields (experimental); account/media excluded | **Motto PUT/read-back/exact restore**; remaining fields incomplete |
 | `education` | POST, PUT, DELETE; ordering | Native record CRUD + adjacent swap sorting; domestic GET region normalization | **SDK CREATE/DELETE verified via two HTTP sessions and exact restore; UPDATE previously restored**; sorting unverified |
-| `experience` | POST, PUT, DELETE; ordering, seniority | Native record CRUD now accepts non-monotonic GET sort permutations; strict companyVisibility verification | **One UPDATE restored**; POST persisted a synthetic row but changed companyVisibility (unverified); cleanup pending due proxy outage; DELETE remains unverified |
+| `experience` | POST, PUT, DELETE; ordering, seniority | Native record CRUD accepts unordered contiguous GET sort keys; CREATE with companyVisibility=False fails before write | **SDK CREATE (companyVisibility=True), DELETE and exact restore independently verified on 2026-11-19**; prior UPDATE restored; hidden-company CREATE still unsupported |
 | `jobCondition` | PUT; separate layout/theme PUT | Source-mapped full native form serializer, experimental | **preferJobContent PUT/read-back/exact restore**; other fields unverified |
 | `skill` | POST, PUT, DELETE; ordering | Source-mapped record CRUD + adjacent swap sorting (experimental) | **CRUD restored**; sort/theme unverified |
 | `certificate` | PUT, DELETE; certification connections | Existing text PUT plus first-empty PUT and guarded clear; global associations excluded | **SDK initialize + clear verified and restored live** |
@@ -59,6 +59,30 @@ named synthetic row. A second HTTP session confirmed the original two
 education rows and full formData were restored. Earlier UPDATE evidence
 is independent.
 
+### Successful EXPERIENCE CRUD and cleanup — 2026-11-19
+
+- One authorized browser login on a currently functional proxy transferred
+  credentials to **two independent original-proxy HTTP transports**.
+  A uniquely marked synthetic fifth EXPERIENCE row was **created by the
+  SDK** with companyVisibility=True; the SDK returned
+  `verified=True` and independent GET confirmed exactly one new row,
+  all four originals unchanged and no metadata changes.
+- The same authenticated writer then **SDK-deleted** that fifth row;
+  the SDK returned `verified=True` and an independent GET confirmed
+  the **exact original EXPERIENCE formData** plus unchanged BIO.
+  Both steps used fresh resume timestamps and one submission per mutation.
+- A prior synthetic fifth row from the earlier failed cycle was also
+  successfully **SDK-deleted** after guarded preflight verification,
+  independently GET-confirming exact original restoration.
+- An earlier POST with companyVisibility=False was stored as True.
+  The SDK now rejects this unsafe CREATE choice **before submitting
+  HTTP**, rather than creating a record with unexpected company-name
+  visibility. Hidden-company CREATE is not verified/supported.
+- Real sign-in checks found PDA entry HTTP 403 can coexist with working
+  official sign-in. The adapter now records 403 and attempts
+  signin.104.com.tw for *non-challenge* PDA entry 403.
+  Explicit Cloudflare challenges continue to stop authentication.
+
 ### Live test continuation — 2026-11-18
 
 - LANGUAGE local: one browser login was transferred to two independently
@@ -74,16 +98,11 @@ is independent.
   original four rows and section metadata were unchanged. The record
   reader now accepts **any permutation** of unique, contiguous sort IDs,
   rather than using array order as record identity.
-- **Pending cleanup:** the unique synthetic EXPERIENCE test record has
-  **not** yet been removed. A safe SDK DELETE attempt was rejected
-  before mutation by the old list-shape validator. After correcting that
-  validator, an authentication attempt failed. Both configured original
-  proxies (#4 and #2) then failed unauthenticated connectivity to
-  public web sites with curl connection error 7; further login attempts
-  were stopped. A private original section backup and a diagnostic snapshot
-  are retained. The synthetic record **must be reconciled and removed**
-  once the authorized original transport is reachable, before any more
-  EXPERIENCE or other mutable live testing.
+- **Historical cleanup blocker (resolved 2026-11-19):** the SDK
+  initially rejected the unexpected GET sort permutation and could
+  not delete the temporary row; subsequent proxy failures postponed
+  cleanup. Later a guarded SDK DELETE, with independent second-session
+  read-back, exactly restored the original full section.
 - Treat the server's companyVisibility coercion as a **real mismatch**,
   not an accepted normalization. Future tests must not silently replace
   false with true or claim this field is verified. Only the test record

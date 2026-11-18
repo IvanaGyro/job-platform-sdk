@@ -259,7 +259,18 @@ class ExperienceTests(unittest.IsolatedAsyncioTestCase):
         }
         requested["companyName"] = "SDK Synthetic Company marker"
         requested["companyVisibility"] = False
-        submitted = experience_operation_body(before, "create", changes=requested)
+        with self.assertRaises(UnsupportedWrite):
+            experience_operation_body(before, "create", changes=requested)
+        # Also retain a regression for the *historical* unsafe POST:
+        # even if an old client submitted False, the current verifier must
+        # never accept upstream-coerced True as proof of a correct create.
+        submitted = experience_operation_body(
+            before, "create",
+            changes={**requested, "companyVisibility": True},
+        )
+        submitted["blockValueList"]["experience"]["experiences"][0][
+            "companyVisibility"
+        ] = False
         persisted = deepcopy(before)
         added = deepcopy(ROW)
         added["sort"] = 2
@@ -274,6 +285,21 @@ class ExperienceTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(verify_experience_operation(
             before, persisted, "create", body=accepted, position=None
         ))
+
+    async def test_create_private_company_fails_before_http_request(self):
+        client = Client()
+        changes = {
+            k: deepcopy(v) for k, v in ROW.items()
+            if k not in ("logo", "sort")
+        }
+        changes["companyVisibility"] = False
+        with self.assertRaises(UnsupportedWrite):
+            await client.mutate_experience(
+                "synthetic", "create",
+                expected_timestamp=100, changes=changes,
+            )
+        self.assertEqual(client.transport.calls, [])
+        self.assertEqual(client.doc, BASE)
 
     async def test_update_create_delete_and_readback(self):
         client = Client()

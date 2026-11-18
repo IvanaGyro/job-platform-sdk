@@ -4,6 +4,34 @@ The default is still `BrowserTransport`: Patchright authenticates and issues
 same-origin requests. An opt-in `CurlCffiTransport` instead uses `curl_cffi`
 0.17 / Chrome 146 impersonation after a **successful browser login**.
 
+## Latest verified work — 2026-11-19
+
+- **SDK EXPERIENCE CREATE/DELETE/restore:** using one authorized
+  browser login and two independent HTTP transports on the same
+  proxy, a uniquely marked fifth row was created with
+  companyVisibility=True, independently read back, deleted by the
+  SDK, and independently verified to restore the **exact original
+  EXPERIENCE formData** (four original records). BIO was unchanged.
+  Both SDK methods returned verified=true; all private snapshots
+  and logs remain outside the repository.
+- **Earlier residual test row cleanup completed:** the earlier
+  fifth synthetic EXPERIENCE record from a previous mismatched POST
+  was independently identified, deleted through the SDK, and the
+  entire original section was restored exactly. No pending synthetic
+  EXPERIENCE residue remains in the verified read-back.
+- **Privacy preflight:** 104 previously changed submitted
+  companyVisibility=false into true. The SDK now refuses this
+  unsupported EXPERIENCE CREATE *before writing*. The successful
+  live CREATE used true, not an unverified normalization.
+- **PDA 403 fallback:** independent curl and Chromium checks showed
+  the PDA entry page can return 403 while official sign-in succeeds.
+  A non-challenge 403 on PDA entry is logged and then followed by
+  the official sign-in path; `cf-mitigated: challenge` remains a
+  hard stop. In a subsequent single-attempt-per-proxy round,
+  four of ten proxies completed login and authenticated overview
+  checks. This does not guarantee future availability or establish
+  that every 403 was issued by Cloudflare.
+
 ## Session lifecycle
 
 1. `FreshBrowserSession` signs in using its selected proxy (including MFA).
@@ -126,9 +154,12 @@ proxies in the new list failed unauthenticated requests to both a
 public TLS diagnostic site and the 104 login page with curl error 7.
 Therefore **no usable current transport** was established, no
 Cloudflare 403 was proven, and no EXPERIENCE DELETE was submitted.
-The synthetic EXPERIENCE record still needs exact restoration.
-Avoid repeating logins until a proxy passes the unauthenticated
-connectivity check.
+**Historical status only:** the initial residual EXPERIENCE record
+was subsequently removed with an independently verified SDK DELETE
+on 2026-11-19. Later binary-curl and browser diagnostics showed
+client-specific responses even when an earlier curl_cffi connection
+failed. Prefer recent, per-client connectivity evidence, not a
+single old error, and do not repeatedly log in without cause.
 
 ## Test evidence
 
@@ -211,11 +242,11 @@ connectivity check.
   a mismatch: companyVisibility=false was stored as true, so SDK
   verification failed. A later GET ordered the records
   [4,5,3,2,1]. The parser has been fixed to accept contiguous
-  sort-key permutations. **The EXPERIENCE synthetic row still
-  requires cleanup**: the initial DELETE was rejected by the old
-  parser, and later recovery login failed. Both known proxies (#4,
-  #2) failed unauthenticated public GETs with curl code 7. Do not
-  repeat sign-ins or claim restoration until independent verification.
+  sort-key permutations. **This was a historical blocker:**
+  the original residual row was later removed on 2026-11-19
+  with independently verified SDK DELETE and exact restoration.
+  A second live SDK CREATE/DELETE round trip also completed with
+  companyVisibility=True. See the latest checkpoint above.
 - **Intermittent transport issue:** with the same login Proxy #4 and valid
   Chromium session, curl code 7 (connection failure before any HTTP status)
   appeared at times for **both** synchronous and asynchronous curl variants,

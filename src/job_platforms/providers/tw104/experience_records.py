@@ -1,10 +1,11 @@
-"""104-native EXPERIENCE record CRUD (source-mapped, not live-write verified).
+"""104-native EXPERIENCE record CRUD (source-mapped; selected live verified).
 
 104 editor frontend: module f30d, postData(), /resumeByBlock/experience.
 It rejects unknown fields and selector variants, but accepts any ordering
-of distinct, contiguous server sort keys. A real POST persisted one synthetic
-record but 104 coerced companyVisibility=false to true; this remains an
-unverified CREATE because the resulting value differs from the request.
+of distinct, contiguous server sort keys. An authorized 104 POST with
+companyVisibility=True completed SDK create/delete/read-back/restore on
+2026-11-19. A previous POST with companyVisibility=False was persisted as
+True; until upstream honors false, a private-company CREATE must fail closed.
 """
 from __future__ import annotations
 
@@ -193,6 +194,15 @@ def experience_operation_body(
     if action == "create":
         if position is not None or set(changes) != EDITABLE_FIELDS:
             raise UnsupportedWrite("104 EXPERIENCE create needs all editable native fields")
+        # Real 104 POST of companyVisibility=False persisted as True.
+        # This alters the user's privacy choice and leaves a record visible
+        # even when post-write verification raises. Fail BEFORE submission.
+        # True was independently verified in a reversible live POST cycle.
+        if changes.get("companyVisibility") is not True:
+            raise UnsupportedWrite(
+                "104 EXPERIENCE create with companyVisibility=False is "
+                "not verified: upstream persisted True; refusing unsafe write"
+            )
         row = {**changes, "logo": "", "sort": len(records) + 1}
     else:
         if isinstance(position, bool) or not isinstance(position, int) or not 1 <= position <= len(records):

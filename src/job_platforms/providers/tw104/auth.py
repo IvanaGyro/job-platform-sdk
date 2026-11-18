@@ -343,10 +343,24 @@ class FreshBrowserSession:
                     "https://pda.104.com.tw/work/peruseRecord/",
                     wait_until="domcontentloaded", timeout=24000,
                 )
-                _reject_prelogin_http_response(response)
-                await page.wait_for_timeout(1800)
+                # PDA is not the login endpoint. An entry-page 403 can
+                # coexist with a working official 104 sign-in page.
+                # Record HTTP/CF evidence and try the normal sign-in page.
+                # Explicit Cloudflare challenges and 429 never fall back.
+                entry_denied = (
+                    response is not None and response.status == 403
+                    and _cloudflare_signal(response.headers) != "challenge"
+                )
+                if entry_denied:
+                    self.prelogin_diagnostics.append(PreloginDiagnostic(
+                        index, stage, "pda_entry_403_try_official_signin",
+                        403, _cloudflare_signal(response.headers),
+                    ))
+                else:
+                    _reject_prelogin_http_response(response)
+                    await page.wait_for_timeout(1800)
                 stage = "pda_profile_navigation"
-                if await page.locator("input#identity:visible").count() != 1:
+                if not entry_denied and await page.locator("input#identity:visible").count() != 1:
                     response = await page.goto(
                         "https://pda.104.com.tw/profile",
                         wait_until="domcontentloaded", timeout=24000,

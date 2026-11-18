@@ -74,33 +74,36 @@ async with FreshBrowserSession(AuthConfig.from_env()) as session:
 - Respect the user's instruction to keep PRs open until explicitly asked to
   merge. Complete 104 coverage before adding Cake, Yourator or Greenhouse.
 
-## Active 104 integration-test recovery (2026-11-18)
+## Completed 104 integration-test recovery (2026-11-19)
 
-**Do not start further mutable live tests until this is resolved.** On the
-designated disposable 104 test resume, a real EXPERIENCE POST persisted one
-uniquely named synthetic fifth record; its upstream `companyVisibility`
-became `true` despite a submitted `false`. The old SDK rejected deletion
-because it assumed a monotonic GET array, but a later GET returned the valid
-sort-key permutation `[4, 5, 3, 2, 1]`. The sort-key parser has since
-been fixed. The synthetic item has **still not been restored**.
+The uniquely marked fifth EXPERIENCE test record from 2026-11-18 was
+**successfully removed** on 2026-11-19. One successful browser login
+on the new private proxy list provided two independent HTTP transports.
+The writer's SDK DELETE reported verified=true, and the second
+transport's GET proved the entire original EXPERIENCE formData and
+the four original rows were restored **field-for-field as structured
+JSON** against the private backup. The previous hold on live writes
+due to this specific synthetic residue is now lifted.
 
-The original 4 EXPERIENCE records and section metadata were independently
-confirmed unchanged in a private diagnostic snapshot. Private backups and
-recovery scripts are retained in the original Modal workspace outside Git.
-The original proxies subsequently failed even unauthenticated
-connectivity tests (curl code 7). The newer ten-proxy list contained two
-previously authenticated proxies, but **all ten** failed unauthenticated
-public TLS/104 connectivity checks in the 2026-11-18 continuation.
-**Do not repeatedly attempt login** while the proxy transport is
-unavailable. Consult the `prelogin_diagnostics` stage/status/Cloudflare
-evidence; a browser navigation error is not an observed HTTP 403.
-When connectivity is restored, make one
-authorized login, independent read-back on two transports, identify exactly
-one synthetic record by its unique marker *and sort value* (not array index),
-compare the original four against the private backup, delete only the
-synthetic record using a fresh timestamp, and independently verify complete
-restoration. Stop on any ambiguous state or result. The user has not
-authorized modifying other entries.
+A separate authorized 2026-11-19 SDK cycle then **created** a uniquely
+marked fifth EXPERIENCE row with companyVisibility=True, independently
+read it, SDK-deleted it, and independently verified exact restoration
+of all four original EXPERIENCE rows and unchanged BIO. Both SDK
+CREATE and DELETE reported verified=true. All real private backups
+and diagnostic logs remain outside Git. Never leave test rows in a
+user's resume, and always verify restoration after an uncertain reply.
+
+**Privacy guard:** a prior POST with companyVisibility=False was
+persisted by 104 as True. New EXPERIENCE CREATE requests with False
+now fail *before the HTTP write* instead of risking a public entry.
+This behavior is not silently normalized. No claim is made that 104
+supports creating a hidden-company record.
+
+**Sign-in guard:** PDA entry HTTP 403 does not necessarily mean that
+the official signin.104.com.tw login flow is blocked. The adapter
+retains HTTP/Cloudflare evidence and, for a non-challenge 403, attempts
+the official sign-in before classifying login failure. Do not bypass
+explicit Cloudflare challenges, and authenticate only as needed.
 
 In short: **authenticate once per planned live batch, reuse the session for
 many operations, refresh document state when needed, and reauthenticate only

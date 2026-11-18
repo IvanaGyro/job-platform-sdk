@@ -282,8 +282,13 @@ private Modal directory. They are never part of the public repository.
   A later GET returned sort IDs in order [4,5,3,2,1] instead of a
   monotonic array. Use unique, contiguous sort IDs as record identifiers,
   never array indices; duplicate/gapped sort IDs remain unsupported.
-  The synthetic record remains **pending cleanup** while both original
-  proxy connections are unavailable. No live DELETE success is claimed.
+  The original synthetic record was **SDK-deleted on 2026-11-19** and
+  two independent HTTP transports verified the exact original section.
+  A subsequent live CREATE with companyVisibility=True returned
+  SDK verified=true, was independently read back, then SDK-deleted
+  with exact restoration. CREATE with companyVisibility=False is
+  now explicitly blocked **before HTTP** because 104 was observed
+  coercing False to True. Hidden-company CREATE remains unverified.
 - LANGUAGE local: one authenticated SDK POST/DELETE cycle passed two
   independent original-proxy HTTP-session GETs and exact original full
   formData restoration. FOREIGN POST/DELETE is not yet verified.

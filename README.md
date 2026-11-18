@@ -18,7 +18,7 @@ authentication has expired or a new browser-only context is genuinely needed.
 | Read full resume | Live tested | Planned | Planned | Platform-dependent |
 | Create resume | Browser flow tested; SDK not yet live-tested | Planned | Planned | Platform-dependent |
 | Edit multiple fields locally | JSON Patch supported | Planned | Planned | Platform-dependent |
-| Persist edits to website | **BIO live-tested; other mapped fields experimental** | Planned | Planned | Platform-dependent |
+| Persist edits to website | **Selected native fields/record CRUD live-tested; other mapped fields experimental** | Planned | Planned | Platform-dependent |
 | HTTP wrapper | Mock-tested | Planned | Planned | Planned |
 
 The SDK does **not** claim successful persistence from local-only edits. Unsupported write operations return an explicit error.
@@ -533,9 +533,14 @@ there has been no real 104 write/read-back/restore test.
 ### More experimental 104-native operations
 
 These operations are implemented as separate methods, not as arbitrary JSON
-Patch replacement of whole record arrays. **They have only synthetic tests,
-not real 104 write/read-back/restore verification.** Use the original site or
-source to confirm any upstream changes before enabling writes.
+Patch replacement of whole record arrays. Their validation levels vary:
+**EXPERIENCE CREATE (companyVisibility=True) and DELETE, and LANGUAGE local
+CREATE/DELETE, were live-verified with independent read-back and exact
+restoration**; other cases remain experimental. The 104 site previously
+changed companyVisibility=False into True on EXPERIENCE CREATE, so the SDK
+now rejects that unsupported privacy choice *before* any write.
+See [104 coverage](docs/tw104-editor-coverage.md) for per-operation evidence.
+Use the upstream source and a private backup before other experimental writes.
 
 | Operation | Python SDK | HTTP endpoint |
 |---|---|---|

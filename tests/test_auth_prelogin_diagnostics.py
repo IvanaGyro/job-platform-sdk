@@ -101,7 +101,7 @@ class PreloginDiagnosticsTests(unittest.IsolatedAsyncioTestCase):
                     await session.open()
             message = str(err.exception)
             self.assertTrue(browser.closed)
-            self.assertEqual(len(session.prelogin_diagnostics), 1)
+            self.assertGreaterEqual(len(session.prelogin_diagnostics), 1)
             for secret in ("fake-password", "private-account", "private-password",
                            "host.invalid"):
                 self.assertNotIn(secret, message)
@@ -140,13 +140,18 @@ class PreloginDiagnosticsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(diagnostic.cloudflare, "edge_headers")
         self.assertIn("login_init_http_error", message)
 
-    async def test_navigation_403_without_cloudflare_is_unconfirmed(self):
-        diagnostic, _ = await self.check_failure(nav_status={
-            "https://pda.104.com.tw/work/peruseRecord/": FakeResponse(403)
-        })
+    async def test_navigation_403_without_cloudflare_falls_back_to_signin(self):
+        diagnostic, message = await self.check_failure(
+            nav_status={
+                "https://pda.104.com.tw/work/peruseRecord/": FakeResponse(403)
+            },
+            init_status=403,
+        )
         self.assertEqual(diagnostic.stage, "pda_entry_navigation")
+        self.assertEqual(diagnostic.reason, "pda_entry_403_try_official_signin")
         self.assertEqual(diagnostic.http_status, 403)
         self.assertEqual(diagnostic.cloudflare, "unconfirmed")
+        self.assertIn("stage=login_init", message)
 
     async def test_playwright_exception_does_not_leak_proxy_or_password(self):
         diagnostic, message = await self.check_failure(nav_errors={
