@@ -134,6 +134,31 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(corrected.status_code, 200)
         self.assertEqual([method for method, _ in fake.transport.calls], ["POST"])
 
+    async def test_language_capacity_rejection_does_not_reserve_idempotency_key(self):
+        fake = LanguageClient()
+        fake.input_fields["language"]["local"]["count"] = 1
+        self.app.state.client = fake
+        changes = {
+            "type": {"text": "客語", "value": 2},
+            "level": {"text": "精通", "value": 2},
+        }
+        key = "language-capacity-denied-001"
+        rejection = await self.http.post(
+            LANGUAGES, json=changes, headers=self.headers(key=key)
+        )
+        self.assertEqual(rejection.status_code, 422)
+        self.assertEqual(fake.transport.calls, [])
+        self.assertNotIn(
+            ("LANGUAGE", "synthetic", "local", key),
+            self.app.state.idempotency_results,
+        )
+        fake.input_fields["language"]["local"]["count"] = 2
+        success = await self.http.post(
+            LANGUAGES, json=changes, headers=self.headers(key=key)
+        )
+        self.assertEqual(success.status_code, 200)
+        self.assertEqual([method for method, _ in fake.transport.calls], ["POST"])
+
     async def test_language_stale_invalid_and_ambiguous(self):
         fake = LanguageClient(ambiguous=True)
         self.app.state.client = fake

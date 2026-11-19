@@ -322,7 +322,14 @@ private Modal directory. They are never part of the public repository.
   catalogs fail without HTTP mutation. This check is local/synthetic-tested;
   it does not establish unique foreign CREATE/DELETE live success. Native
   editor count limits (`inputValidation`/`staInputField`) are a separate
-  conditional branch and are not yet source-validated in the SDK.
+  conditional branch. The frontend `languageMaximum` reads both
+  `foreign.count` and `local.count` from the current `jsonInputField.language`.
+  The 104 legacy GET `/profile/ajax/inputField` has previously returned that
+  field-constraint structure. The SDK and HTTP API now request it before
+  LANGUAGE CREATE, rejecting an absent/malformed count or a full group
+  without reserving an indeterminate write. This is source-mapped and
+  synthetic-tested; a new live count preflight was attempted but did not
+  complete, so the current server contract is not newly live-confirmed.
 - LANGUAGE FOREIGN duplicate-type POST (2026-11-19): when the existing
   foreign record had the same type selector as a proposed second one,
   104 **overwrote the original row**, instead of appending a new row.

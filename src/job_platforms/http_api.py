@@ -44,7 +44,8 @@ from job_platforms.providers.tw104.custom_text_contract import (
     custom_delete_body,
 )
 from job_platforms.providers.tw104.language_records import (
-    language_operation_body, validate_language_selectors,
+    language_operation_body, language_lists,
+    validate_language_selectors, validate_language_capacity,
     KINDS as LANGUAGE_KINDS,
 )
 from job_platforms.providers.tw104.layout_theme import THEME_OPTION_KEYS, theme_body
@@ -1224,6 +1225,15 @@ def create_app(
                 language_operation_body(
                     before, kind, action, changes=changes, position=position
                 )
+                if action == "create":
+                    fields = request.app.state.client._data(
+                        await request.app.state.client.transport.get_json(
+                            "/profile/ajax/inputField"
+                        )
+                    )
+                    validate_language_capacity(
+                        fields, kind, len(language_lists(before)[kind])
+                    )
                 if action != "delete":
                     # Validate current official options before reserving the
                     # Idempotency-Key. An invalid user selection is a definite

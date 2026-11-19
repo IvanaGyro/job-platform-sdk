@@ -90,6 +90,26 @@ def validate_language_selectors(options: dict, kind: str, changes: dict) -> None
             )
 
 
+def validate_language_capacity(fields: dict, kind: str, existing_count: int) -> None:
+    """Check the native editor's current per-kind record-count constraint.
+
+    Source: `language-editor` computes languageMaximum using the `foreign`
+    and `local` `.count` values in GET /profile/ajax/inputField. Only
+    CREATE increases count; UPDATE/DELETE never use this preflight.
+    """
+    if kind not in KINDS or type(existing_count) is not int or existing_count < 0:
+        raise UnsupportedWrite("104 LANGUAGE capacity check invalid")
+    if not isinstance(fields, dict):
+        raise UnsupportedWrite("104 LANGUAGE inputField missing")
+    section = fields.get("language")
+    entry = section.get(kind) if isinstance(section, dict) else None
+    maximum = entry.get("count") if isinstance(entry, dict) else None
+    if type(maximum) is not int or maximum < 1:
+        raise UnsupportedWrite("104 LANGUAGE current capacity unavailable")
+    if existing_count >= maximum:
+        raise UnsupportedWrite("104 LANGUAGE current kind reached site record limit")
+
+
 def _record(row: Any, kind: str) -> dict:
     if kind not in KINDS:
         raise UnsupportedWrite("104 LANGUAGE kind must be local or foreign")
@@ -118,10 +138,20 @@ def language_lists(document: dict) -> dict[str, list[dict]]:
         isinstance(data.get(kind), list) for kind in KINDS
     ):
         raise UnsupportedWrite("104 LANGUAGE collections missing")
-    records = {kind: [_record(x, kind) for x in data[kind]] for kind in KINDS}
+    records = {kind: sorted((_record(x, kind) for x in data[kind]),
+                            key=lambda row: row["sort"]) for kind in KINDS}
     for kind, rows in records.items():
+        # GET array order is not guaranteed to be the numeric sort order.
+        # The native DELETE/UPDATE contract identifies records by sort (not
+        # by raw array position), so normalize only a unique contiguous set.
         if [row["sort"] for row in rows] != list(range(1, len(rows) + 1)):
-            raise UnsupportedWrite(f"104 LANGUAGE {kind} sorts not sequential")
+            raise UnsupportedWrite(f"104 LANGUAGE {kind} sort identifiers not contiguous")
+        # The deployed UI uses per-kind language IDs as distinct identities
+        # during INSERT. When GET itself contains duplicate IDs, neither a
+        # position-only UPDATE nor a new CREATE has safe identity semantics.
+        ids = [_type_id(row["type"]) for row in rows]
+        if len(ids) != len(set(ids)):
+            raise UnsupportedWrite(f"104 LANGUAGE {kind} contains duplicate IDs")
     return records
 
 
@@ -214,7 +244,12 @@ def verify_language_operation(
 ) -> bool:
     old = language_lists(before)
     new = language_lists(after)
-    if before["language"]["formData"]["themeChoose"] != after["language"]["formData"]["themeChoose"]:
+    # Protect every non-record field, including unknown future metadata. An
+    # unrelated change must never count as a verified LANGUAGE mutation.
+    old_form = before["language"]["formData"]
+    new_form = after["language"]["formData"]
+    if ({k: v for k, v in old_form.items() if k != "languages"}
+            != {k: v for k, v in new_form.items() if k != "languages"}):
         return False
     other = "local" if kind == "foreign" else "foreign"
     if old[other] != new[other]:
@@ -242,5 +277,11 @@ def verify_language_operation(
         if len(current) != len(originals) - 1:
             return False
         expected = originals[:position - 1] + originals[position:]
-        return [project(x) for x in current] == [project(x) for x in expected]
+        # DELETE renumbers the survivors' sort fields. Compare everything
+        # else, especially FOREIGN certificate links; _wire/project would
+        # silently omit those links and could report a destructive success.
+        def without_sort(row: dict) -> dict:
+            return {key: value for key, value in row.items() if key != "sort"}
+        return ([without_sort(x) for x in current]
+                == [without_sort(x) for x in expected])
     return False

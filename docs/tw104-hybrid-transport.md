@@ -4,6 +4,22 @@ The default is still `BrowserTransport`: Patchright authenticates and issues
 same-origin requests. An opt-in `CurlCffiTransport` instead uses `curl_cffi`
 0.17 / Chrome 146 impersonation after a **successful browser login**.
 
+## Guarded 2026-11-20 continuation — no new real mutations
+
+- LANGUAGE DELETE verification now protects surviving FOREIGN certificate
+  associations and all unrelated section metadata, not just option IDs.
+  GET arrays may arrive out of `sort` order; the SDK normalizes only unique
+  contiguous identifiers and rejects duplicate language IDs.
+- LANGUAGE CREATE checks the current `GET /profile/ajax/inputField`
+  per-kind `count` limit before POST. Source-mapped and synthetic-tested,
+  not a new live successful create.
+- Three private single-login attempts stopped before HTTP writes: #4
+  browser authenticated but detached HTTP resume access failed; #6 detached
+  HTTP resume reads succeeded but BFF input-validation GET was denied; a
+  final #6 browser login failed. These failures are not interpreted as a
+  Cloudflare challenge or proof of expired cookies. No real resume record
+  was changed in these test attempts. No repeated login attempts followed.
+
 ## Latest verified work — 2026-11-19
 
 - **LANGUAGE selector preflight (source + synthetic):** the frontend

@@ -26,7 +26,8 @@ from .layout_theme import (
 )
 from .language_records import (
     KINDS as LANGUAGE_KINDS, language_lists, language_operation_body,
-    validate_language_selectors, verify_language_operation,
+    validate_language_selectors, validate_language_capacity,
+    verify_language_operation,
 )
 from .bio_actions import bio_action_body, verify_bio_action
 from .certificate_block_actions import (
@@ -934,7 +935,12 @@ class Resume104Client:
             body = language_operation_body(
                 before, kind, action, changes=changes, position=position
             )
-            language_lists(before)
+            records = language_lists(before)
+            if action == "create":
+                fields = self._data(await self.transport.get_json(
+                    "/profile/ajax/inputField"
+                ))
+                validate_language_capacity(fields, kind, len(records[kind]))
             if action != "delete":
                 # Official editor selects from /options lists. Validate those
                 # live and fail before POST/PUT instead of guessing language IDs

@@ -7,6 +7,7 @@ from job_platforms.core.errors import ConflictError, UnsupportedWrite, Verificat
 from job_platforms.providers.tw104.client import Resume104Client
 from job_platforms.providers.tw104.language_records import (
     language_lists, language_operation_body, validate_language_selectors,
+    validate_language_capacity,
     verify_language_operation,
 )
 
@@ -34,6 +35,10 @@ OPTIONS = {
     ],
 }
 
+INPUT_FIELDS = {
+    "language": {"foreign": {"count": 3}, "local": {"count": 3}},
+}
+
 BASE = {
     "resume": {"vno": "synthetic"}, "resumeTimestamp": 100,
     "language": {"formData": {
@@ -50,9 +55,11 @@ class Transport:
         self.ambiguous = ambiguous
 
     async def get_json(self, path):
-        if path != "/profile/ajax/options":
-            raise AssertionError(path)
-        return {"data": deepcopy(OPTIONS)}
+        if path == "/profile/ajax/options":
+            return {"data": deepcopy(OPTIONS)}
+        if path == "/profile/ajax/inputField":
+            return {"data": deepcopy(self.owner.input_fields)}
+        raise AssertionError(path)
 
     async def request(self, method, path, *, params, json_data):
         assert path == "/profile/ajax/resumeByBlock/language"
@@ -104,6 +111,7 @@ class OverwritingTransport(Transport):
 
 class Client(Resume104Client):
     def __init__(self, ambiguous=False):
+        self.input_fields = deepcopy(INPUT_FIELDS)
         self.doc = deepcopy(BASE)
         self.transport = Transport(self, ambiguous)
         self._write_lock = asyncio.Lock()
@@ -171,6 +179,42 @@ class LanguageTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaisesRegex(UnsupportedWrite, "may overwrite"):
                     language_operation_body(BASE, kind, "create", changes=duplicate)
 
+    def test_unordered_native_get_uses_sort_identity_not_array_position(self):
+        before = deepcopy(BASE)
+        second = deepcopy(FOREIGN)
+        second["type"] = {"text": "日文", "value": 2}
+        second["sort"] = 2
+        before["language"]["formData"]["languages"]["foreign"].insert(0, second)
+        self.assertEqual([row["sort"] for row in language_lists(before)["foreign"]], [1, 2])
+        update = language_operation_body(
+            before, "foreign", "update", position=1,
+            changes={"speaking": {"text": "中等", "value": 8}},
+        )
+        self.assertEqual(update["blockValueList"]["language"]["languages"]["foreign"][0]["sort"], 1)
+        deletion = language_operation_body(before, "foreign", "delete", position=2)
+        self.assertEqual(deletion["blockValueList"]["language"]["languages"]["foreign"]["sort"], [2])
+        after = deepcopy(before)
+        after["language"]["formData"]["languages"]["foreign"] = [deepcopy(FOREIGN)]
+        self.assertTrue(verify_language_operation(
+            before, after, "foreign", "delete", body=deletion, position=2,
+        ))
+        before["language"]["formData"]["languages"]["foreign"][0]["sort"] = 3
+        with self.assertRaisesRegex(UnsupportedWrite, "contiguous"):
+            language_lists(before)
+
+    def test_native_duplicate_language_id_records_fail_closed(self):
+        for kind, original in (("foreign", FOREIGN), ("local", LOCAL)):
+            with self.subTest(kind=kind):
+                doc = deepcopy(BASE)
+                other = deepcopy(original)
+                other["sort"] = 2
+                other["type"]["value"] = str(original["type"]["value"])
+                doc["language"]["formData"]["languages"][kind].append(other)
+                with self.assertRaisesRegex(UnsupportedWrite, "duplicate IDs"):
+                    language_lists(doc)
+                with self.assertRaisesRegex(UnsupportedWrite, "duplicate IDs"):
+                    language_operation_body(doc, kind, "delete", position=2)
+
     def test_type_id_normalization_does_not_bypass_duplicate_guard(self):
         changes = {key: deepcopy(value) for key, value in FOREIGN.items()
                    if key not in {"certificate", "sort"}}
@@ -227,6 +271,36 @@ class LanguageTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(client.transport.calls[0][0], "POST")
         self.assertEqual(len(client.doc["language"]["formData"]["languages"]["foreign"]), 1)
         self.assertNotEqual(client.doc, before)
+
+    def test_capacity_uses_current_site_limit_for_each_kind(self):
+        validate_language_capacity(INPUT_FIELDS, "foreign", 1)
+        validate_language_capacity(INPUT_FIELDS, "local", 2)
+        for bad, kind, count in (
+            ({}, "foreign", 1),
+            ({"language": {"foreign": {"count": 1}}}, "foreign", 1),
+            ({"language": {"foreign": {"count": True}}}, "foreign", 0),
+            ({"language": {"foreign": {"count": "3"}}}, "foreign", 1),
+            ({"language": {"foreign": {"count": -1}}}, "foreign", 0),
+            (INPUT_FIELDS, "alien", 0),
+            (INPUT_FIELDS, "local", -1),
+        ):
+            with self.subTest(bad=bad, kind=kind, count=count):
+                with self.assertRaises(UnsupportedWrite):
+                    validate_language_capacity(bad, kind, count)
+
+    async def test_full_language_capacity_fails_before_create_write(self):
+        client = Client()
+        client.input_fields["language"]["foreign"]["count"] = 1
+        changes = {key: deepcopy(value) for key, value in FOREIGN.items()
+                   if key not in {"certificate", "sort"}}
+        changes["type"] = {"text": "日文", "value": 2}
+        with self.assertRaisesRegex(UnsupportedWrite, "record limit"):
+            await client.mutate_language(
+                "synthetic", "foreign", "create", expected_timestamp=100,
+                changes=changes,
+            )
+        self.assertEqual(client.transport.calls, [])
+        self.assertEqual(client.doc, BASE)
 
     def test_uses_distinct_official_option_catalogs_for_foreign_and_local(self):
         validate_language_selectors(OPTIONS, "foreign", {
@@ -311,6 +385,48 @@ class LanguageTests(unittest.IsolatedAsyncioTestCase):
                 "synthetic", "local", "delete", position=1, expected_timestamp=100
             )
         self.assertEqual(len(client.transport.calls), 1)
+
+    def test_delete_requires_all_surviving_certificate_links_unchanged(self):
+        before = deepcopy(BASE)
+        foreign = before["language"]["formData"]["languages"]["foreign"]
+        second = deepcopy(FOREIGN)
+        second["type"] = {"text": "日文", "value": 2}
+        second["sort"] = 2
+        second["certificate"] = [{"id": 123, "title": "Synthetic certificate"}]
+        foreign.append(second)
+        body = language_operation_body(before, "foreign", "delete", position=1)
+        after = deepcopy(before)
+        rows = after["language"]["formData"]["languages"]["foreign"]
+        rows.pop(0)
+        rows[0]["sort"] = 1
+        self.assertTrue(verify_language_operation(
+            before, after, "foreign", "delete", body=body, position=1,
+        ))
+        rows[0]["certificate"] = []
+        self.assertFalse(verify_language_operation(
+            before, after, "foreign", "delete", body=body, position=1,
+        ))
+
+    def test_create_does_not_verify_unrelated_metadata_change(self):
+        before = deepcopy(BASE)
+        changes = {k: deepcopy(v) for k, v in FOREIGN.items()
+                   if k not in {"certificate", "sort"}}
+        changes["type"] = {"text": "日文", "value": 2}
+        body = language_operation_body(before, "foreign", "create", changes=changes)
+        after = deepcopy(before)
+        second = deepcopy(FOREIGN)
+        second["type"] = changes["type"]
+        second["sort"] = 2
+        after["language"]["formData"]["languages"]["foreign"].append(second)
+        # The actual verified new row must reflect the requested field values.
+        after["language"]["formData"]["languages"]["foreign"][-1].update(changes)
+        self.assertTrue(verify_language_operation(
+            before, after, "foreign", "create", body=body, position=None,
+        ))
+        after["language"]["formData"]["unrelatedMetadata"] = "changed"
+        self.assertFalse(verify_language_operation(
+            before, after, "foreign", "create", body=body, position=None,
+        ))
 
     def test_unrelated_language_branch_change_fails_verification(self):
         before = deepcopy(BASE)

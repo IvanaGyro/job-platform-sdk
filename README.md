@@ -566,8 +566,13 @@ LANGUAGE CREATE/UPDATE, the SDK fetches the current 104 `/profile/ajax/options`
 catalog and requires every supplied language/proficiency selector to match
 its numeric ID **and display text**. `optionsForeignType` / `optionsLocalType`
 are separate; `optionsLanguageType` only selects the UI category. Invalid,
-missing or stale option catalogs fail before the write. Use UPDATE to edit an
-existing language. A genuinely new FOREIGN CREATE remains live-unverified.
+missing or stale option catalogs fail before the write. A LANGUAGE CREATE
+also obtains the current per-kind record-count limit from official
+`GET /profile/ajax/inputField`, refusing a missing/malformed limit or a
+full collection before POST. Existing records are identified by unique,
+contiguous `sort` values even when the GET array order differs; duplicate
+language IDs fail closed. Use UPDATE to edit an existing language. A genuinely
+new FOREIGN CREATE remains live-unverified.
 Theme selections are validated against `GET /profile/ajax/options`, not a
 locally guessed numeric range. Sorting permits **adjacent** SKILL/EDUCATION swaps and **adjacent**
 local/foreign LANGUAGE swaps. The language group is an explicit kind

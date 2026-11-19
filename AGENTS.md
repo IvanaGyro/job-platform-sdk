@@ -109,6 +109,16 @@ Do not attempt another same-kind duplicate type CREATE; the SDK now
 rejects it *before HTTP*. Use UPDATE for an existing type. A genuinely
 new FOREIGN type CREATE/DELETE remains unverified live.
 
+**2026-11-20 guarded FOREIGN CREATE attempts:** no real mutations were
+submitted. Proxy index #4 browser login succeeded but detached HTTP resume
+access failed. Index #6 completed two independent HTTP resume GETs, but a
+BFF input-validation read was denied. A final #6 browser login failed;
+authentication retries stopped. Offline code now guards the official native
+`/profile/ajax/inputField` per-kind count before CREATE; however, this
+count preflight and unique foreign CREATE/DELETE were **not** live verified
+in this continuation. Do not resume an unverified write by blindly POSTing;
+revalidate the test resume and backup from a fresh authorized session first.
+
 **Sign-in guard:** PDA entry HTTP 403 does not necessarily mean that
 the official signin.104.com.tw login flow is blocked. The adapter
 retains HTTP/Cloudflare evidence and, for a non-challenge 403, attempts
