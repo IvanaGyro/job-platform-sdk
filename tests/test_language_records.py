@@ -9,10 +9,10 @@ from job_platforms.providers.tw104.language_records import (
     language_lists, language_operation_body, verify_language_operation,
 )
 
-LOCAL = {"type": {"text": "Mandarin", "value": 1},
+LOCAL = {"type": {"text": "Taiwanese Hokkien", "value": 1},
          "level": {"text": "Fluent", "value": 4}, "sort": 1}
 FOREIGN = {
-    "type": {"text": "English", "value": 2},
+    "type": {"text": "English", "value": 1},
     "listening": {"text": "Fluent", "value": 4},
     "speaking": {"text": "Good", "value": 3},
     "reading": {"text": "Fluent", "value": 4},
@@ -81,6 +81,7 @@ class Client(Resume104Client):
 class LanguageTests(unittest.IsolatedAsyncioTestCase):
     def test_create_update_delete_native_buckets(self):
         foreign_fields = {k: deepcopy(v) for k, v in FOREIGN.items() if k not in ("certificate", "sort")}
+        foreign_fields["type"] = {"text": "Japanese", "value": 2}
         body = language_operation_body(BASE, "foreign", "create", changes=foreign_fields)
         self.assertEqual(
             body["blockValueList"]["language"]["languages"]["foreign"],
@@ -121,6 +122,41 @@ class LanguageTests(unittest.IsolatedAsyncioTestCase):
             language_operation_body(doc, "foreign", "update", position=1,
                                     changes={"speaking": {"text": "OK", "value": 2}})
 
+    def test_duplicate_type_create_is_rejected_before_wire_serialization(self):
+        for kind, record, ignored in (
+            ("foreign", FOREIGN, {"certificate", "sort"}),
+            ("local", LOCAL, {"sort"}),
+        ):
+            with self.subTest(kind=kind):
+                duplicate = {key: deepcopy(value) for key, value in record.items()
+                             if key not in ignored}
+                with self.assertRaisesRegex(UnsupportedWrite, "may overwrite"):
+                    language_operation_body(BASE, kind, "create", changes=duplicate)
+                duplicate["type"]["value"] = str(record["type"]["value"])
+                with self.assertRaisesRegex(UnsupportedWrite, "may overwrite"):
+                    language_operation_body(BASE, kind, "create", changes=duplicate)
+
+    def test_type_id_normalization_does_not_bypass_duplicate_guard(self):
+        changes = {key: deepcopy(value) for key, value in FOREIGN.items()
+                   if key not in {"certificate", "sort"}}
+        for raw in ("1", "01", "+1", "1.0", 0, -1, "一", True):
+            with self.subTest(raw=raw):
+                changes["type"]["value"] = raw
+                with self.assertRaises(UnsupportedWrite):
+                    language_operation_body(BASE, "foreign", "create", changes=changes)
+
+    async def test_duplicate_foreign_type_create_never_sends_http_request(self):
+        client = Client()
+        existing = {key: deepcopy(value) for key, value in FOREIGN.items()
+                    if key not in {"certificate", "sort"}}
+        with self.assertRaises(UnsupportedWrite):
+            await client.mutate_language(
+                "synthetic", "foreign", "create", expected_timestamp=100,
+                changes=existing,
+            )
+        self.assertEqual(client.transport.calls, [])
+        self.assertEqual(client.doc, BASE)
+
     async def test_local_update_and_foreign_create_delete(self):
         client = Client()
         changed = await client.mutate_language(
@@ -129,6 +165,7 @@ class LanguageTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertTrue(changed["verified"])
         fields = {k: deepcopy(v) for k, v in FOREIGN.items() if k not in ("certificate", "sort")}
+        fields["type"] = {"text": "Japanese", "value": 2}
         created = await client.mutate_language(
             "synthetic", "foreign", "create", expected_timestamp=client.doc["resumeTimestamp"],
             changes=fields,

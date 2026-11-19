@@ -6,6 +6,14 @@ same-origin requests. An opt-in `CurlCffiTransport` instead uses `curl_cffi`
 
 ## Latest verified work — 2026-11-19
 
+- **LANGUAGE FOREIGN duplicate type observed:** one real POST attempted
+  to CREATE a second foreign row with an already-present type; instead
+  the existing row was overwritten. The SDK reported the CREATE as
+  unverified, then performed a guarded SDK UPDATE restoring the exact
+  original LANGUAGE formData; a second HTTP transport independently
+  verified the restoration. The SDK now rejects duplicate same-kind
+  LANGUAGE CREATE **before sending HTTP**, rather than risking another
+  silent overwrite. A unique FOREIGN CREATE/DELETE remains unverified.
 - **SDK EXPERIENCE CREATE/DELETE/restore:** using one authorized
   browser login and two independent HTTP transports on the same
   proxy, a uniquely marked fifth row was created with

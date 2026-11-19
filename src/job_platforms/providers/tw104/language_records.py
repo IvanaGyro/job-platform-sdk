@@ -1,9 +1,10 @@
-"""Source-mapped 104 LANGUAGE local / foreign record CRUD.
+"""104 LANGUAGE local/foreign record CRUD with duplicate-type protection.
 
 104 Vuex module 96e2: local and foreign are independent arrays, with
-different selector fields and separate delete/sort payloads. Certificate
-associations are NOT managed by these payloads; linked records are blocked
-until association preservation is independently verified.
+different selectors and delete/sort payloads. A real foreign POST with
+an already-present type overwrote its existing row (not a CREATE).
+Reject duplicate same-kind type creates before HTTP. Certificate associations
+are separately managed; linked records are blocked until verified.
 """
 from __future__ import annotations
 
@@ -31,6 +32,21 @@ def _selected(value: Any, field: str) -> str | int:
     if isinstance(selected, bool) or not isinstance(selected, (int, str)) or selected == "":
         raise UnsupportedWrite(f"104 LANGUAGE {field} has invalid value")
     return selected
+
+
+def _type_id(selector: Any) -> int:
+    """Canonical native language ID, scoped to a foreign/local collection.
+
+    Native selector IDs are positive integers. A canonical decimal string is
+    accepted for callers that deserialize form values, but leading-zero or
+    non-decimal forms must never evade the pre-write duplicate guard.
+    """
+    raw = _selected(selector, "type")
+    if isinstance(raw, int) and raw > 0:
+        return raw
+    if isinstance(raw, str) and raw.isascii() and raw.isdecimal() and raw[0] != "0":
+        return int(raw)
+    raise UnsupportedWrite("104 LANGUAGE type must be a positive language ID")
 
 
 def _record(row: Any, kind: str) -> dict:
@@ -97,6 +113,17 @@ def language_operation_body(
     if action == "create":
         if position is not None or set(changes) != EDITABLE[kind]:
             raise UnsupportedWrite("104 LANGUAGE create requires every selector")
+        # On real 104, a FOREIGN POST with an existing type overwrote the
+        # original foreign record instead of appending a second one.
+        # `optionsLanguageType` selects the UI category (foreign/dialect);
+        # each row's `type` selects an actual language within that category.
+        # 104 can overwrite an existing row when a POST reuses its language ID.
+        target_type = _type_id(changes["type"])
+        if any(_type_id(item["type"]) == target_type for item in existing):
+            raise UnsupportedWrite(
+                "104 LANGUAGE create with existing type may overwrite "
+                "the current record; use update instead"
+            )
         row = {
             **changes, "sort": len(existing) + 1,
             **({"certificate": []} if kind == "foreign" else {}),

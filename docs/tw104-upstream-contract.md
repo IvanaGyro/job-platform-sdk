@@ -289,6 +289,25 @@ private Modal directory. They are never part of the public repository.
   with exact restoration. CREATE with companyVisibility=False is
   now explicitly blocked **before HTTP** because 104 was observed
   coercing False to True. Hidden-company CREATE remains unverified.
+- LANGUAGE selector disambiguation: the official frontend's Vuex
+  module `96e2` serializes `language.foreign.type.value` and
+  `language.local.type.value` into the separate native `languages` buckets.
+  `optionsLanguageType` (values `1=外文`, `2=方言`) is an **editor category
+  selector**, not the per-record language identifier. A real read-back has
+  distinct per-kind language labels in `languages.foreign[].type` and
+  `languages.local[].type`; their numeric IDs are scoped to each kind.
+  Accordingly, a duplicate guard must compare row type IDs **within the
+  selected kind**, not across both collections or against the UI category.
+  This is source-mapped plus live-read evidence, not a verified guarantee
+  that every unique-ID FOREIGN POST successfully creates a record.
+- LANGUAGE FOREIGN duplicate-type POST (2026-11-19): when the existing
+  foreign record had the same type selector as a proposed second one,
+  104 **overwrote the original row**, instead of appending a new row.
+  The SDK correctly rejected the supposed CREATE, and the original
+  full LANGUAGE formData was restored via an independently verified SDK
+  UPDATE. The serializer now rejects same-kind duplicate type CREATE
+  before HTTP, for either local or foreign records. Existing types
+  should use UPDATE; truly new FOREIGN CREATE/DELETE remains unverified.
 - LANGUAGE local: one authenticated SDK POST/DELETE cycle passed two
   independent original-proxy HTTP-session GETs and exact original full
   formData restoration. FOREIGN POST/DELETE is not yet verified.

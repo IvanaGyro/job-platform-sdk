@@ -99,6 +99,16 @@ now fail *before the HTTP write* instead of risking a public entry.
 This behavior is not silently normalized. No claim is made that 104
 supports creating a hidden-company record.
 
+**LANGUAGE duplicate-type guard (live observation 2026-11-19):** an
+attempted FOREIGN POST for a type already present in the designated
+resume did **not** append a row. The server silently overwrote the
+existing FOREIGN ability selectors; the SDK rejected the supposed
+CREATE, then a guarded SDK UPDATE exactly restored the original
+LANGUAGE formData, independently verified via a second transport.
+Do not attempt another same-kind duplicate type CREATE; the SDK now
+rejects it *before HTTP*. Use UPDATE for an existing type. A genuinely
+new FOREIGN type CREATE/DELETE remains unverified live.
+
 **Sign-in guard:** PDA entry HTTP 403 does not necessarily mean that
 the official signin.104.com.tw login flow is blocked. The adapter
 retains HTTP/Cloudflare evidence and, for a non-challenge 403, attempts

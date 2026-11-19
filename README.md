@@ -554,6 +554,11 @@ Record methods use 104's native selectors and one-based `sort` positions.
 Experience salary is serialized according to the native job type. Local and
 foreign language proficiency fields differ; changes to linked foreign
 certificates are blocked until the separate association API is mapped.
+A real 104 FOREIGN POST with an existing same-kind type **overwrote the
+original record** instead of adding another; the original was restored.
+The SDK now rejects any LANGUAGE CREATE with a type already present
+in the selected kind before sending a request. Use UPDATE to edit that
+existing record. A genuinely new FOREIGN CREATE remains live-unverified.
 Theme selections are validated against `GET /profile/ajax/options`, not a
 locally guessed numeric range. Sorting permits **adjacent** SKILL/EDUCATION swaps and **adjacent**
 local/foreign LANGUAGE swaps. The language group is an explicit kind
