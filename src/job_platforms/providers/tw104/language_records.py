@@ -87,6 +87,8 @@ def language_lists(document: dict) -> dict[str, list[dict]]:
 def _wire(row: dict, kind: str, *, include_sort: bool) -> dict:
     _record(row, kind)
     result = {key: _selected(row[key], key) for key in EDITABLE[kind]}
+    # Native form option IDs are integers, not alternative language names.
+    result["type"] = _type_id(row["type"])
     if include_sort:
         result["sort"] = row["sort"]
     return result
@@ -133,6 +135,15 @@ def language_operation_body(
             raise UnsupportedWrite("104 LANGUAGE update requires current record position")
         if kind == "foreign" and existing[position - 1]["certificate"]:
             raise UnsupportedWrite("104 LANGUAGE linked certificates require separate handling")
+        if "type" in changes:
+            # PUT by sort with another existing language ID might be treated
+            # upstream as an update to that other language. Reject on overlap.
+            requested_id = _type_id(changes["type"])
+            if any(_type_id(item["type"]) == requested_id
+                   for idx, item in enumerate(existing, start=1) if idx != position):
+                raise UnsupportedWrite(
+                    "104 LANGUAGE update type would collide with another record"
+                )
         row = {**existing[position - 1], **changes}
     record = _wire(row, kind, include_sort=(action == "update"))
     buckets = {"foreign": [], "local": []}

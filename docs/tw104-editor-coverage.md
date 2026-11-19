@@ -78,7 +78,10 @@ is independent.
 - The source-mapped encoder now rejects same-kind LANGUAGE CREATE when
   the target type already exists, before HTTP. Existing types must be
   edited with UPDATE. This rejection applies to both local and foreign
-  to avoid accidental overwrites. It does **not** prove that a genuinely
+  to avoid accidental overwrites. Type-changing UPDATE also rejects
+  collision with another existing language ID, before sending HTTP.
+  Synthetic upstream-overwrite tests reject supposed CREATE success and
+  never resend an ambiguous mutation. This does **not** prove that a genuinely
   new FOREIGN type CREATE is accepted by 104. Certificate associations
   remain excluded.
 

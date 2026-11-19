@@ -557,8 +557,10 @@ certificates are blocked until the separate association API is mapped.
 A real 104 FOREIGN POST with an existing same-kind type **overwrote the
 original record** instead of adding another; the original was restored.
 The SDK now rejects any LANGUAGE CREATE with a type already present
-in the selected kind before sending a request. Use UPDATE to edit that
-existing record. A genuinely new FOREIGN CREATE remains live-unverified.
+in the selected kind before sending a request; UPDATE also rejects
+changing one record's type to another existing record's ID. Canonical
+numeric language IDs are enforced for wire serialization. Use UPDATE to
+edit an existing language. A genuinely new FOREIGN CREATE remains live-unverified.
 Theme selections are validated against `GET /profile/ajax/options`, not a
 locally guessed numeric range. Sorting permits **adjacent** SKILL/EDUCATION swaps and **adjacent**
 local/foreign LANGUAGE swaps. The language group is an explicit kind

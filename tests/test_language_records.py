@@ -67,6 +67,21 @@ class Transport:
         return {"data": {}}
 
 
+class OverwritingTransport(Transport):
+    """Synthetic upstream anomaly: POST edits the first row, not append."""
+
+    async def request(self, method, path, *, params, json_data):
+        if method != "POST":
+            return await super().request(method, path, params=params, json_data=json_data)
+        self.calls.append((method, deepcopy(json_data)))
+        wire = json_data["blockValueList"]["language"]["languages"]["foreign"][0]
+        row = self.owner.doc["language"]["formData"]["languages"]["foreign"][0]
+        for field, value in wire.items():
+            row[field] = {"text": str(value), "value": value}
+        self.owner.doc["resumeTimestamp"] += 1
+        return {"data": {}}
+
+
 class Client(Resume104Client):
     def __init__(self, ambiguous=False):
         self.doc = deepcopy(BASE)
@@ -144,6 +159,39 @@ class LanguageTests(unittest.IsolatedAsyncioTestCase):
                 changes["type"]["value"] = raw
                 with self.assertRaises(UnsupportedWrite):
                     language_operation_body(BASE, "foreign", "create", changes=changes)
+
+    async def test_update_to_other_existing_language_is_rejected_before_http(self):
+        client = Client()
+        second = deepcopy(FOREIGN)
+        second["type"] = {"text": "Japanese", "value": 2}
+        second["sort"] = 2
+        client.doc["language"]["formData"]["languages"]["foreign"].append(second)
+        before = deepcopy(client.doc)
+        with self.assertRaisesRegex(UnsupportedWrite, "collide"):
+            await client.mutate_language(
+                "synthetic", "foreign", "update", position=2,
+                expected_timestamp=100,
+                changes={"type": {"text": "English", "value": "1"}},
+            )
+        self.assertEqual(client.transport.calls, [])
+        self.assertEqual(client.doc, before)
+
+    async def test_unexpected_upstream_create_overwrite_is_not_verified_or_retried(self):
+        client = Client()
+        client.transport = OverwritingTransport(client)
+        before = deepcopy(client.doc)
+        changes = {key: deepcopy(value) for key, value in FOREIGN.items()
+                   if key not in {"certificate", "sort"}}
+        changes["type"] = {"text": "Japanese", "value": 2}
+        with self.assertRaises(VerificationError):
+            await client.mutate_language(
+                "synthetic", "foreign", "create", expected_timestamp=100,
+                changes=changes,
+            )
+        self.assertEqual(len(client.transport.calls), 1)
+        self.assertEqual(client.transport.calls[0][0], "POST")
+        self.assertEqual(len(client.doc["language"]["formData"]["languages"]["foreign"]), 1)
+        self.assertNotEqual(client.doc, before)
 
     async def test_duplicate_foreign_type_create_never_sends_http_request(self):
         client = Client()

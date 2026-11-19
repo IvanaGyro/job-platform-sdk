@@ -307,7 +307,10 @@ private Modal directory. They are never part of the public repository.
   full LANGUAGE formData was restored via an independently verified SDK
   UPDATE. The serializer now rejects same-kind duplicate type CREATE
   before HTTP, for either local or foreign records. Existing types
-  should use UPDATE; truly new FOREIGN CREATE/DELETE remains unverified.
+  should use UPDATE; type-changing UPDATE now also rejects collisions
+  with another existing record in its kind. Numeric ID serialization and
+  synthetic upstream-overwrite regression checks are tested offline.
+  Truly new FOREIGN CREATE/DELETE remains unverified.
 - LANGUAGE local: one authenticated SDK POST/DELETE cycle passed two
   independent original-proxy HTTP-session GETs and exact original full
   formData restoration. FOREIGN POST/DELETE is not yet verified.
