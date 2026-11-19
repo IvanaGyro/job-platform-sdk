@@ -185,6 +185,15 @@ def language_operation_body(
                 raise UnsupportedWrite(
                     "104 LANGUAGE update type would collide with another record"
                 )
+            if requested_id != _type_id(existing[position - 1]["type"]):
+                # The official UI's type-changing edit can DELETE the old
+                # record as a distinct request. This SDK deliberately issues
+                # one request per operation, so a rename cannot be treated as
+                # an ordinary in-place UPDATE until the exact lifecycle is
+                # mapped and independently restored on the test resume.
+                raise UnsupportedWrite(
+                    "104 LANGUAGE changing a record's language type is unverified"
+                )
         row = {**existing[position - 1], **changes}
     record = _wire(row, kind, include_sort=(action == "update"))
     buckets = {"foreign": [], "local": []}

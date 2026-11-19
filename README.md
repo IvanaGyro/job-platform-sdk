@@ -557,8 +557,10 @@ certificates are blocked until the separate association API is mapped.
 A real 104 FOREIGN POST with an existing same-kind type **overwrote the
 original record** instead of adding another; the original was restored.
 The SDK now rejects any LANGUAGE CREATE with a type already present
-in the selected kind before sending a request; UPDATE also rejects
-changing one record's type to another existing record's ID. Canonical
+in the selected kind before sending a request; UPDATE rejects **all**
+language-type changes because the official frontend may delete the old row as
+part of its multi-request edit flow. In-place proficiency UPDATE is supported.
+Canonical
 numeric language IDs are enforced for wire serialization. Before a
 LANGUAGE CREATE/UPDATE, the SDK fetches the current 104 `/profile/ajax/options`
 catalog and requires every supplied language/proficiency selector to match

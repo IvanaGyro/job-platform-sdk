@@ -81,6 +81,9 @@ is independent.
   In the UI's type-changing edit flow, it can then DELETE the former record.
   These behaviors support separate SDK CREATE/UPDATE with explicit collision
   rejection; a create request must never be silently promoted to an edit.
+  Because a type-changing frontend UPDATE can involve deleting the old row,
+  the SDK blocks **every** language type-changing UPDATE for now, including
+  changes to otherwise-unused IDs; proficiency-only UPDATE remains supported.
 - The 104 editor uses `optionsForeignType`/`optionsLocalType`, and separate
   `optionsLanguageForeignLevel`/`optionsLanguageLocalLevel` proficiency lists.
   SDK CREATE/UPDATE now fetches the live option catalog, verifies the value

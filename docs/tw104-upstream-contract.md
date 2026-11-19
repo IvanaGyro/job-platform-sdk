@@ -308,7 +308,8 @@ private Modal directory. They are never part of the public repository.
   type-changing edit, the UI's UPDATE flow can additionally issue a DELETE
   for the old row, so duplicate-ID changes must not be treated as harmless.
   The SDK therefore retains explicit CREATE/UPDATE actions: it rejects
-  same-kind duplicate-ID CREATE and cross-record type-changing UPDATE,
+  same-kind duplicate-ID CREATE and **all** type-changing UPDATE until its
+  multi-request lifecycle is safely confirmed (including collisions),
   rather than silently converting a requested CREATE into a destructive PUT.
 - LANGUAGE options (source-mapped): `optionsForeignType` lists actual foreign
   language IDs, `optionsLocalType` lists dialect IDs, and their speaking,

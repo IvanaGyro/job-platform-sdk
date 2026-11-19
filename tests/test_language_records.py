@@ -196,6 +196,21 @@ class LanguageTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(client.transport.calls, [])
         self.assertEqual(client.doc, before)
 
+    async def test_type_changing_update_with_no_collision_fails_pre_write(self):
+        for kind, different in (
+            ("foreign", {"text": "日文", "value": 2}),
+            ("local", {"text": "客語", "value": 2}),
+        ):
+            with self.subTest(kind=kind):
+                client = Client()
+                with self.assertRaisesRegex(UnsupportedWrite, "unverified"):
+                    await client.mutate_language(
+                        "synthetic", kind, "update", position=1,
+                        expected_timestamp=100, changes={"type": different},
+                    )
+                self.assertEqual(client.transport.calls, [])
+                self.assertEqual(client.doc, BASE)
+
     async def test_unexpected_upstream_create_overwrite_is_not_verified_or_retried(self):
         client = Client()
         client.transport = OverwritingTransport(client)
