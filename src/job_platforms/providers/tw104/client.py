@@ -26,7 +26,7 @@ from .layout_theme import (
 )
 from .language_records import (
     KINDS as LANGUAGE_KINDS, language_lists, language_operation_body,
-    verify_language_operation,
+    validate_language_selectors, verify_language_operation,
 )
 from .bio_actions import bio_action_body, verify_bio_action
 from .certificate_block_actions import (
@@ -935,6 +935,14 @@ class Resume104Client:
                 before, kind, action, changes=changes, position=position
             )
             language_lists(before)
+            if action != "delete":
+                # Official editor selects from /options lists. Validate those
+                # live and fail before POST/PUT instead of guessing language IDs
+                # or silently accepting mismatched displayed language labels.
+                options = self._data(await self.transport.get_json(
+                    "/profile/ajax/options"
+                ))
+                validate_language_selectors(options, kind, changes)
             method = {"create": "POST", "update": "PUT", "delete": "DELETE"}[action]
             await self.transport.request(
                 method,

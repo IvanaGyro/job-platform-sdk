@@ -43,7 +43,10 @@ from job_platforms.providers.tw104.custom_text_contract import (
     custom_text_form, custom_text_create_body, custom_text_update_body,
     custom_delete_body,
 )
-from job_platforms.providers.tw104.language_records import language_operation_body, KINDS as LANGUAGE_KINDS
+from job_platforms.providers.tw104.language_records import (
+    language_operation_body, validate_language_selectors,
+    KINDS as LANGUAGE_KINDS,
+)
 from job_platforms.providers.tw104.layout_theme import THEME_OPTION_KEYS, theme_body
 from job_platforms.providers.tw104.record_sort import SORTABLE, sort_body
 
@@ -1221,6 +1224,16 @@ def create_app(
                 language_operation_body(
                     before, kind, action, changes=changes, position=position
                 )
+                if action != "delete":
+                    # Validate current official options before reserving the
+                    # Idempotency-Key. An invalid user selection is a definite
+                    # preflight rejection, not an indeterminate remote write.
+                    options = request.app.state.client._data(
+                        await request.app.state.client.transport.get_json(
+                            "/profile/ajax/options"
+                        )
+                    )
+                    validate_language_selectors(options, kind, changes)
             except (ValueError, KeyError, TypeError, IndexError, UnsupportedWrite):
                 raise HTTPException(
                     422, "Invalid LANGUAGE fields or record position"

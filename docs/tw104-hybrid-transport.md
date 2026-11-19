@@ -6,6 +6,12 @@ same-origin requests. An opt-in `CurlCffiTransport` instead uses `curl_cffi`
 
 ## Latest verified work — 2026-11-19
 
+- **LANGUAGE selector preflight (source + synthetic):** the frontend
+  chooses actual foreign/dialect IDs from different option arrays and its
+  INSERT action uses PUT for an existing same-kind ID, POST only for a new
+  ID. SDK CREATE/UPDATE now uses a read-only current options GET to validate
+  all supplied language and proficiency selectors before any HTTP write.
+  This is not a new live foreign CREATE verification.
 - **LANGUAGE FOREIGN duplicate type observed:** one real POST attempted
   to CREATE a second foreign row with an already-present type; instead
   the existing row was overwritten. The SDK reported the CREATE as

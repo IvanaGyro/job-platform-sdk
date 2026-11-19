@@ -559,8 +559,13 @@ original record** instead of adding another; the original was restored.
 The SDK now rejects any LANGUAGE CREATE with a type already present
 in the selected kind before sending a request; UPDATE also rejects
 changing one record's type to another existing record's ID. Canonical
-numeric language IDs are enforced for wire serialization. Use UPDATE to
-edit an existing language. A genuinely new FOREIGN CREATE remains live-unverified.
+numeric language IDs are enforced for wire serialization. Before a
+LANGUAGE CREATE/UPDATE, the SDK fetches the current 104 `/profile/ajax/options`
+catalog and requires every supplied language/proficiency selector to match
+its numeric ID **and display text**. `optionsForeignType` / `optionsLocalType`
+are separate; `optionsLanguageType` only selects the UI category. Invalid,
+missing or stale option catalogs fail before the write. Use UPDATE to edit an
+existing language. A genuinely new FOREIGN CREATE remains live-unverified.
 Theme selections are validated against `GET /profile/ajax/options`, not a
 locally guessed numeric range. Sorting permits **adjacent** SKILL/EDUCATION swaps and **adjacent**
 local/foreign LANGUAGE swaps. The language group is an explicit kind

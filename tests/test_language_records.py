@@ -6,19 +6,34 @@ import unittest
 from job_platforms.core.errors import ConflictError, UnsupportedWrite, VerificationError
 from job_platforms.providers.tw104.client import Resume104Client
 from job_platforms.providers.tw104.language_records import (
-    language_lists, language_operation_body, verify_language_operation,
+    language_lists, language_operation_body, validate_language_selectors,
+    verify_language_operation,
 )
 
-LOCAL = {"type": {"text": "Taiwanese Hokkien", "value": 1},
-         "level": {"text": "Fluent", "value": 4}, "sort": 1}
+LOCAL = {"type": {"text": "台語", "value": 1},
+         "level": {"text": "略懂", "value": 4}, "sort": 1}
 FOREIGN = {
-    "type": {"text": "English", "value": 1},
-    "listening": {"text": "Fluent", "value": 4},
-    "speaking": {"text": "Good", "value": 3},
-    "reading": {"text": "Fluent", "value": 4},
-    "writing": {"text": "Good", "value": 3},
+    "type": {"text": "英文", "value": 1},
+    "listening": {"text": "精通", "value": 2},
+    "speaking": {"text": "略懂", "value": 4},
+    "reading": {"text": "精通", "value": 2},
+    "writing": {"text": "略懂", "value": 4},
     "certificate": [], "sort": 1,
 }
+# Public, source-mapped subset of the 104 editor option catalog. No user data.
+OPTIONS = {
+    "optionsForeignType": [{"text": "英文", "value": 1}, {"text": "日文", "value": 2}],
+    "optionsLocalType": [{"text": "台語", "value": 1}, {"text": "客語", "value": 2}],
+    "optionsLanguageForeignLevel": [
+        {"text": "不會", "value": 1}, {"text": "略懂", "value": 4},
+        {"text": "中等", "value": 8}, {"text": "精通", "value": 2},
+    ],
+    "optionsLanguageLocalLevel": [
+        {"text": "略懂", "value": 4}, {"text": "中等", "value": 8},
+        {"text": "精通", "value": 2},
+    ],
+}
+
 BASE = {
     "resume": {"vno": "synthetic"}, "resumeTimestamp": 100,
     "language": {"formData": {
@@ -33,6 +48,11 @@ class Transport:
         self.owner = owner
         self.calls = []
         self.ambiguous = ambiguous
+
+    async def get_json(self, path):
+        if path != "/profile/ajax/options":
+            raise AssertionError(path)
+        return {"data": deepcopy(OPTIONS)}
 
     async def request(self, method, path, *, params, json_data):
         assert path == "/profile/ajax/resumeByBlock/language"
@@ -96,17 +116,17 @@ class Client(Resume104Client):
 class LanguageTests(unittest.IsolatedAsyncioTestCase):
     def test_create_update_delete_native_buckets(self):
         foreign_fields = {k: deepcopy(v) for k, v in FOREIGN.items() if k not in ("certificate", "sort")}
-        foreign_fields["type"] = {"text": "Japanese", "value": 2}
+        foreign_fields["type"] = {"text": "日文", "value": 2}
         body = language_operation_body(BASE, "foreign", "create", changes=foreign_fields)
         self.assertEqual(
             body["blockValueList"]["language"]["languages"]["foreign"],
-            [{"type": 2, "listening": 4, "speaking": 3, "reading": 4, "writing": 3}],
+            [{"type": 2, "listening": 2, "speaking": 4, "reading": 2, "writing": 4}],
         )
         self.assertEqual(body["blockValueList"]["language"]["languages"]["local"], [])
         self.assertEqual(
             language_operation_body(
                 BASE, "local", "update", position=1,
-                changes={"level": {"text": "Good", "value": 3}},
+                changes={"level": {"text": "精通", "value": 2}},
             )["blockValueList"]["language"]["languages"]["local"][0]["sort"], 1
         )
         self.assertEqual(
@@ -163,7 +183,7 @@ class LanguageTests(unittest.IsolatedAsyncioTestCase):
     async def test_update_to_other_existing_language_is_rejected_before_http(self):
         client = Client()
         second = deepcopy(FOREIGN)
-        second["type"] = {"text": "Japanese", "value": 2}
+        second["type"] = {"text": "日文", "value": 2}
         second["sort"] = 2
         client.doc["language"]["formData"]["languages"]["foreign"].append(second)
         before = deepcopy(client.doc)
@@ -171,7 +191,7 @@ class LanguageTests(unittest.IsolatedAsyncioTestCase):
             await client.mutate_language(
                 "synthetic", "foreign", "update", position=2,
                 expected_timestamp=100,
-                changes={"type": {"text": "English", "value": "1"}},
+                changes={"type": {"text": "英文", "value": "1"}},
             )
         self.assertEqual(client.transport.calls, [])
         self.assertEqual(client.doc, before)
@@ -182,7 +202,7 @@ class LanguageTests(unittest.IsolatedAsyncioTestCase):
         before = deepcopy(client.doc)
         changes = {key: deepcopy(value) for key, value in FOREIGN.items()
                    if key not in {"certificate", "sort"}}
-        changes["type"] = {"text": "Japanese", "value": 2}
+        changes["type"] = {"text": "日文", "value": 2}
         with self.assertRaises(VerificationError):
             await client.mutate_language(
                 "synthetic", "foreign", "create", expected_timestamp=100,
@@ -192,6 +212,43 @@ class LanguageTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(client.transport.calls[0][0], "POST")
         self.assertEqual(len(client.doc["language"]["formData"]["languages"]["foreign"]), 1)
         self.assertNotEqual(client.doc, before)
+
+    def test_uses_distinct_official_option_catalogs_for_foreign_and_local(self):
+        validate_language_selectors(OPTIONS, "foreign", {
+            "type": {"text": "日文", "value": "2"},
+            "speaking": {"text": "中等", "value": 8},
+        })
+        validate_language_selectors(OPTIONS, "local", {
+            "type": {"text": "客語", "value": 2},
+            "level": {"text": "精通", "value": 2},
+        })
+        for kind, bad in (
+            ("foreign", {"type": {"text": "外文", "value": 1}}),
+            ("foreign", {"type": {"text": "日文", "value": 1}}),
+            ("foreign", {"type": {"text": "日文", "value": 999}}),
+            ("local", {"type": {"text": "日文", "value": 2}}),
+            ("local", {"level": {"text": "不會", "value": 1}}),
+        ):
+            with self.subTest(kind=kind, bad=bad):
+                with self.assertRaises(UnsupportedWrite):
+                    validate_language_selectors(OPTIONS, kind, bad)
+        with self.assertRaises(UnsupportedWrite):
+            validate_language_selectors({}, "foreign", {"type": {"text": "日文", "value": 2}})
+        bool_options = deepcopy(OPTIONS)
+        bool_options["optionsForeignType"] = [{"text": "英文", "value": True}]
+        with self.assertRaises(UnsupportedWrite):
+            validate_language_selectors(bool_options, "foreign", {"type": {"text": "英文", "value": 1}})
+
+    async def test_wrong_current_site_language_options_fail_before_http(self):
+        client = Client()
+        with self.assertRaises(UnsupportedWrite):
+            await client.mutate_language(
+                "synthetic", "local", "update", position=1,
+                expected_timestamp=100,
+                changes={"type": {"text": "客語", "value": 1}},
+            )
+        self.assertEqual(client.transport.calls, [])
+        self.assertEqual(client.doc, BASE)
 
     async def test_duplicate_foreign_type_create_never_sends_http_request(self):
         client = Client()
@@ -209,11 +266,11 @@ class LanguageTests(unittest.IsolatedAsyncioTestCase):
         client = Client()
         changed = await client.mutate_language(
             "synthetic", "local", "update", position=1, expected_timestamp=100,
-            changes={"level": {"text": "Excellent", "value": 5}},
+            changes={"level": {"text": "精通", "value": 2}},
         )
         self.assertTrue(changed["verified"])
         fields = {k: deepcopy(v) for k, v in FOREIGN.items() if k not in ("certificate", "sort")}
-        fields["type"] = {"text": "Japanese", "value": 2}
+        fields["type"] = {"text": "日文", "value": 2}
         created = await client.mutate_language(
             "synthetic", "foreign", "create", expected_timestamp=client.doc["resumeTimestamp"],
             changes=fields,
@@ -246,10 +303,10 @@ class LanguageTests(unittest.IsolatedAsyncioTestCase):
         after["language"]["formData"]["languages"]["local"][0]["level"]["value"] = 2
         body = language_operation_body(
             before, "foreign", "update", position=1,
-            changes={"speaking": {"text": "Excellent", "value": 5}}
+            changes={"speaking": {"text": "精通", "value": 2}}
         )
         after["language"]["formData"]["languages"]["foreign"][0]["speaking"] = {
-            "text": "Excellent", "value": 5
+            "text": "精通", "value": 2
         }
         self.assertFalse(verify_language_operation(
             before, after, "foreign", "update", body=body, position=1

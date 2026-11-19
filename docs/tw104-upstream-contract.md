@@ -300,6 +300,28 @@ private Modal directory. They are never part of the public repository.
   selected kind**, not across both collections or against the UI category.
   This is source-mapped plus live-read evidence, not a verified guarantee
   that every unique-ID FOREIGN POST successfully creates a record.
+- LANGUAGE editor INSERT semantics (source-mapped from the deployed
+  `FormLanguage` frontend bundle): it consults the **current kind's** array
+  of `type.value` IDs. When an ID is already present, it dispatches UPDATE
+  (`PUT`, using that existing row's `sort`) rather than INSERT. Only a new
+  language ID dispatches INSERT, which delegates to CREATE (`POST`). On a
+  type-changing edit, the UI's UPDATE flow can additionally issue a DELETE
+  for the old row, so duplicate-ID changes must not be treated as harmless.
+  The SDK therefore retains explicit CREATE/UPDATE actions: it rejects
+  same-kind duplicate-ID CREATE and cross-record type-changing UPDATE,
+  rather than silently converting a requested CREATE into a destructive PUT.
+- LANGUAGE options (source-mapped): `optionsForeignType` lists actual foreign
+  language IDs, `optionsLocalType` lists dialect IDs, and their speaking,
+  listening, reading and writing selectors use `optionsLanguageForeignLevel`;
+  dialect proficiency uses `optionsLanguageLocalLevel`. In contrast,
+  `optionsLanguageType` chooses between *foreign* and *dialect* UI categories.
+  Before LANGUAGE POST/PUT, the SDK fetches current `/profile/ajax/options`
+  and requires every supplied selector's `value` **and `text`** to match an
+  official option for its particular kind/field. Noncanonical/missing option
+  catalogs fail without HTTP mutation. This check is local/synthetic-tested;
+  it does not establish unique foreign CREATE/DELETE live success. Native
+  editor count limits (`inputValidation`/`staInputField`) are a separate
+  conditional branch and are not yet source-validated in the SDK.
 - LANGUAGE FOREIGN duplicate-type POST (2026-11-19): when the existing
   foreign record had the same type selector as a proposed second one,
   104 **overwrote the original row**, instead of appending a new row.

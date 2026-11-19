@@ -75,6 +75,18 @@ is independent.
   `languages.local[].type` carry a **concrete language ID within the kind**.
   The frontend module `96e2` serializes these row selectors. A collision
   across the two different collections does not represent a duplicate.
+- The deployed frontend's LANGUAGE INSERT first looks for a matching
+  language ID **in the same kind**. A duplicate dispatches PUT against the
+  existing `sort` instead of POST; a previously unseen ID dispatches POST.
+  In the UI's type-changing edit flow, it can then DELETE the former record.
+  These behaviors support separate SDK CREATE/UPDATE with explicit collision
+  rejection; a create request must never be silently promoted to an edit.
+- The 104 editor uses `optionsForeignType`/`optionsLocalType`, and separate
+  `optionsLanguageForeignLevel`/`optionsLanguageLocalLevel` proficiency lists.
+  SDK CREATE/UPDATE now fetches the live option catalog, verifies the value
+  and text for every submitted selector, and refuses bad/missing options
+  before HTTP. This is **source-mapped and synthetic-tested**, not additional
+  live-write evidence. Editor count limits remain to be mapped.
 - The source-mapped encoder now rejects same-kind LANGUAGE CREATE when
   the target type already exists, before HTTP. Existing types must be
   edited with UPDATE. This rejection applies to both local and foreign

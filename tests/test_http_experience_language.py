@@ -88,12 +88,12 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(bad_kind.status_code, 422)
         updated = await self.http.put(
-            LANGUAGES + "/1", json={"level": {"text": "Excellent", "value": 5}},
+            LANGUAGES + "/1", json={"level": {"text": "精通", "value": 2}},
             headers=self.headers(),
         )
         self.assertEqual(updated.status_code, 200)
         again = await self.http.put(
-            LANGUAGES + "/1", json={"level": {"text": "Excellent", "value": 5}},
+            LANGUAGES + "/1", json={"level": {"text": "精通", "value": 2}},
             headers=self.headers(),
         )
         self.assertEqual(again.status_code, 200)
@@ -105,6 +105,34 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         self.assertEqual(deleted.status_code, 200)
+
+    async def test_language_invalid_option_is_unwritable_over_http(self):
+        fake = LanguageClient()
+        self.app.state.client = fake
+        requested = {
+            "type": {"text": "台語", "value": 2},  # 2 means 客語 in 104 options
+            "level": {"text": "精通", "value": 2},
+        }
+        response = await self.http.post(
+            LANGUAGES, json=requested,
+            headers=self.headers(key="language-invalid-options-001")
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(fake.transport.calls, [])
+        self.assertNotIn(
+            ("LANGUAGE", "synthetic", "local", "language-invalid-options-001"),
+            self.app.state.idempotency_results,
+        )
+        # Reusing the key after a definite validation rejection is safe:
+        # no request was sent and no indeterminate record should exist.
+        corrected = await self.http.post(
+            LANGUAGES, json={
+                "type": {"text": "客語", "value": 2},
+                "level": {"text": "精通", "value": 2},
+            }, headers=self.headers(key="language-invalid-options-001")
+        )
+        self.assertEqual(corrected.status_code, 200)
+        self.assertEqual([method for method, _ in fake.transport.calls], ["POST"])
 
     async def test_language_stale_invalid_and_ambiguous(self):
         fake = LanguageClient(ambiguous=True)

@@ -34,19 +34,60 @@ def _selected(value: Any, field: str) -> str | int:
     return selected
 
 
-def _type_id(selector: Any) -> int:
-    """Canonical native language ID, scoped to a foreign/local collection.
-
-    Native selector IDs are positive integers. A canonical decimal string is
-    accepted for callers that deserialize form values, but leading-zero or
-    non-decimal forms must never evade the pre-write duplicate guard.
-    """
-    raw = _selected(selector, "type")
+def _option_id(selector: Any, field: str) -> int:
+    """Canonical native integer selector ID; reject ambiguous coercions."""
+    raw = _selected(selector, field)
     if isinstance(raw, int) and raw > 0:
         return raw
     if isinstance(raw, str) and raw.isascii() and raw.isdecimal() and raw[0] != "0":
         return int(raw)
-    raise UnsupportedWrite("104 LANGUAGE type must be a positive language ID")
+    raise UnsupportedWrite(f"104 LANGUAGE {field} must be a positive option ID")
+
+
+def _type_id(selector: Any) -> int:
+    return _option_id(selector, "type")
+
+
+# Extracted from official editor `language-editor` component options bindings.
+# `optionsLanguageType` is the UI foreign/dialect category, NOT a record ID.
+LANGUAGE_SELECTOR_OPTIONS = {
+    "foreign": {
+        "type": "optionsForeignType",
+        "listening": "optionsLanguageForeignLevel",
+        "speaking": "optionsLanguageForeignLevel",
+        "reading": "optionsLanguageForeignLevel",
+        "writing": "optionsLanguageForeignLevel",
+    },
+    "local": {
+        "type": "optionsLocalType",
+        "level": "optionsLanguageLocalLevel",
+    },
+}
+
+
+def validate_language_selectors(options: dict, kind: str, changes: dict) -> None:
+    """Fail closed on unlisted or mislabeled selections before HTTP writes.
+
+    Read options live from /profile/ajax/options, not from a baked-in catalog;
+    a language's numeric value is scoped to its own foreign/local list.
+    """
+    if not isinstance(options, dict) or kind not in LANGUAGE_SELECTOR_OPTIONS:
+        raise UnsupportedWrite("104 LANGUAGE options unavailable")
+    for field, selector in changes.items():
+        option_key = LANGUAGE_SELECTOR_OPTIONS[kind].get(field)
+        entries = options.get(option_key) if option_key else None
+        if not isinstance(entries, list):
+            raise UnsupportedWrite(f"104 LANGUAGE {field} option catalog missing")
+        value = _option_id(selector, field)
+        if not isinstance(selector.get("text"), str):
+            raise UnsupportedWrite(f"104 LANGUAGE {field} text missing")
+        matching = [entry for entry in entries if isinstance(entry, dict)
+                    and type(entry.get("value")) is int
+                    and entry["value"] == value]
+        if (len(matching) != 1 or matching[0].get("text") != selector["text"]):
+            raise UnsupportedWrite(
+                f"104 LANGUAGE {field} selector does not match current site options"
+            )
 
 
 def _record(row: Any, kind: str) -> dict:
@@ -86,9 +127,9 @@ def language_lists(document: dict) -> dict[str, list[dict]]:
 
 def _wire(row: dict, kind: str, *, include_sort: bool) -> dict:
     _record(row, kind)
-    result = {key: _selected(row[key], key) for key in EDITABLE[kind]}
-    # Native form option IDs are integers, not alternative language names.
-    result["type"] = _type_id(row["type"])
+    # All source-mapped LANGUAGE native option IDs are numeric, including
+    # proficiency selectors, so do not serialize string IDs as string values.
+    result = {key: _option_id(row[key], key) for key in EDITABLE[kind]}
     if include_sort:
         result["sort"] = row["sort"]
     return result
