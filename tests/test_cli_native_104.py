@@ -5,7 +5,7 @@ import io
 import json
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stdout, redirect_stderr
 from pathlib import Path
 from unittest.mock import patch
 
@@ -41,6 +41,11 @@ class DummyClient:
     async def mutate_referrer(self, version, action, **kwargs):
         self.calls.append(("referrer", version, action, kwargs))
         return {"verified": True}
+
+    async def get_language_editor_options(self, version, kind):
+        self.calls.append(("language-options", version, kind))
+        return {"resume_id": version, "kind": kind, "remaining_capacity": 2,
+                "persisted": False}
 
     async def mutate_language(self, version, kind, action, **kwargs):
         self.calls.append(("language", version, kind, action, kwargs))
@@ -83,6 +88,14 @@ class CLI104Tests(unittest.IsolatedAsyncioTestCase):
         with redirect_stdout(io.StringIO()) as captured:
             await _run(args)
         return json.loads(captured.getvalue())
+
+    async def test_language_options_read_only_cli_dispatch(self):
+        data = await self.execute(["language-options", "synthetic", "foreign"])
+        self.assertEqual(DummyClient.calls, [("language-options", "synthetic", "foreign")])
+        self.assertEqual(data["remaining_capacity"], 2)
+        self.assertFalse(data["persisted"])
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            _parser().parse_args(["language-options", "synthetic", "unknown"])
 
     async def test_experience_and_language_native_dispatch(self):
         with tempfile.TemporaryDirectory() as folder:

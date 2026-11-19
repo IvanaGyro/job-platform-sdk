@@ -27,6 +27,7 @@ from .layout_theme import (
 from .language_records import (
     KINDS as LANGUAGE_KINDS, language_lists, language_operation_body,
     validate_language_selectors, validate_language_capacity,
+    language_editor_choices, language_capacity_limit,
     verify_language_operation,
 )
 from .bio_actions import bio_action_body, verify_bio_action
@@ -119,6 +120,43 @@ class Resume104Client:
         if not isinstance(item, (dict, list)):
             raise ResumeNotFound("Selected resume section is unavailable")
         return item
+
+    async def get_language_editor_options(
+        self, resume_id: str | int, kind: str,
+    ) -> dict:
+        """Read official per-kind LANGUAGE selectors and remaining capacity.
+
+        This method makes no remote writes. An available unused type is not
+        proof that a FOREIGN POST will succeed: unique foreign CREATE is
+        still unverified on the live 104 resume editor.
+        """
+        if kind not in LANGUAGE_KINDS:
+            raise UnsupportedWrite("104 LANGUAGE editor kind unsupported")
+        version = self._version(resume_id)
+        document = await self.get_resume(version)
+        timestamp = document.get("resumeTimestamp")
+        if type(timestamp) not in (int, str) or timestamp == "":
+            raise UnsupportedWrite("104 LANGUAGE current resume revision unavailable")
+        records = language_lists(document)[kind]
+        options = self._data(await self.transport.get_json("/profile/ajax/options"))
+        fields = self._data(await self.transport.get_json("/profile/ajax/inputField"))
+        choices = language_editor_choices(options, kind)
+        maximum = language_capacity_limit(fields, kind)
+        occupied = {int(row["type"]["value"]) for row in records}
+        return {
+            "resume_id": version,
+            "resumeTimestamp": timestamp,
+            "kind": kind,
+            "count": len(records),
+            "maximum": maximum,
+            "remaining_capacity": max(0, maximum - len(records)),
+            "occupied_type_ids": sorted(occupied),
+            "selector_options": choices,
+            "unused_type_options": [option for option in choices["type"]
+                                    if option["value"] not in occupied],
+            "source": "104-native-current-options",
+            "persisted": False,
+        }
 
     async def get_schema(self, resume_id: str | int) -> dict:
         document = await self.get_resume(resume_id)

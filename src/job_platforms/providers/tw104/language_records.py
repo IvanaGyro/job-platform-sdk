@@ -90,6 +90,18 @@ def validate_language_selectors(options: dict, kind: str, changes: dict) -> None
             )
 
 
+def language_capacity_limit(fields: dict, kind: str) -> int:
+    """Read a native maximum from the official editor inputField contract."""
+    if kind not in KINDS or not isinstance(fields, dict):
+        raise UnsupportedWrite("104 LANGUAGE inputField missing or invalid kind")
+    section = fields.get("language")
+    entry = section.get(kind) if isinstance(section, dict) else None
+    maximum = entry.get("count") if isinstance(entry, dict) else None
+    if type(maximum) is not int or maximum < 1:
+        raise UnsupportedWrite("104 LANGUAGE current capacity unavailable")
+    return maximum
+
+
 def validate_language_capacity(fields: dict, kind: str, existing_count: int) -> None:
     """Check the native editor's current per-kind record-count constraint.
 
@@ -97,17 +109,40 @@ def validate_language_capacity(fields: dict, kind: str, existing_count: int) -> 
     and `local` `.count` values in GET /profile/ajax/inputField. Only
     CREATE increases count; UPDATE/DELETE never use this preflight.
     """
-    if kind not in KINDS or type(existing_count) is not int or existing_count < 0:
+    if type(existing_count) is not int or existing_count < 0:
         raise UnsupportedWrite("104 LANGUAGE capacity check invalid")
-    if not isinstance(fields, dict):
-        raise UnsupportedWrite("104 LANGUAGE inputField missing")
-    section = fields.get("language")
-    entry = section.get(kind) if isinstance(section, dict) else None
-    maximum = entry.get("count") if isinstance(entry, dict) else None
-    if type(maximum) is not int or maximum < 1:
-        raise UnsupportedWrite("104 LANGUAGE current capacity unavailable")
+    maximum = language_capacity_limit(fields, kind)
     if existing_count >= maximum:
         raise UnsupportedWrite("104 LANGUAGE current kind reached site record limit")
+
+
+def language_editor_choices(options: dict, kind: str) -> dict[str, list[dict]]:
+    """List current native choices without guessing or exposing raw backend JSON.
+
+    All lists are source-mapped in the deployed language-editor component. A
+    malformed/ambiguous option catalog fails closed (rather than dropping a
+    duplicate option and allowing callers to write against a guessed ID).
+    """
+    if kind not in LANGUAGE_SELECTOR_OPTIONS or not isinstance(options, dict):
+        raise UnsupportedWrite("104 LANGUAGE options missing")
+    result = {}
+    for field, source in LANGUAGE_SELECTOR_OPTIONS[kind].items():
+        entries = options.get(source)
+        if not isinstance(entries, list) or not entries:
+            raise UnsupportedWrite(f"104 LANGUAGE {source} list unavailable")
+        selected = []
+        ids = set()
+        for item in entries:
+            if not isinstance(item, dict):
+                raise UnsupportedWrite(f"104 LANGUAGE {source} malformed option")
+            value = _option_id(item, field)
+            label = item.get("text")
+            if not isinstance(label, str) or not label.strip() or value in ids:
+                raise UnsupportedWrite(f"104 LANGUAGE {source} duplicate or invalid option")
+            ids.add(value)
+            selected.append({"text": label, "value": value})
+        result[field] = selected
+    return result
 
 
 def _record(row: Any, kind: str) -> dict:

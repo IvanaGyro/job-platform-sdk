@@ -7,7 +7,7 @@ from job_platforms.core.errors import ConflictError, UnsupportedWrite, Verificat
 from job_platforms.providers.tw104.client import Resume104Client
 from job_platforms.providers.tw104.language_records import (
     language_lists, language_operation_body, validate_language_selectors,
-    validate_language_capacity,
+    validate_language_capacity, language_editor_choices,
     verify_language_operation,
 )
 
@@ -271,6 +271,53 @@ class LanguageTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(client.transport.calls[0][0], "POST")
         self.assertEqual(len(client.doc["language"]["formData"]["languages"]["foreign"]), 1)
         self.assertNotEqual(client.doc, before)
+
+    async def test_read_only_editor_options_reports_unused_ids_and_capacity(self):
+        client = Client()
+        foreign = await client.get_language_editor_options("synthetic", "foreign")
+        self.assertEqual(foreign["resumeTimestamp"], 100)
+        self.assertEqual((foreign["count"], foreign["maximum"],
+                          foreign["remaining_capacity"]), (1, 3, 2))
+        self.assertEqual(foreign["occupied_type_ids"], [1])
+        self.assertEqual(foreign["unused_type_options"], [{"text": "日文", "value": 2}])
+        self.assertEqual(foreign["selector_options"]["listening"],
+                         foreign["selector_options"]["speaking"])
+        self.assertFalse(foreign["persisted"])
+        local = await client.get_language_editor_options("synthetic", "local")
+        self.assertEqual(local["unused_type_options"], [{"text": "客語", "value": 2}])
+        self.assertEqual(set(local["selector_options"]), {"type", "level"})
+        self.assertEqual(client.transport.calls, [])
+        self.assertEqual(client.doc, BASE)
+
+    def test_editor_catalog_rejects_ambiguous_or_invalid_native_options(self):
+        for value in (True, "2", 0, -1):
+            with self.subTest(value=value):
+                opts = deepcopy(OPTIONS)
+                opts["optionsForeignType"].append({"text": "Fake", "value": value})
+                with self.assertRaises(UnsupportedWrite):
+                    language_editor_choices(opts, "foreign")
+        opts = deepcopy(OPTIONS)
+        opts["optionsForeignType"].append({"text": "Duplicated Japanese", "value": 2})
+        with self.assertRaises(UnsupportedWrite):
+            language_editor_choices(opts, "foreign")
+        opts = deepcopy(OPTIONS)
+        opts.pop("optionsLanguageLocalLevel")
+        with self.assertRaises(UnsupportedWrite):
+            language_editor_choices(opts, "local")
+
+    async def test_read_only_options_require_valid_resume_revision(self):
+        client = Client()
+        del client.doc["resumeTimestamp"]
+        with self.assertRaises(UnsupportedWrite):
+            await client.get_language_editor_options("synthetic", "foreign")
+        self.assertEqual(client.transport.calls, [])
+
+    async def test_read_only_editor_options_fails_closed_with_missing_capacity(self):
+        client = Client()
+        del client.input_fields["language"]["foreign"]
+        with self.assertRaises(UnsupportedWrite):
+            await client.get_language_editor_options("synthetic", "foreign")
+        self.assertEqual(client.transport.calls, [])
 
     def test_capacity_uses_current_site_limit_for_each_kind(self):
         validate_language_capacity(INPUT_FIELDS, "foreign", 1)

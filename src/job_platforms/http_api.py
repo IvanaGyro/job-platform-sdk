@@ -1263,6 +1263,23 @@ def create_app(
                 record.update({"state": "succeeded", "result": result})
                 return result
 
+    @app.get(
+        "/v1/tw104/resumes/{resume_id}/languages/{kind}/options",
+        dependencies=[Depends(authorize)],
+    )
+    async def get_language_editor_options(
+        resume_id: str, kind: str, request: Request,
+    ):
+        if kind not in LANGUAGE_KINDS:
+            raise HTTPException(422, "Language kind must be local or foreign")
+        try:
+            async with request.app.state.action_lock:
+                return await request.app.state.client.get_language_editor_options(
+                    resume_id, kind,
+                )
+        except JobPlatformError as exc:
+            translate_error(exc)
+
     @app.post(
         "/v1/tw104/resumes/{resume_id}/languages/{kind}",
         dependencies=[Depends(authorize)],

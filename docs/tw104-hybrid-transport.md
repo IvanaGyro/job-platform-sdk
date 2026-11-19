@@ -10,6 +10,10 @@ same-origin requests. An opt-in `CurlCffiTransport` instead uses `curl_cffi`
   associations and all unrelated section metadata, not just option IDs.
   GET arrays may arrive out of `sort` order; the SDK normalizes only unique
   contiguous identifiers and rejects duplicate language IDs.
+- Read-only `get_language_editor_options` is exposed by the Python SDK,
+  CLI `language-options`, and authenticated HTTP API GET. Each uses current
+  site options, the selected kind's count limit, and GET sort identities.
+  These paths have synthetic parity tests only, and do not enable writes.
 - LANGUAGE CREATE checks the current `GET /profile/ajax/inputField`
   per-kind `count` limit before POST. Source-mapped and synthetic-tested,
   not a new live successful create.

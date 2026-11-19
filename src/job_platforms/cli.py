@@ -74,6 +74,12 @@ def _parser() -> argparse.ArgumentParser:
         help="Inspect discovered native custom1..custom6 schema without writing",
     )
     custom_slots.add_argument("resume_id")
+    language_choices = sub.add_parser(
+        "language-options",
+        help="Read current 104 foreign/local language choices and capacity; no write",
+    )
+    language_choices.add_argument("resume_id")
+    language_choices.add_argument("kind", choices=["foreign", "local"])
     section = sub.add_parser("get-section", help="Read one native resume section")
     section.add_argument("resume_id")
     section.add_argument("section", choices=Resume104Client.SECTIONS)
@@ -264,6 +270,10 @@ async def _run(args):
             result = await client.list_custom_slots(args.resume_id)
         elif args.command == "get-section":
             result = await client.get_section(args.resume_id, args.section)
+        elif args.command == "language-options":
+            result = await client.get_language_editor_options(
+                args.resume_id, args.kind,
+            )
         elif args.command == "create":
             result = await client.create_resume()
         elif args.command == "custom-text":

@@ -134,6 +134,25 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(corrected.status_code, 200)
         self.assertEqual([method for method, _ in fake.transport.calls], ["POST"])
 
+    async def test_read_only_language_editor_options_http_parity(self):
+        fake = LanguageClient()
+        self.app.state.client = fake
+        endpoint = LANGUAGES + "/options"
+        missing_auth = await self.http.get(endpoint)
+        self.assertEqual(missing_auth.status_code, 401)
+        result = await self.http.get(endpoint, headers=self.headers())
+        self.assertEqual(result.status_code, 200)
+        payload = result.json()
+        self.assertEqual(payload["occupied_type_ids"], [1])
+        self.assertEqual(payload["unused_type_options"], [{"text": "客語", "value": 2}])
+        self.assertEqual(payload["remaining_capacity"], 2)
+        self.assertEqual(fake.transport.calls, [])
+        invalid = await self.http.get(
+            "/v1/tw104/resumes/synthetic/languages/unknown/options",
+            headers=self.headers(),
+        )
+        self.assertEqual(invalid.status_code, 422)
+
     async def test_language_capacity_rejection_does_not_reserve_idempotency_key(self):
         fake = LanguageClient()
         fake.input_fields["language"]["local"]["count"] = 1

@@ -573,6 +573,15 @@ full collection before POST. Existing records are identified by unique,
 contiguous `sort` values even when the GET array order differs; duplicate
 language IDs fail closed. Use UPDATE to edit an existing language. A genuinely
 new FOREIGN CREATE remains live-unverified.
+
+Read native LANGUAGE choices without writing using
+`job-platform language-options <resume_id> foreign` (or `local`), or
+`GET /v1/tw104/resumes/{resume_id}/languages/{kind}/options` in the
+opt-in localhost API. The response reports current official selectors,
+occupied IDs, unused type options, `resumeTimestamp`, and per-kind capacity.
+**An unused option is only a source-mapped candidate, not proof that 104
+will persist a new FOREIGN record.** Both interfaces reuse the SDK's
+read-only method; no HTTP write is enabled by this lookup.
 Theme selections are validated against `GET /profile/ajax/options`, not a
 locally guessed numeric range. Sorting permits **adjacent** SKILL/EDUCATION swaps and **adjacent**
 local/foreign LANGUAGE swaps. The language group is an explicit kind

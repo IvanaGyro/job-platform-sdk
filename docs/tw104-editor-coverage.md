@@ -94,7 +94,11 @@ is independent.
   canonicalized by the unique contiguous `sort` identity, not raw array
   position; duplicates and unrelated metadata/certificate changes fail
   verification. This is **source-mapped and synthetic-tested**, not additional
-  live-write evidence.
+  live-write evidence. Read-only SDK `get_language_editor_options()` now
+  exposes current native selectors, occupied and unused type IDs, count and
+  `resumeTimestamp`; `language-options` CLI and an authenticated HTTP GET
+  expose the same result. These new read APIs have **synthetic parity tests
+  only** and do not establish that unique FOREIGN CREATE is live supported.
 - The source-mapped encoder now rejects same-kind LANGUAGE CREATE when
   the target type already exists, before HTTP. Existing types must be
   edited with UPDATE. This rejection applies to both local and foreign

@@ -330,6 +330,12 @@ private Modal directory. They are never part of the public repository.
   without reserving an indeterminate write. This is source-mapped and
   synthetic-tested; a new live count preflight was attempted but did not
   complete, so the current server contract is not newly live-confirmed.
+  The SDK also has read-only `get_language_editor_options(resume_id, kind)`:
+  it returns source-validated per-kind options, occupied/unused type IDs,
+  current `resumeTimestamp`, and remaining slots. The CLI `language-options`
+  and HTTP GET `/v1/tw104/resumes/{resume_id}/languages/{kind}/options`
+  share that SDK method, with synthetic parity coverage. No real CREATE is
+  implied by availability in this read-only catalog.
 - LANGUAGE FOREIGN duplicate-type POST (2026-11-19): when the existing
   foreign record had the same type selector as a proposed second one,
   104 **overwrote the original row**, instead of appending a new row.
