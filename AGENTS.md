@@ -53,6 +53,21 @@ async with FreshBrowserSession(AuthConfig.from_env()) as session:
     verifier = Resume104Client(transport=await session.http_transport())
 ```
 
+## CUSTOM CLASSIC/BANNER writer boundary (2026-11-20)
+
+`mutate_custom_layout()` is a separate experimental SDK method for only
+CLASSIC=1/BANNER=2 and exactly one content item with `{type:0}` media.
+The CLI `custom-layout` and opt-in HTTP `/custom-layout` map the same native
+POST/PUT/DELETE; they do not enable IMAGE, MAGAZINE, multi-content forms,
+or theme conversion. A malformed or occupied native CUSTOM slot, any
+media identifiers, extra content metadata or unsupported dates must abort
+before an upstream write. The current revision and website theme options
+are checked on create, updates preserve the existing theme, and each write
+verifies the complete target content plus other CUSTOM slots. The earlier
+private raw endpoint cycle succeeded in 104, but the new SDK/CLI/HTTP
+path has **synthetic tests only**. No real account access was needed to
+implement it. Do not equate earlier raw success with live wrapper coverage.
+
 ## Revision preflight for all direct writes (2026-11-20)
 
 Always use `revision_guard.revision_matches(document, expected_timestamp)`

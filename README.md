@@ -182,8 +182,9 @@ write/read-back/restore cycles:
 - CUSTOM TEXT=3: SDK POST create, PUT update, DELETE clear; exact
   empty CUSTOM slot restored.
 - CUSTOM CLASSIC=1 and BANNER=2: source-mapped raw native
-  POST/PUT/DELETE succeeded; generic SDK mutation of these themes
-  has **not** yet been enabled.
+  POST/PUT/DELETE succeeded; the later `mutate_custom_layout()` SDK wrapper,
+  CLI and HTTP API now exist with synthetic tests, but those **wrappers have
+  not yet been live-verified**.
 - CUSTOM IMAGE=4: a generated blank 69-byte PNG was accepted
   by the real 104 POST and removed from the empty CUSTOM slot.
   This does **not** verify media replacement, preview or physical
@@ -250,6 +251,54 @@ PROJECT sorting, PORTFOLIO link/media changes, all CUSTOM writers,
 global certificate CRUD and resume associations are not yet verified live. A PORTFOLIO link test aborted before network mutation
 because an existing attachment did not match the initial private
 snapshot. See docs/tw104-live-smoke-report.md for a redacted report.
+
+### CUSTOM CLASSIC/BANNER guarded native CRUD (experimental)
+
+The 104 native editor has five CUSTOM themes. For **CLASSIC (1)** and
+**BANNER (2)**, `client.mutate_custom_layout(...)` now supports create,
+update and delete on a numbered `custom1`–`custom6` slot, limited to **one
+non-media content entry**. It uses the same source-mapped native POST, PUT,
+DELETE and current theme options as the official frontend; update can change
+title only or replace the complete content object while preserving the
+existing theme. Content is a private JSON object with exactly these keys:
+
+```json
+{
+  "duration": {"startYear": "", "startMonth": 0,
+               "endYear": "", "endMonth": 0},
+  "isInProgress": false,
+  "introduction_html": "<p>Synthetic example</p>",
+  "url": "",
+  "media": {"type": 0}
+}
+```
+
+Use the CLI with a **locally protected** file containing that object:
+
+```bash
+job-platform custom-layout VERSION_NO create --slot 1 --theme 1 \
+  --name "Example" --content-file private-layout.json \
+  --if-match TIMESTAMP --confirm experimental-custom-layout-write
+job-platform custom-layout VERSION_NO update --slot 1 \
+  --name "Updated example" --if-match NEW_TIMESTAMP \
+  --confirm experimental-custom-layout-write
+job-platform custom-layout VERSION_NO delete --slot 1 \
+  --if-match NEXT_TIMESTAMP --confirm experimental-custom-layout-write
+```
+
+The opt-in, bearer-protected local HTTP service has matching
+`POST /v1/tw104/resumes/{resume_id}/custom-layout`,
+`PUT /v1/tw104/resumes/{resume_id}/custom-layout/{slot}` and
+`DELETE /v1/tw104/resumes/{resume_id}/custom-layout/{slot}` routes. HTTP
+writes additionally require an Idempotency-Key (at least 16 characters).
+The operation verifies a fresh `resumeTimestamp`, exact no-media native
+GET shape, the full submitted content and preservation of other CUSTOM
+slots. No failed or uncertain write is automatically retried. **This SDK,
+CLI and HTTP integration is synthetic-tested only**: earlier raw native
+CLASSIC/BANNER site tests passed, but these new wrappers have not been
+independently tested online. IMAGE (4), MAGAZINE (5), rich media, multi-item
+layouts and theme conversions remain unsupported by this API. The separate
+TEXT=3 API is unchanged.
 
 ### Offline native 104 CUSTOM text and certification connection plans
 

@@ -22,7 +22,7 @@ and successful real 104 writes.** Each is a separate evidence level.
 | `referrer` | POST, PUT, DELETE; reorder | Native record CRUD, empty-form first-create, exactly-two-record hardcoded adjacent swap | **CRUD restored**; sort unverified |
 | `sidebar` | PUT | Complete-list reorder only; metadata edits rejected | **One adjacent swap PUT and exact restore** |
 | `layout` | PUT | Per-section themes using current 104 options; FILE token-safe verifier | **JOB_CONDITION theme PUT and restore via SDK verified**; other themes/sections unverified |
-| `custom` | POST, PUT, DELETE | **SDK TEXT=3 CRUD live**; CLASSIC/BANNER raw native CRUD live; IMAGE=4 synthetic PNG native create/delete live; MAGAZINE incomplete | TEXT real; others partial |
+| `custom` | POST, PUT, DELETE | **SDK TEXT=3 CRUD live**; CLASSIC/BANNER raw native CRUD live and **new single no-media SDK/CLI/HTTP CRUD synthetic-tested**; IMAGE=4 synthetic PNG raw native create/delete live; MAGAZINE incomplete | TEXT SDK real; CLASSIC/BANNER new wrappers synthetic-only |
 | `under18` | POST, PUT | Optional native section/schema **read-only**; no remote writer | No |
 
 For source details see [104 upstream contract](tw104-upstream-contract.md).
@@ -620,6 +620,23 @@ swap and its reverse**, not a proof of non-adjacent or arbitrary
 multi-record ordering. Signed file tokens and previews are not
 part of the stable displayed identity comparison.
 
+
+### Guarded CLASSIC/BANNER no-media SDK/CLI/HTTP (2026-11-20)
+
+Earlier private live raw 104 POST, PUT and DELETE succeeded for CUSTOM
+CLASSIC=1 and BANNER=2 and restored the original test slot. The new
+`mutate_custom_layout()` wraps these native actions with a checked
+`resumeTimestamp`, known empty-slot CREATE, current official theme option
+on CREATE, exact non-media GET shape on UPDATE/DELETE, one content item,
+limited markup/URL/date/progress serialization, fresh read-back of the full
+expected content, and equality checks for every other CUSTOM slot. The
+API and CLI require explicit experimental opt-in; HTTP also requires bearer
+and an Idempotency-Key and refuses ambiguous request replay. These new
+**SDK/CLI/HTTP wrappers have synthetic tests only** and did not initiate
+new website writes during this development. Unrecognized media metadata,
+IMAGE/MAGAZINE, multi-content layouts and theme conversions fail closed.
+Do not count earlier raw endpoint successes as a live verification of the
+new integrated wrapper, and do not infer blob/preview deletion guarantees.
 
 ### Latest CUSTOM, REFERRER, SKILL, and PORTFOLIO 3+ sorting
 

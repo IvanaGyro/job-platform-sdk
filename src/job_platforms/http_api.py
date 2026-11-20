@@ -42,6 +42,9 @@ from job_platforms.providers.tw104.transport import (
 from job_platforms.providers.tw104.certificate_block_actions import (
     certificate_block_body,
 )
+from job_platforms.providers.tw104.custom_layout_records import (
+    layout_operation_body,
+)
 from job_platforms.providers.tw104.custom_text_contract import (
     custom_text_form, custom_text_create_body, custom_text_update_body,
     custom_delete_body,
@@ -151,6 +154,8 @@ def create_app(
                 "experimental_theme_sections": list(THEME_OPTION_KEYS),
                 "experimental_sort_sections": list(SORTABLE),
                 "experimental_custom_text_actions": ["create","update","delete"],
+                "experimental_custom_layout_actions": ["create", "update", "delete"],
+                "experimental_custom_layout_themes": {"CLASSIC": 1, "BANNER": 2},
                 "experimental_bio_actions": ["create", "clear"],
                 "experimental_record_operations": {
                     "skill": ["create", "update", "delete"],
@@ -213,6 +218,79 @@ def create_app(
                 return await request.app.state.client.get_schema(resume_id)
         except JobPlatformError as exc:
             translate_error(exc)
+
+    async def custom_layout_http(
+        resume_id: str, request: Request, action: str, slot: int,
+        changes: dict, if_match: str | None,
+        idempotency_key: str | None,
+    ):
+        """Native CLASSIC/BANNER no-media CRUD; no implicit retries."""
+        if not allow_experimental_writes:
+            raise HTTPException(501, "104 CUSTOM layout requires experimental opt-in")
+        if if_match is None:
+            raise HTTPException(428, "If-Match resumeTimestamp required")
+        if not idempotency_key or len(idempotency_key) < 16:
+            raise HTTPException(400, "Idempotency-Key must be at least 16 characters")
+        if type(slot) is not int or not 1 <= slot <= 6:
+            raise HTTPException(422, "CUSTOM layout slot must be 1 through 6")
+        if not isinstance(changes, dict):
+            raise HTTPException(422, "CUSTOM layout expects an object")
+        required = {"name", "theme", "content"}
+        if action == "create" and set(changes) != required:
+            raise HTTPException(422, "CUSTOM layout create needs name, theme, content")
+        if action == "update" and (not changes or set(changes) - {"name", "content"}):
+            raise HTTPException(422, "CUSTOM layout update needs name or content")
+        if action == "delete" and changes:
+            raise HTTPException(422, "CUSTOM layout delete takes no fields")
+        expected = if_match.strip('"')
+        fingerprint = hashlib.sha256(json.dumps({
+            "action": action, "slot": slot, "changes": changes,
+            "timestamp": expected,
+        }, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
+        key = ("CUSTOM_LAYOUT", resume_id, idempotency_key)
+        async with request.app.state.action_lock:
+            cached = request.app.state.idempotency_results.get(key)
+            if cached is not None:
+                if cached["fingerprint"] != fingerprint:
+                    raise HTTPException(409, "Idempotency-Key reused for other payload")
+                if cached["state"] != "succeeded":
+                    raise HTTPException(409, "CUSTOM layout outcome uncertain; inspect first")
+                return cached["result"]
+            try:
+                before = await request.app.state.client.get_resume(resume_id)
+                if not revision_matches(before, expected):
+                    raise HTTPException(412, "Resume changed since prior GET")
+                options = None
+                if action == "create":
+                    if f"custom{slot}" in before:
+                        raise UnsupportedWrite("CUSTOM layout slot occupied")
+                    options = request.app.state.client._data(
+                        await request.app.state.client.transport.get_json(
+                            "/profile/ajax/options"
+                        )
+                    )
+                layout_operation_body(
+                    before, action, slot=slot, options=options,
+                    name=changes.get("name"), theme=changes.get("theme"),
+                    content=changes.get("content"),
+                )
+            except (UnsupportedWrite, ValueError, KeyError, TypeError):
+                raise HTTPException(422, "Unsupported CUSTOM layout fields or slot") from None
+            except JobPlatformError as exc:
+                translate_error(exc)
+            entry = {"fingerprint": fingerprint, "state": "indeterminate"}
+            request.app.state.idempotency_results[key] = entry
+            try:
+                result = await request.app.state.client.mutate_custom_layout(
+                    resume_id, action, slot=slot, expected_timestamp=expected,
+                    name=changes.get("name"), theme=changes.get("theme"),
+                    content=changes.get("content"),
+                )
+            except JobPlatformError as exc:
+                translate_error(exc)
+            else:
+                entry.update({"state": "succeeded", "result": result})
+                return result
 
     async def custom_text_http(
         resume_id: str,request: Request,action: str,slot: int,
@@ -298,6 +376,53 @@ def create_app(
             else:
                 entry.update({"state":"succeeded","result":result})
                 return result
+
+    @app.post(
+        "/v1/tw104/resumes/{resume_id}/custom-layout",
+        dependencies=[Depends(authorize)],
+    )
+    async def create_custom_layout(
+        resume_id: str, request: Request, changes: dict = Body(...),
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        if type(changes.get("slot")) is not int:
+            raise HTTPException(422, "CUSTOM layout create requires slot")
+        slot = changes["slot"]
+        return await custom_layout_http(
+            resume_id, request, "create", slot,
+            {k: v for k, v in changes.items() if k != "slot"},
+            if_match, idempotency_key,
+        )
+
+    @app.put(
+        "/v1/tw104/resumes/{resume_id}/custom-layout/{slot}",
+        dependencies=[Depends(authorize)],
+    )
+    async def update_custom_layout(
+        resume_id: str, slot: int, request: Request,
+        changes: dict = Body(...),
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        return await custom_layout_http(
+            resume_id, request, "update", slot, changes,
+            if_match, idempotency_key,
+        )
+
+    @app.delete(
+        "/v1/tw104/resumes/{resume_id}/custom-layout/{slot}",
+        dependencies=[Depends(authorize)],
+    )
+    async def delete_custom_layout(
+        resume_id: str, slot: int, request: Request,
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        return await custom_layout_http(
+            resume_id, request, "delete", slot, {},
+            if_match, idempotency_key,
+        )
 
     @app.post(
         "/v1/tw104/resumes/{resume_id}/custom-text",

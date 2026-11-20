@@ -551,8 +551,16 @@ GET has been inspected.
 The source-mapped serializer supports exactly one text-only content
 and only the TEXT theme. Its separate DELETE operation uses
 blockValueList.custom.custom.sort=[DYNAMIC_SLOT] for custom1..custom6.
-No CUSTOM POST/PUT/DELETE network path is enabled in the SDK yet.
-The offline planner is available through the Python module and CLI.
+That was the original source-only checkpoint. **Later work supersedes
+this status:** the TEXT=3 SDK CRUD path has now been verified live and the
+CLASSIC=1/BANNER=2 single no-media SDK, CLI and HTTP CRUD paths are
+synthetic-tested (a separate, earlier raw native CRUD cycle passed live for
+those two themes). `custom_layout_records.py` validates one known GET
+content row, protected no-media state, dates, progress and HTML, rejects
+occupied or unknown-theme slots, and verifies the exact submitted content
+and unchanged sibling CUSTOM slots on a fresh GET. A theme conversion,
+multiple content items, IMAGE=4 and MAGAZINE=5 remain unimplemented by the
+new wrappers. The original offline planner remains available via Python/CLI.
 
 ### Certificate association actions are separate from record CRUD
 

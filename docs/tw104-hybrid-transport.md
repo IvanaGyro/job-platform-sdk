@@ -4,6 +4,23 @@ The default is still `BrowserTransport`: Patchright authenticates and issues
 same-origin requests. An opt-in `CurlCffiTransport` instead uses `curl_cffi`
 0.17 / Chrome 146 impersonation after a **successful browser login**.
 
+## Guarded CUSTOM CLASSIC/BANNER no-media CRUD (2026-11-20)
+
+The frontend's CUSTOM module 4228 supplies POST/PUT/DELETE
+`/profile/ajax/resumeByBlock/custom` requests. Existing private 104
+raw endpoint tests on 2026-11-17 confirmed reversible CLASSIC=1/BANNER=2
+single no-media CRUD, but the **new SDK/CLI/HTTP wrapper remains synthetic-
+tested only**. The SDK `mutate_custom_layout()` refuses occupied slots,
+unknown themes, incomplete/complex native GET forms, media metadata,
+multiple content rows, and any HTML/URL/date values outside the bounded
+serializer. UPDATE preserves the current theme and unchanged fields; a
+fresh GET must match all expected fields, and all sibling CUSTOM slots
+must remain unchanged. The CLI's `custom-layout` and authenticated
+HTTP `/custom-layout` endpoints use mandatory explicit write opt-in,
+`If-Match`, and (for HTTP) an Idempotency-Key. No ambiguous remote
+request is automatically retried. MAGAZINE, IMAGE and live wrapper
+read-back are still unresolved, and the work made no new real-site writes.
+
 ## Shared mandatory revision guard for all writes (2026-11-20)
 
 A follow-up SDK/HTTP audit found unsafe

@@ -47,6 +47,9 @@ from .custom_text_contract import (
     custom_text_update_body, custom_delete_body,
     verify_custom_text_mutation,
 )
+from .custom_layout_records import (
+    LAYOUT_THEMES, layout_operation_body, verify_layout_mutation,
+)
 from .portfolio_preview import conversion_file_id,convert_status_summary
 from .referrer_records import (
     referrer_records, referrer_operation_body, verify_referrer_operation,
@@ -987,6 +990,70 @@ class Resume104Client:
                     await asyncio.sleep(0.75)
             raise VerificationError(
                 "104 CUSTOM request submitted but target was not verified"
+            )
+
+    async def mutate_custom_layout(
+        self, resume_id: str | int, action: str, *, slot: int,
+        expected_timestamp: int | str,
+        theme: int | None = None, name: str | None = None,
+        content: dict | None = None,
+    ) -> dict:
+        """Guarded CLASSIC/BANNER single no-media CUSTOM slot CRUD.
+
+        This wraps the earlier raw native site-tested request; the combined
+        SDK/HTTP flows have synthetic tests only. Never retries a mutation
+        with ambiguous results, and never overwrites another custom theme.
+        """
+        if action not in ("create", "update", "delete"):
+            raise UnsupportedWrite("104 CUSTOM layout unsupported action")
+        if type(slot) is not int or not 1 <= slot <= 6:
+            raise UnsupportedWrite("104 CUSTOM layout invalid slot")
+        version = self._version(resume_id)
+        async with self._write_lock:
+            before = await self.get_resume(version)
+            if not revision_matches(before, expected_timestamp):
+                raise ConflictError("104 CUSTOM layout revision changed before operation")
+            options = None
+            if action == "create":
+                if f"custom{slot}" in before:
+                    raise UnsupportedWrite("104 CUSTOM layout slot already occupied")
+                options = self._data(await self.transport.get_json(
+                    "/profile/ajax/options"
+                ))
+            body = layout_operation_body(
+                before, action, slot=slot, theme=theme, name=name,
+                content=content, options=options,
+            )
+            method = {"create": "POST", "update": "PUT", "delete": "DELETE"}[action]
+            await self.transport.request(
+                method, "/profile/ajax/resumeByBlock/custom",
+                params={"vno": version}, json_data=body,
+            )
+            for attempt in range(4):
+                try:
+                    after = await self.get_resume(version)
+                    matched = verify_layout_mutation(
+                        before, after, action, slot=slot, body=body,
+                    )
+                except Exception:
+                    raise VerificationError(
+                        "104 CUSTOM layout submitted; read-back unavailable"
+                    ) from None
+                if matched:
+                    current_theme = (
+                        theme if action == "create" else
+                        before[f"custom{slot}"]["formData"]["themeChoose"]
+                        ["selectedTheme"]["value"]
+                    )
+                    return {
+                        "resume_id": version, "section": f"custom{slot}",
+                        "action": action, "theme": LAYOUT_THEMES[current_theme],
+                        "persisted": True, "verified": True, "atomic": True,
+                    }
+                if attempt < 3:
+                    await asyncio.sleep(0.75)
+            raise VerificationError(
+                "104 CUSTOM layout request submitted but exact result unverified"
             )
 
     async def mutate_language(

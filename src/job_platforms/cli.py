@@ -43,6 +43,21 @@ def _parser() -> argparse.ArgumentParser:
     )
     cert_plan.add_argument("--ids-file", default=None)
     cert_plan.add_argument("--record-id", type=int, default=None)
+    layout = sub.add_parser(
+        "custom-layout",
+        help="104 CLASSIC/BANNER single no-media CUSTOM slot CRUD (experimental)",
+    )
+    layout.add_argument("resume_id")
+    layout.add_argument("action", choices=["create", "update", "delete"])
+    layout.add_argument("--slot", type=int, required=True)
+    layout.add_argument("--theme", type=int, choices=[1, 2], default=None,
+                        help="Required for create; existing theme retained on update")
+    layout.add_argument("--name", default=None)
+    layout.add_argument("--content-file", default=None,
+                        help="Private JSON with full no-media content; required for create")
+    layout.add_argument("--if-match", required=True)
+    layout.add_argument("--confirm", choices=["experimental-custom-layout-write"],
+                        required=True)
     custom_write = sub.add_parser(
         "custom-text",
         help="104 native CUSTOM TEXT=3 create/update/delete with read-back",
@@ -297,6 +312,27 @@ async def _run(args):
             )
         elif args.command == "create":
             result = await client.create_resume()
+        elif args.command == "custom-layout":
+            if args.action == "create":
+                if args.theme is None or args.name is None or args.content_file is None:
+                    raise ValueError("CUSTOM layout create requires theme/name/content")
+            elif args.action == "update":
+                if args.theme is not None or (args.name is None and args.content_file is None):
+                    raise ValueError("CUSTOM layout update retains theme and needs changes")
+            else:
+                if any(x is not None for x in (
+                    args.theme, args.name, args.content_file,
+                )):
+                    raise ValueError("CUSTOM layout delete accepts no changed fields")
+            contents = (
+                json.loads(Path(args.content_file).read_text(encoding="utf-8"))
+                if args.content_file is not None else None
+            )
+            result = await client.mutate_custom_layout(
+                args.resume_id, args.action, slot=args.slot,
+                expected_timestamp=args.if_match.strip('"'),
+                theme=args.theme, name=args.name, content=contents,
+            )
         elif args.command == "custom-text":
             if args.action == "create" and (
                 not args.name or not args.html_file
