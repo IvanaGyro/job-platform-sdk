@@ -76,7 +76,9 @@ outside Git. The config should contain only the explicit proxy and its
 credentials and disable `NO_PROXY` bypass (curl `noproxy = ""`). Pass
 each public URL once and record the exit status as well as CONNECT and
 destination HTTP codes. Keep stderr private. The command does not follow
-redirects or load the user's default curl config.
+redirects or load the user's default curl config. CONNECT 200 confirms the
+proxy opened a tunnel. Curl exit 0 confirms an HTTP exchange completed and
+can accompany a destination 403. Neither confirms sign-in.
 
 ```sh
 curl -q --config "$TW104_PRIVATE_CURL_CONFIG" --silent --show-error \
@@ -112,11 +114,12 @@ from job_platforms.providers.tw104 import AuthConfig, FreshBrowserSession
 async def read_only_comparison(test_resume_id):
     async with FreshBrowserSession(AuthConfig.from_env()) as session:
         browser = await session.resume_client(transport="browser")
-        await browser.list_resumes()
-        await browser.get_resume(test_resume_id)
-
         http = await session.resume_client(transport="curl_cffi")
+
+        await browser.list_resumes()
         await http.list_resumes()
+
+        await browser.get_resume(test_resume_id)
         await http.get_resume(test_resume_id)
 ```
 
@@ -139,6 +142,30 @@ write. Closing Chromium removes the same-session browser fallback. See the
 [hybrid transport contract](tw104-hybrid-transport.md) for lifecycle and
 write gates.
 
+## Live check on 2026-11-21 (Taipei)
+
+A read-only check used the SDK's existing Patchright and `curl_cffi`
+backends with a configured proxy in the same runner. No resume write was
+sent.
+
+| Observed stop point | Result |
+|---|---|
+| Fresh browser sign-in and same-endpoint GET | Sign-in and MFA completed. Browser `GET /profile/ajax/overview` returned HTTP 200 and passed SDK shape validation. |
+| Attached `curl_cffi` GET of the same overview | The standard same-proxy handoff attempted the same GET. Curl reported code 7 before an HTTP response, which the SDK surfaced as `UpstreamError`. |
+| Unauthenticated standalone curl controls on two configured proxies | Both had CONNECT 200 and neutral HTTPS 200. Official sign-in and PDA returned destination HTTP 403 on both. This shows the proxy tunnels worked for standalone curl. The source of the destination 403 was unconfirmed. |
+| Fresh-browser attempts to check detached mode | One stopped during official sign-in navigation with `ERR_ABORTED`. Another received a PDA entry 403 with edge headers, then HTTP 200 HTML at the official sign-in page and HTTP 401 JSON from `login_init`. Both stopped before account entry and before handing off to curl. |
+
+The first run verified browser authentication and isolated a curl connection
+failure on the same endpoint. This round did not establish current attached
+or detached curl access. Earlier successful detached reads and reversible
+operations are documented in the [hybrid transport test evidence](tw104-hybrid-transport.md#test-evidence).
+A curl failure before HTTP, a destination 403 after CONNECT, and a
+`login_init` 401 require separate diagnoses. Treat the last one as a
+pre-account failure, even if the login page loaded successfully. A browser
+navigation abort also needs its own diagnosis. Record the resulting page
+and SDK stage without inferring credential rejection or an HTTP block from
+the abort alone.
+
 ## What to leave in the handoff
 
 Record UTC time, proxy index, client/version, stage, host and path without
@@ -148,9 +175,12 @@ For example, record `edge_headers`, `challenge`, `explicit_block` or
 `unconfirmed` and whether each authenticated read passed. These are runbook
 categories. The SDK uses only `edge_headers`, `challenge` and
 `unconfirmed` in prelogin diagnostics. Library exceptions can collapse
-several causes into one error. If exact status or headers are unavailable at
-the SDK layer, inspect the failing read privately at the client boundary and
-keep the diagnosis open until there is evidence.
+several causes into one error. For example, curl connection error 7 is
+reported as an SDK `UpstreamError` with status 0. Capture the numeric
+error code at the curl client boundary if the SDK reports status 0. If a
+response exists, capture its HTTP status, body category and Cloudflare
+signal before the SDK converts it into an exception. Keep raw headers,
+body, URLs and exception text out of diagnostic output.
 
 Share only sanitized fields. Keep raw headers, bodies, traces, proxy
 endpoints, credentials, cookies, MFA data and resume identifiers private.
