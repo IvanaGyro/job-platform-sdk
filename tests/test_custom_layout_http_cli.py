@@ -48,6 +48,20 @@ class LayoutAPITests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         await self.http.__aexit__(None, None, None)
 
+    async def test_custom_themes_read_only_http_requires_bearer(self):
+        denied = await self.http.get("/v1/tw104/custom-themes")
+        allowed = await self.http.get(
+            "/v1/tw104/custom-themes", headers={"Authorization": "Bearer " + TOKEN}
+        )
+        self.assertEqual((denied.status_code, allowed.status_code), (401, 200))
+        self.assertEqual(
+            [x["frontend_content_slots"] for x in allowed.json()["themes"]],
+            [1, 1, 1, 2, 2],
+        )
+        self.assertFalse(allowed.json()["current_site_availability_verified"])
+        self.assertEqual(self.client.transport.calls, [])
+        self.assertEqual(self.client.doc, self.client.doc)
+
     async def test_create_update_delete_replay_and_different_payload_conflict(self):
         body = {"slot": 1, "theme": 2, "name": "Synthetic layout",
                 "content": deepcopy(CONTENT)}
@@ -131,6 +145,18 @@ class LayoutAPITests(unittest.IsolatedAsyncioTestCase):
 
 
 class LayoutCLITests(unittest.IsolatedAsyncioTestCase):
+    async def test_custom_themes_offline_without_credentials(self):
+        with patch("job_platforms.cli.AuthConfig.from_env",
+                   side_effect=AssertionError("Offline lookup must not read credentials")), \
+             patch("job_platforms.cli.FreshBrowserSession",
+                   side_effect=AssertionError("Offline lookup must not login")):
+            with redirect_stdout(io.StringIO()) as output:
+                await _run(_parser().parse_args(["custom-themes"]))
+        data = json.loads(output.getvalue())
+        self.assertTrue(data["read_only"])
+        self.assertFalse(data["persisted"])
+        self.assertEqual([theme["value"] for theme in data["themes"]], [1, 2, 3, 4, 5])
+
     async def test_cli_create_update_delete_and_no_invalid_option(self):
         client = Client()
         class Factory:

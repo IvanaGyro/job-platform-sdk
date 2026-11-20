@@ -53,6 +53,20 @@ async with FreshBrowserSession(AuthConfig.from_env()) as session:
     verifier = Resume104Client(transport=await session.http_transport())
 ```
 
+## CUSTOM source-defined content slots (2026-11-20)
+
+Official bundle module 5255 defines `contentNumber` as 1 for CLASSIC,
+BANNER and TEXT, and 2 for IMAGE/MAGAZINE. Do not restore the old generic
+six-item limit or widen CLASSIC/BANNER `mutate_custom_layout()` to multiple
+rows without new upstream evidence and a separately tested safe lifecycle.
+`custom_theme_capabilities()` exposes these static constraints through the
+SDK/CLI/HTTP with explicit evidence labels and no site login. IMAGE's
+single PNG raw POST was accepted in older live tests, so the offline image
+serializer permits one or two inputs. MAGAZINE's former one-item POSTs
+failed, so the planner only models a complete two-item candidate and **no
+successful MAGAZINE write is asserted**. The capability catalog does not
+imply current server approval or enable a new write API.
+
 ## CUSTOM CLASSIC/BANNER writer boundary (2026-11-20)
 
 `mutate_custom_layout()` is a separate experimental SDK method for only

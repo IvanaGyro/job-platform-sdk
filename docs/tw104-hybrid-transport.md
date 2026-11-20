@@ -4,6 +4,21 @@ The default is still `BrowserTransport`: Patchright authenticates and issues
 same-origin requests. An opt-in `CurlCffiTransport` instead uses `curl_cffi`
 0.17 / Chrome 146 impersonation after a **successful browser login**.
 
+## CUSTOM frontend content cardinalities and offline inspection (2026-11-20)
+
+Production Vue module 5255 maps `CustomThemeImage` and
+`CustomThemeMagazine` to `contentNumber=2`; other CUSTOM themes default
+to exactly one. The previous generic CUSTOM serializer used a site-
+unsupported six-item ceiling. Its new source-mapped per-theme guard
+allows only one CLASSIC/BANNER/TEXT row, one or two IMAGE inputs (based on
+past raw one-PNG server acceptance), or two MAGAZINE candidate rows. The
+latter is **not claimed to succeed**: actual prior MAGAZINE writes failed.
+`custom_theme_capabilities()` is exposed by the SDK static method,
+`job-platform custom-themes` (offline) and token-protected local HTTP
+`GET /v1/tw104/custom-themes` (no site GET). It carries limits, exact
+implementation scope and historical evidence without account data. All
+new regression tests are synthetic; no browser login or write was used.
+
 ## Guarded CUSTOM CLASSIC/BANNER no-media CRUD (2026-11-20)
 
 The frontend's CUSTOM module 4228 supplies POST/PUT/DELETE

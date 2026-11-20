@@ -47,6 +47,7 @@ from .custom_text_contract import (
     custom_text_update_body, custom_delete_body,
     verify_custom_text_mutation,
 )
+from .custom_themes import custom_theme_capabilities
 from .custom_layout_records import (
     LAYOUT_THEMES, layout_operation_body, verify_layout_mutation,
 )
@@ -98,6 +99,11 @@ class Resume104Client:
         if not isinstance(payload, dict) or not isinstance(payload.get("data"), dict):
             raise VerificationError("Unexpected 104 response structure")
         return payload["data"]
+
+    @staticmethod
+    def supported_custom_themes() -> dict:
+        """Discover source-mapped theme capacities without site access."""
+        return custom_theme_capabilities()
 
     @staticmethod
     def supported_patch_paths() -> dict:

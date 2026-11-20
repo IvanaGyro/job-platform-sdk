@@ -5,7 +5,7 @@ import unittest
 
 from job_platforms.core.errors import UnsupportedWrite
 from job_platforms.providers.tw104.custom_themes import (
-    THEMES,custom_theme_create_body,
+    THEMES, CONTENT_SLOTS, custom_theme_create_body, custom_theme_capabilities,
 )
 
 OPTIONS={"optionsCustomTheme":[{"value":i,"name":name} for i,name in (
@@ -35,14 +35,14 @@ class ThemesTests(unittest.TestCase):
         })
 
     def test_non_media_layouts_use_one_content_per_item(self):
-        for theme in (1,2,5):
+        for theme, count in ((1, 1), (2, 1), (5, 2)):
             body=custom_theme_create_body(
                 slot=1,name="Synthetic layout",theme=theme,
-                contents=[deepcopy(TEMPLATE),deepcopy(TEMPLATE)],
+                contents=[deepcopy(TEMPLATE) for _ in range(count)],
                 theme_options=OPTIONS,
             )["blockValueList"]["custom"]
             self.assertEqual(body["themeChoose"]["selectedTheme"],theme)
-            self.assertEqual(len(body["custom"]["content"]),2)
+            self.assertEqual(len(body["custom"]["content"]),count)
             item=body["custom"]["content"][0]
             self.assertEqual(item["isInProgress"],0)
             self.assertEqual(item["duration"]["startMonth"],2)
@@ -61,7 +61,7 @@ class ThemesTests(unittest.TestCase):
         self.assertEqual(row["duration"]["endMonth"],"")
 
     def test_very_specific_pure_image_shape(self):
-        rows=[{"media":deepcopy(IMAGE)} for _ in range(3)]
+        rows=[{"media":deepcopy(IMAGE)} for _ in range(2)]
         body=custom_theme_create_body(
             slot=5,name="Pure image",theme=4,contents=rows,
             theme_options=OPTIONS,
@@ -69,7 +69,7 @@ class ThemesTests(unittest.TestCase):
         content=body["blockValueList"]["custom"]["custom"]["content"]
         self.assertEqual(len(content),1)
         self.assertEqual(set(content[0]),{"file"})
-        self.assertEqual(len(content[0]["file"]),3)
+        self.assertEqual(len(content[0]["file"]),2)
         self.assertEqual(content[0]["file"][0]["type"],1)
         self.assertEqual(
             base64.b64decode(content[0]["file"][0]["content"]),PNG,
@@ -87,7 +87,7 @@ class ThemesTests(unittest.TestCase):
             data["media"]=media
             body=custom_theme_create_body(
                 slot=1,name="Synthetic",theme=5,
-                contents=[data],theme_options=OPTIONS,
+                contents=[deepcopy(data), data],theme_options=OPTIONS,
             )
             content=body["blockValueList"]["custom"]["custom"]["content"][0]["file"][0]
             self.assertEqual((content["type"],content["content"]),(kind,value))
@@ -100,6 +100,45 @@ class ThemesTests(unittest.TestCase):
         )
         row=body["blockValueList"]["custom"]["custom"]["content"][0]
         self.assertEqual(row["file"],[{"type":0,"content":"","ext":""}])
+
+    def test_exact_source_theme_content_slots_and_write_support(self):
+        self.assertEqual(CONTENT_SLOTS, {1: 1, 2: 1, 3: 1, 4: 2, 5: 2})
+        catalog = custom_theme_capabilities()
+        self.assertFalse(catalog["current_site_availability_verified"])
+        self.assertFalse(catalog["persisted"])
+        self.assertTrue(catalog["read_only"])
+        self.assertEqual([x["value"] for x in catalog["themes"]], [1,2,3,4,5])
+        self.assertEqual([x["frontend_content_slots"] for x in catalog["themes"]],
+                         [1,1,1,2,2])
+        from job_platforms.providers.tw104.client import Resume104Client
+        self.assertEqual(Resume104Client.supported_custom_themes(), catalog)
+        self.assertEqual([x["writer_scope"] for x in catalog["themes"]], [
+            "single-no-media", "single-no-media", "single-text",
+            "offline-planner", "offline-planner",
+        ])
+
+    def test_serializer_refuses_excess_or_incomplete_theme_content(self):
+        for theme, count, row in (
+            (1, 2, TEMPLATE), (2, 2, TEMPLATE),
+            (5, 1, TEMPLATE), (5, 3, TEMPLATE),
+            (4, 3, {"media": IMAGE}),
+        ):
+            with self.subTest(theme=theme, count=count):
+                with self.assertRaisesRegex(UnsupportedWrite, "content count"):
+                    custom_theme_create_body(
+                        slot=1, name="Synthetic", theme=theme,
+                        contents=[deepcopy(row) for _ in range(count)],
+                        theme_options=OPTIONS,
+                    )
+        for count in (1, 2):
+            self.assertEqual(
+                len(custom_theme_create_body(
+                    slot=1, name="Synthetic", theme=4,
+                    contents=[{"media": deepcopy(IMAGE)} for _ in range(count)],
+                    theme_options=OPTIONS,
+                )["blockValueList"]["custom"]["custom"]["content"][0]["file"]),
+                count,
+            )
 
     def test_no_media_and_markup_injection_rejected(self):
         invalid=[

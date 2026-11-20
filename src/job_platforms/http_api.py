@@ -184,6 +184,11 @@ def create_app(
         except JobPlatformError as exc:
             translate_error(exc)
 
+    @app.get("/v1/tw104/custom-themes", dependencies=[Depends(authorize)])
+    async def custom_theme_capabilities_http():
+        # Static frontend metadata; never accesses or writes a real resume.
+        return Resume104Client.supported_custom_themes()
+
     @app.get("/v1/tw104/writable-paths", dependencies=[Depends(authorize)])
     async def writable_paths():
         # Static source mapping only: does not read or write any resume.

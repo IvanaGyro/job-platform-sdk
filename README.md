@@ -254,6 +254,27 @@ snapshot. See docs/tw104-live-smoke-report.md for a redacted report.
 
 ### CUSTOM CLASSIC/BANNER guarded native CRUD (experimental)
 
+The current source-mapped theme capacities are also available **offline**
+without any credentials or browser login:
+
+```bash
+job-platform custom-themes
+```
+
+Python provides `Resume104Client.supported_custom_themes()` and the
+bearer-protected local HTTP service provides `GET /v1/tw104/custom-themes`.
+The catalog distinguishes the frontend's content-slot limit, the safe
+serializer's accepted item counts, and the implementation's evidence level.
+The deployed editor module `5255` uses **one** content slot for CLASSIC,
+BANNER and TEXT, and **two** for IMAGE and MAGAZINE. The older generic
+CUSTOM request serializer could submit up to six content items; it now
+refuses that unsupported shape. The offline IMAGE planner accepts one or
+two images (the raw 104 site previously accepted a single PNG, then exposed
+two slots), and the MAGAZINE planner accepts only a complete two-item
+candidate. MAGAZINE POST previously failed upstream; this restriction does
+**not** mean that its two-item candidate is known to succeed. Neither
+IMAGE nor MAGAZINE has an SDK writer.
+
 The 104 native editor has five CUSTOM themes. For **CLASSIC (1)** and
 **BANNER (2)**, `client.mutate_custom_layout(...)` now supports create,
 update and delete on a numbered `custom1`–`custom6` slot, limited to **one

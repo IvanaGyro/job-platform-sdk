@@ -621,6 +621,27 @@ multi-record ordering. Signed file tokens and previews are not
 part of the stable displayed identity comparison.
 
 
+### CUSTOM theme content slot limits and offline capabilities (2026-11-20)
+
+The deployed production Vue bundle module `5255` exports a per-theme
+`contentNumber` mapping: **CLASSIC=1, BANNER=1, TEXT=1, IMAGE=2,
+MAGAZINE=2**. An older generic source-mapped encoder allowed up to six
+content items even for CLASSIC/BANNER; that did not match the official
+editor and was corrected. The offline IMAGE planner allows one or two
+images because a one-PNG raw POST was accepted on 2026-11-17, with native
+GET showing two file positions afterward. The MAGAZINE planner now only
+constructs a complete two-content candidate; earlier native MAGAZINE POSTs
+failed, and a two-content candidate is **not yet live-tested or accepted**.
+No new real-site mutations were performed for this update.
+
+New static discovery: Python `Resume104Client.supported_custom_themes()`,
+CLI `job-platform custom-themes`, and bearer-authenticated local HTTP
+`GET /v1/tw104/custom-themes`. They return non-personal, read-only
+frontend content limits and explicit evidence/available writer scopes,
+without opening a browser, logging in, or reading a resume. The response
+sets `current_site_availability_verified:false`; source mapping alone is
+not proof that the live site accepts the request.
+
 ### Guarded CLASSIC/BANNER no-media SDK/CLI/HTTP (2026-11-20)
 
 Earlier private live raw 104 POST, PUT and DELETE succeeded for CUSTOM

@@ -539,6 +539,18 @@ records swapped, without modifying any other form data.
 
 Public frontend module 5255 lists CUSTOM theme constants:
 1=CLASSIC, 2=BANNER, 3=TEXT, 4=IMAGE, 5=MAGAZINE.
+The same module exports `h = {CustomThemeImage: 2,
+CustomThemeMagazine: 2}`. The CUSTOM editor calculates
+`contentNumber = h[selectedTheme.name] || 1`, so CLASSIC/BANNER/TEXT
+have exactly one content position, while IMAGE/MAGAZINE display two.
+The previously used generic `MAX_ITEMS=6` was not grounded in this
+frontend constant and has been replaced with a per-theme constraint.
+The raw native 104 site accepted a single PNG IMAGE request and later
+represented two image positions, so the offline IMAGE planner allows one
+or two entries. MAGAZINE's earlier single-item POST attempts failed;
+the offline serializer now requires a complete two-entry candidate, but
+**no successful MAGAZINE persistence is claimed**. All of this describes
+frontend shape and planning only, not new current-site read/write evidence.
 Module 4228.postData() converts
 {custom:{name,sort,content:[...]},themeChoose:{selectedTheme:{value:3}}}
 into blockValueList.custom with the numeric selected theme.

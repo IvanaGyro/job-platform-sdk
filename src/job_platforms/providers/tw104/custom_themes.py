@@ -25,7 +25,43 @@ THEMES = {
     4:"IMAGE",5:"MAGAZINE",
 }
 MEDIA_TYPES = {0,1,2,3}
-MAX_ITEMS = 6
+# Deployed frontend module 5255: contentNumber = 2 only for IMAGE and
+# MAGAZINE; all other themes use 1. The previous generic 6-item serializer
+# could construct layouts impossible to author through the site's editor.
+CONTENT_SLOTS = {1: 1, 2: 1, 3: 1, 4: 2, 5: 2}
+MAX_ITEMS = max(CONTENT_SLOTS.values())
+
+
+def custom_theme_capabilities() -> dict:
+    """Offline source-mapped UI limits and evidence-aware writer coverage.
+
+    This is *not* a live website availability claim. The new CUSTOM layout
+    wrapper only handles one no-media CLASSIC/BANNER item; the standalone
+    image/magazine serializers remain offline planners.
+    """
+    status = {
+        1: ("raw-native-live; SDK/CLI/HTTP synthetic", "single-no-media"),
+        2: ("raw-native-live; SDK/CLI/HTTP synthetic", "single-no-media"),
+        3: ("SDK native CRUD live", "single-text"),
+        4: ("raw-native-image-create/delete live; no SDK writer", "offline-planner"),
+        5: ("raw-native create failed; no SDK writer", "offline-planner"),
+    }
+    return {
+        "provider": "tw104", "source": "104 frontend module 5255",
+        "themes": [
+            {
+                "value": value, "name": name,
+                "frontend_content_slots": CONTENT_SLOTS[value],
+                "serializer_min_items": 1 if value == 4 else CONTENT_SLOTS[value],
+                "serializer_max_items": CONTENT_SLOTS[value],
+                "writer_scope": status[value][1],
+                "evidence": status[value][0],
+            }
+            for value, name in sorted(THEMES.items())
+        ],
+        "read_only": True, "persisted": False,
+        "current_site_availability_verified": False,
+    }
 MAX_BINARY = 5*1024*1024
 
 
@@ -141,11 +177,16 @@ def custom_theme_create_body(
         for x in options if isinstance(x,dict)
     ):
         raise UnsupportedWrite("104 CUSTOM theme not in current options")
-    if (
-        not isinstance(contents,list)
-        or not 1<=len(contents)<=MAX_ITEMS
-    ):
-        raise UnsupportedWrite("104 CUSTOM content count invalid")
+    if not isinstance(contents, list):
+        raise UnsupportedWrite("104 CUSTOM content list missing")
+    # IMAGE accepted a single PNG in a previous raw native test and the
+    # website materialized a second empty file position. MAGAZINE's single
+    # item trial was rejected; do not advertise unsupported partial layouts.
+    allowed = range(1, CONTENT_SLOTS[theme] + 1) if theme == 4 else (
+        CONTENT_SLOTS[theme],
+    )
+    if len(contents) not in allowed:
+        raise UnsupportedWrite("104 CUSTOM content count differs from editor theme")
     if theme==3:
         if len(contents)!=1 or set(contents[0])!={"introduction_html"}:
             raise UnsupportedWrite("104 CUSTOM TEXT only accepts one text content")

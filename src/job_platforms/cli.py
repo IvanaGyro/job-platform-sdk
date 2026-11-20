@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from job_platforms.providers.tw104 import AuthConfig, FreshBrowserSession, Resume104Client
+from job_platforms.providers.tw104.custom_themes import custom_theme_capabilities
 from job_platforms.providers.tw104.writers import (
     checked_write_paths, changed_sections, patch_path_catalog,
 )
@@ -81,6 +82,10 @@ def _parser() -> argparse.ArgumentParser:
     custom_plan.add_argument("--html-file", default=None)
     custom_plan.add_argument("--options-file", default=None)
     custom_plan.add_argument("--existing-form-file", default=None)
+    sub.add_parser(
+        "custom-themes",
+        help="Offline CUSTOM theme/editor content slot capacities and writer evidence",
+    )
     sub.add_parser(
         "writable-paths",
         help="Offline list of source-mapped JSON Patch replacement paths; no login",
@@ -217,6 +222,9 @@ async def _run(args):
             "persisted": False, "network_sent": False,
             **operation,
         }, ensure_ascii=False, indent=2))
+        return
+    if args.command == "custom-themes":
+        print(json.dumps(custom_theme_capabilities(), ensure_ascii=False, indent=2))
         return
     if args.command == "writable-paths":
         print(json.dumps(
