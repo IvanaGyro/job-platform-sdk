@@ -66,6 +66,7 @@ from .editor_limits import INPUT_FIELD_GROUPS, native_editor_limits
 from .revision_guard import is_revision, revision_matches, require_revision_match
 from .patch_verification import (
     PRESERVE_BLOCKS, stable_block_equal, verify_patch_transition,
+    verify_untouched_blocks,
 )
 from .writers import (
     checked_write_paths, changed_sections, section_data, section_request_body,
@@ -379,7 +380,7 @@ class Resume104Client:
                     after = await self.get_resume(version)
                     if verify_skill_operation(
                         before, after, action, body=body, position=position
-                    ):
+                    ) and verify_untouched_blocks(before, after, changed="skill"):
                         return {
                             "resume_id": version,
                             "action": action,
@@ -440,7 +441,7 @@ class Resume104Client:
                     after = await self.get_resume(version)
                     if verify_education_operation(
                         before, after, action, body=body, position=position
-                    ):
+                    ) and verify_untouched_blocks(before, after, changed="education"):
                         return {
                             "resume_id": version,
                             "action": action,
@@ -500,7 +501,7 @@ class Resume104Client:
                     after = await self.get_resume(version)
                     if verify_experience_operation(
                         before, after, action, body=body, position=position
-                    ):
+                    ) and verify_untouched_blocks(before, after, changed="experience"):
                         return {
                             "resume_id": version,
                             "action": action,
@@ -551,7 +552,7 @@ class Resume104Client:
                     after = await self.get_resume(version)
                     if verify_certificate_block(
                         before, after, action, body=body
-                    ):
+                    ) and verify_untouched_blocks(before, after, changed="certificate"):
                         return {
                             "resume_id": version, "section": "certificate",
                             "action": action, "persisted": True,
@@ -592,7 +593,9 @@ class Resume104Client:
             for attempt in range(4):
                 try:
                     after = await self.get_resume(version)
-                    if verify_bio_action(before, after, action, body=body):
+                    if verify_bio_action(before, after, action, body=body) and verify_untouched_blocks(
+                        before, after, changed="bio",
+                    ):
                         return {
                             "resume_id": version, "section": "bio",
                             "action": action, "persisted": True,
@@ -707,7 +710,7 @@ class Resume104Client:
                     after = await self.get_resume(version)
                     if verify_referrer_operation(
                         before, after, action, body=body, position=position
-                    ):
+                    ) and verify_untouched_blocks(before, after, changed="referrer"):
                         return {
                             "resume_id": version,
                             "action": action,
@@ -776,7 +779,7 @@ class Resume104Client:
                     after = await self.get_resume(version)
                     if verify_project_operation(
                         before, after, action, body=body, position=position
-                    ):
+                    ) and verify_untouched_blocks(before, after, changed="project"):
                         return {
                             "resume_id": version,
                             "action": action,
@@ -855,7 +858,9 @@ class Resume104Client:
                             before, after, position=position
                         )
                     )
-                    if valid:
+                    if valid and verify_untouched_blocks(
+                        before, after, changed="portfolio",
+                    ):
                         return {
                             "resume_id": version, "section": "portfolio",
                             "action": action,
@@ -922,7 +927,7 @@ class Resume104Client:
                     after = await self.get_resume(version)
                     if verify_portfolio_file_create(
                         before, after, fields=fields,
-                    ):
+                    ) and verify_untouched_blocks(before, after, changed="portfolio"):
                         return {
                             "resume_id": version, "section": "portfolio",
                             "action": "create-file", "persisted": True,
@@ -1060,7 +1065,7 @@ class Resume104Client:
                     after=await self.get_resume(version)
                     if verify_custom_text_mutation(
                         before,after,action,slot=slot,body=body
-                    ):
+                    ) and verify_untouched_blocks(before, after, changed=f"custom{slot}"):
                         return {
                             "resume_id":version,"section":f"custom{slot}",
                             "action":action,"persisted":True,"verified":True,
@@ -1123,7 +1128,9 @@ class Resume104Client:
                     raise VerificationError(
                         "104 CUSTOM layout submitted; read-back unavailable"
                     ) from None
-                if matched:
+                if matched and verify_untouched_blocks(
+                    before, after, changed=f"custom{slot}",
+                ):
                     current_theme = (
                         theme if action == "create" else
                         before[f"custom{slot}"]["formData"]["themeChoose"]
@@ -1189,7 +1196,7 @@ class Resume104Client:
                     after = await self.get_resume(version)
                     if verify_language_operation(
                         before, after, kind, action, body=body, position=position
-                    ):
+                    ) and verify_untouched_blocks(before, after, changed="language"):
                         return {
                             "resume_id": version,
                             "action": action,
@@ -1245,7 +1252,9 @@ class Resume104Client:
             for attempt in range(4):
                 try:
                     after = await self.get_resume(version)
-                    if verify_theme_write(before, after, section, selected_theme):
+                    if verify_theme_write(before, after, section, selected_theme) and verify_untouched_blocks(
+                        before, after, changed=section,
+                    ):
                         return {
                             "resume_id": version, "section": section,
                             "selected_theme": selected_theme,
@@ -1289,7 +1298,7 @@ class Resume104Client:
                     if verify_sort(
                         before, after, section, from_position, to_position,
                         kind=kind,
-                    ):
+                    ) and verify_untouched_blocks(before, after, changed=section):
                         return {
                             "resume_id": version, "section": section,
                             "from": from_position, "to": to_position,

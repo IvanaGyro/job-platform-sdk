@@ -40,6 +40,39 @@ def stable_block_equal(before: dict, after: dict, block: str) -> bool:
     )
 
 
+def verify_untouched_blocks(
+    before: dict, after: dict, *, changed: str | tuple[str, ...],
+) -> bool:
+    """Ensure a native action never silently corrupts other known blocks.
+
+    Native record CRUD/layout/sort/upload are single-block operations, but
+    unlike PATCH their success checks previously inspected only the target.
+    An aggregate `custom` theme selection is also valid although most
+    CUSTOM editor records use dynamic custom1..6 keys; the latter stay
+    protected as separate blocks. Reuse the exact same FILE-only
+    rotating access-token exemption as PATCH;
+    all LINK URLs and all other section data remain strict.
+
+    This compares a before/after GET *after* a submitted remote action; it
+    does not provide upstream transactions, rollback or server-side CAS.
+    """
+    if not isinstance(before, dict) or not isinstance(after, dict):
+        return False
+    allowed = (changed,) if type(changed) is str else changed
+    if not isinstance(allowed, tuple) or not allowed or any(
+        type(block) is not str or block not in (*PRESERVE_BLOCKS, "custom")
+        for block in allowed
+    ) or len(allowed) != len(set(allowed)):
+        return False
+    try:
+        return all(
+            stable_block_equal(before, after, block)
+            for block in PRESERVE_BLOCKS if block not in allowed
+        )
+    except (UnsupportedWrite, ValueError, TypeError, KeyError, AttributeError):
+        return False
+
+
 def _strip_target_data(document: dict[str, Any], section: str) -> dict:
     """Remove only fields whose change was verified by section_data()."""
     native = deepcopy(document[section])
@@ -86,9 +119,8 @@ def verify_patch_transition(
     try:
         if section_data(after, section) != desired_section:
             return False
-        for sibling in PRESERVE_BLOCKS:
-            if sibling != section and not stable_block_equal(before, after, sibling):
-                return False
+        if not verify_untouched_blocks(before, after, changed=section):
+            return False
         if section == "sidebar":
             return _same_sidebar_records(before, after)
         if section in ("bio", "certificate", "experience"):

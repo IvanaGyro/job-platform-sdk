@@ -102,6 +102,22 @@ any POST, PUT, DELETE or file conversion. The local HTTP wrapper also checks
 preconditions and **do not establish atomic server-side concurrency control**;
 104's separate `104-profile-ver` transport handshake remains required.
 
+**Collateral-write verification for native actions:** The same strict
+non-target-section read-back used by JSON Patch now also applies to all
+source-mapped SDK native CRUD actions, CUSTOM TEXT/CLASSIC/BANNER, record
+sorting, per-section theme changes, PORTFOLIO LINK/FILE creation and FILE
+upload. A successful native request and matching target data are **not**
+considered verified if any other known resume section unexpectedly
+changes or disappears. The narrow, previously observed rotation of four
+opaque PORTFOLIO **FILE** access fields remains permitted; changes to LINK
+URLs, display names, other metadata or any dynamic CUSTOM slot do not.
+A failed/ambiguous write is never automatically submitted again.
+
+This is an offline/synthetic-tested safeguard covering known native GET
+blocks, not a complete account-wide change detector or upstream atomic
+transaction. Changes to native data absent from both GET snapshots cannot
+be detected; independent server-side version checks remain unverified.
+
 `client.save_edit(plan)` supports:
 
 - `/bio/formData/bio/chi` and `/bio/formData/bio/eng`. The BIO PUT has passed

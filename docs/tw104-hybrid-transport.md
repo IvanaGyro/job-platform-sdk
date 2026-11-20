@@ -4,6 +4,29 @@ The default is still `BrowserTransport`: Patchright authenticates and issues
 same-origin requests. An opt-in `CurlCffiTransport` instead uses `curl_cffi`
 0.17 / Chrome 146 impersonation after a **successful browser login**.
 
+## Collateral-change detection for all native writer families (2026-11-20)
+
+The earlier cross-section preservation check covered multi-field JSON
+Patch, but direct native SKILL/EDUCATION/EXPERIENCE/REFERRER/PROJECT/
+LANGUAGE, BIO/CERTIFICATE, CUSTOM TEXT/CLASSIC/BANNER, PORTFOLIO LINK/FILE,
+sorting and theme PUTs could still report success based solely on the
+modified target. Now `verify_untouched_blocks(before, after, changed=...)`
+checks every *other* known native block, including optional UNDER18 and
+all six numbered CUSTOM slots, after the target-specific validator passes.
+The native aggregate CUSTOM theme is supported as a special target while
+individual numbered CUSTOM slots remain protected. A missing/present
+section mismatch is rejected. A new unknown block not present in the
+known allowlist is outside the current detection scope.
+
+The helper shares JSON Patch's exact narrow exemption for regenerated
+PORTFOLIO **FILE** access `fileId`, `thumbnailFileId`, `src` and `url`.
+PORTFOLIO LINK URLs, record identities, filename, sort and other metadata
+are never masked. A changed unrelated block means the result is **not
+verified** and the SDK does **not** replay a POST/PUT/DELETE/upload.
+Only synthetic GET/PUT/POST/DELETE fixtures were used in the tests for
+this extension, not a current 104 login or live mutation. No rollback,
+upstream atomicity or account-wide state preservation is implied.
+
 ## UNDER18 sensitive age/identity native writes (2026-11-20)
 
 The retained Vuex module for the optional UNDER18 section maps CREATE to

@@ -53,6 +53,21 @@ async with FreshBrowserSession(AuthConfig.from_env()) as session:
     verifier = Resume104Client(transport=await session.http_transport())
 ```
 
+## Collateral-write preservation for direct native mutations (2026-11-20)
+
+Every newly added native writer must verify its requested target *and* call
+`verify_untouched_blocks(before, after, changed=section)` before claiming
+successful persistence. This includes record CRUD, theme changes, sorting,
+CUSTOM and upload flows. `changed` must name exactly the section whose
+write is intended; numbered CUSTOM slots remain protected independently.
+An aggregate `custom` layout theme is a permitted special target, not a
+license to ignore changes in custom1..custom6. The shared comparator
+intentionally ignores only four regenerated access tokens in PORTFOLIO
+**FILE**, never LINK URLs or other metadata. A collateral change is a
+verification failure; never retry an already-submitted write or claim an
+automatic rollback. This is a synthetic-tested client safety guard and is
+not upstream 104 atomic concurrency support.
+
 ## Sensitive UNDER18 identity writes (2026-11-20)
 
 The official Vuex source describes only CREATE/UPDATE via

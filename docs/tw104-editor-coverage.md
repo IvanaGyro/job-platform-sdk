@@ -623,6 +623,25 @@ multi-record ordering. Signed file tokens and previews are not
 part of the stable displayed identity comparison.
 
 
+### Cross-section preservation for direct native CRUD — 2026-11-20
+
+The earlier `save_edit()` hardening checked collateral block changes during
+JSON Patch. Direct SKILL, EDUCATION, EXPERIENCE, LANGUAGE, PROJECT, REFERRER,
+BIO, CERTIFICATE, CUSTOM, PORTFOLIO LINK/FILE, sorting and layout writes
+now apply the same guard to their own successful target read-back. In
+particular, a modified value can no longer be considered verified if
+another native block or numbered CUSTOM slot was destroyed by the same
+request. The four existing FILE-only volatile URL/token exceptions are
+retained; LINK destinations and all other saved metadata remain strict.
+
+Synthetic regressions deliberately corrupt another block after 14
+otherwise successful native mutations and confirm **one submitted request,
+no retry and verification failure**. Separate tests show unrelated FILE
+access-token rotation remains acceptable, whereas unexpected LINK URL
+changes are rejected. This is read-back detection, not server-side
+transaction isolation, repair, legal-account-state verification or proof
+of new 104 live compatibility. No new live login or mutation was made.
+
 ### Guarded UNDER18 age/identity POST/PUT — 2026-11-20
 
 The retained official Vuex source dispatches `api/resumeByBlock/post` or
