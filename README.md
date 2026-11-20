@@ -144,6 +144,60 @@ be detected; independent server-side version checks remain unverified.
   submits or overwrites the individual `experiences` list. **Synthetic-tested,
   not live-tested.** Independent EXPERIENCE record CRUD is documented below.
 
+### Sequential native edit batch for workflows (experimental)
+
+A workflow can now combine the **existing** supported 104 writers into one
+ordered, bounded job. No new 104 site endpoint is used. This is **not an
+atomic transaction**: each step writes and verifies independently, and
+later steps see a freshly read `resumeTimestamp`. Example *synthetic*
+`private-steps.json` (replace all examples with the resume's real values,
+and do not commit such files):
+
+```json
+[
+  {"type":"record","section":"skill","action":"update",
+   "position":1,"changes":{"desc":"Synthetic skill description"}},
+  {"type":"patch","operations":[
+   {"op":"replace","path":"/bio/formData/bio/chi","value":"<p>Example</p>"}]},
+  {"type":"theme","section":"skill","selected_theme":2},
+  {"type":"sort","section":"skill","from_position":1,"to_position":2}
+]
+```
+
+Python SDK: `await client.apply_batch(resume_id, steps,
+expected_timestamp=revision)`. CLI:
+
+```bash
+job-platform batch VERSION_NO --steps-file private-steps.json \
+  --if-match TIMESTAMP --confirm experimental-nonatomic-batch
+```
+
+The opt-in bearer-protected local HTTP service accepts the same JSON array
+through `POST /v1/tw104/resumes/{resume_id}/batch` with `If-Match` and a
+16+-character `Idempotency-Key`. The optional SQLite idempotency journal
+protects this route across service restarts too. Supported step types are
+`record` (SKILL, EDUCATION, EXPERIENCE, REFERRER, PROJECT and LANGUAGE
+create/update/delete; LANGUAGE additionally requires `kind=local|foreign`),
+`patch` (existing mapped JSON Patch paths), `theme` (existing mapped
+sections) and `sort` (existing supported sort methods, LANGUAGE also needs
+`kind`). Maximum **12 steps**, and at most **64 operations per PATCH step**.
+Each step has a strict key whitelist. No UNDER18 identity writes, media
+uploads, guessed certification links or arbitrary network actions are
+accepted through batch.
+
+All step **structures** are checked before the first request. Site-specific
+fields, selector options, current positions, capacities and theme choices
+are still validated by each underlying writer against current site data,
+so a later step may fail **after** earlier steps were committed. Success
+returns only safe step labels such as `1:skill.update` and `2:patch`, never
+resume field values. A later failure raises `PartialWriteError` with the
+verified labels in `verified_sections` and a `failed_section` step label;
+HTTP returns a 409 on that uncertain/partial result and prevents same-key
+replay. Do not automatically retry a partially successful batch or assume
+rollback, especially if the same section is edited multiple times. Client
+checks are **not** server-side atomic compare-and-swap. All new batch
+orchestration is **synthetic-tested only**, not newly live-verified.
+
 ### Experimental 104 skill records (CRUD)
 
 The 104 editor uses *distinct* POST, PUT and DELETE requests for skills, not

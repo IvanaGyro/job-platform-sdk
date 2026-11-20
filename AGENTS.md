@@ -68,6 +68,24 @@ verification failure; never retry an already-submitted write or claim an
 automatic rollback. This is a synthetic-tested client safety guard and is
 not upstream 104 atomic concurrency support.
 
+## 104 workflow batch writes (2026-11-21)
+
+`batch_edit.validate_batch_steps` whitelists at most 12 ordered steps:
+existing native record CRUD (six record families), supported JSON Patch,
+source-mapped section theme, and known sort methods. The SDK
+`apply_batch()` delegates **only** to existing individually verified
+writers; CLI `batch` reads an explicitly acknowledged private JSON file,
+and opt-in HTTP POST `/v1/tw104/resumes/{id}/batch` requires bearer,
+If-Match and Idempotency-Key (including SQLite persistence when enabled).
+Never infer a new upstream 104 endpoint from this orchestration layer;
+UNDER18 identity, media, and unverified certificate associations are
+intentionally outside the batch contract. Validate all step structure
+before the first write, re-read the resume after each successful step,
+verify untouched blocks and global revision before the next step, and
+never report partial operations as an atomic transaction. Do not retry
+ambiguous mutations, auto-rollback previously verified steps or expose
+user field values in step labels/results. Synthetic tests only.
+
 ## Local HTTP idempotency persistence (2026-11-21)
 
 The server defaults to its original in-memory result map. For a stateful

@@ -121,6 +121,16 @@ def _parser() -> argparse.ArgumentParser:
     plan = sub.add_parser("plan", help="Validate multi-field edits without saving")
     plan.add_argument("resume_id")
     plan.add_argument("--patch-file", required=True)
+    batch = sub.add_parser(
+        "batch", help="Sequential 104 record/PATCH/theme/sort writes (non-atomic)",
+    )
+    batch.add_argument("resume_id")
+    batch.add_argument("--steps-file", required=True,
+                       help="Private JSON list of ordered supported operations")
+    batch.add_argument("--if-match", required=True,
+                       help="resumeTimestamp from prior GET")
+    batch.add_argument("--confirm", choices=["experimental-nonatomic-batch"],
+                       required=True)
     apply_cmd = sub.add_parser("apply", help="Explicitly write supported 104 sections (experimental)")
     apply_cmd.add_argument("resume_id")
     apply_cmd.add_argument("--patch-file", required=True)
@@ -376,6 +386,12 @@ async def _run(args):
                     Path(args.html_file).read_text(encoding="utf-8")
                     if args.html_file is not None else None
                 ),
+            )
+        elif args.command == "batch":
+            steps = json.loads(Path(args.steps_file).read_text(encoding="utf-8"))
+            result = await client.apply_batch(
+                args.resume_id, steps,
+                expected_timestamp=args.if_match.strip('"'),
             )
         elif args.command == "under18":
             if not args.acknowledge_identity_write:

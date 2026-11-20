@@ -623,6 +623,24 @@ multi-record ordering. Signed file tokens and previews are not
 part of the stable displayed identity comparison.
 
 
+### Non-atomic ordered batch of already-supported writers — 2026-11-21
+
+New `batch_edit.py` statically validates ordered 104 native record CRUD,
+JSON Patch, section theme and record sort steps before starting. The batch
+is explicitly limited to 12 steps and does not widen the source-mapped
+record/field coverage or introduce remote endpoints. It excludes UNDER18,
+media uploads, guessed certificate association endpoints, and anything
+without a separately implemented safe native writer. Each step calls the
+existing SDK write method and checks its verified persistence; current
+`resumeTimestamp` and all known non-target blocks are re-read before
+continuing. If a writer could have partially succeeded or the site was
+edited concurrently, it stops without retry/rollback, returning safe step
+labels through the existing `PartialWriteError` interface. The CLI and
+local HTTP routes share the contract and the HTTP route supports durable
+SQLite idempotency. Synthetic tests validate the real skill SDK call path,
+preflight, revision changes, partial outcome, HMAC request fingerprint,
+HTTP bearer and persistent replay; no live 104 authentication was needed.
+
 ### Optional durable HTTP Idempotency-Key journal — 2026-11-21
 
 All earlier entries describing HTTP idempotency as *in-memory only*

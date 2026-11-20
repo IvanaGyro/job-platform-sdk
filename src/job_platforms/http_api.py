@@ -29,6 +29,7 @@ from job_platforms.core.errors import (
 )
 from job_platforms.providers.tw104 import AuthConfig, FreshBrowserSession, Resume104Client
 from job_platforms.providers.tw104.writers import checked_write_paths, changed_sections
+from job_platforms.providers.tw104.batch_edit import validate_batch_steps
 from job_platforms.providers.tw104.editor_limits import INPUT_FIELD_GROUPS
 from job_platforms.providers.tw104.revision_guard import is_revision, revision_matches
 from job_platforms.providers.tw104.skill_records import skill_operation_body
@@ -185,6 +186,9 @@ def create_app(
                 "experimental_custom_layout_actions": ["create", "update", "delete"],
                 "experimental_custom_layout_themes": {"CLASSIC": 1, "BANNER": 2},
                 "experimental_bio_actions": ["create", "clear"],
+                "experimental_batch_steps": ["record", "patch", "theme", "sort"],
+                "experimental_batch_atomic": False,
+                "experimental_batch_max_steps": 12,
                 "experimental_under18_actions": ["create", "update"],
                 "under18_requires_identity_acknowledgement": True,
                 "experimental_record_operations": {
@@ -563,6 +567,61 @@ def create_app(
             else:
                 record.update({"state": "succeeded", "result": item})
                 return item
+
+    @app.post(
+        "/v1/tw104/resumes/{resume_id}/batch",
+        dependencies=[Depends(authorize)],
+    )
+    async def apply_batch_http(
+        resume_id: str, request: Request, steps: list[dict] = Body(...),
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        """Sequential existing SDK writes; atomic=False and never auto-replay."""
+        if not allow_experimental_writes:
+            raise HTTPException(501, "104 batch requires experimental write opt-in")
+        if if_match is None:
+            raise HTTPException(428, "If-Match resumeTimestamp required")
+        if not idempotency_key or len(idempotency_key) < 16:
+            raise HTTPException(400, "Idempotency-Key must be at least 16 characters")
+        expected = if_match.strip('"')
+        try:
+            operations = validate_batch_steps(steps)
+        except (UnsupportedWrite, ValueError, KeyError, TypeError):
+            raise HTTPException(422, "Unsupported 104 batch operation") from None
+        # Fingerprint uses a keyed digest: user-supplied names/text must not
+        # be recoverable through a small-dictionary attack on SQLite rows.
+        fingerprint = hmac.new(token.encode("utf-8"), json.dumps({
+            "steps": operations, "revision": expected,
+        }, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+            hashlib.sha256).hexdigest()
+        key = ("BATCH", resume_id, idempotency_key)
+        async with request.app.state.action_lock:
+            cached = request.app.state.idempotency_results.get(key)
+            if cached is not None:
+                if cached["fingerprint"] != fingerprint:
+                    raise HTTPException(409, "Idempotency-Key reused for a different batch")
+                if cached["state"] != "succeeded":
+                    raise HTTPException(409, "Batch outcome uncertain; inspect before retry")
+                return cached["result"]
+            try:
+                before = await request.app.state.client.get_resume(resume_id)
+                if not revision_matches(before, expected):
+                    raise HTTPException(412, "Resume changed since caller's read")
+            except JobPlatformError as exc:
+                translate_error(exc)
+            record = {"state": "indeterminate", "fingerprint": fingerprint}
+            request.app.state.idempotency_results[key] = record
+            record = request.app.state.idempotency_results[key]
+            try:
+                result = await request.app.state.client.apply_batch(
+                    resume_id, operations, expected_timestamp=expected,
+                )
+            except JobPlatformError as exc:
+                translate_error(exc)
+            else:
+                record.update({"state": "succeeded", "result": result})
+                return result
 
     @app.post(
         "/v1/{provider}/resumes/{resume_id}/plan",

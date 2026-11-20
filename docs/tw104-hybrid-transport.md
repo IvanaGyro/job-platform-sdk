@@ -27,6 +27,29 @@ Only synthetic GET/PUT/POST/DELETE fixtures were used in the tests for
 this extension, not a current 104 login or live mutation. No rollback,
 upstream atomicity or account-wide state preservation is implied.
 
+## Ordered workflow batch orchestration (2026-11-21)
+
+`Resume104Client.apply_batch()` now sequences the existing source-mapped
+`mutate_skill/education/experience/referrer/project/language`, JSON Patch
+`plan_edit`/`save_edit`, `set_theme` and `sort_records` methods without
+inventing any new 104 remote endpoint. The CLI `job-platform batch` accepts
+a locally protected JSON steps file; authenticated opt-in HTTP
+`POST /v1/tw104/resumes/{resume_id}/batch` uses `If-Match` and the same
+in-process/optional SQLite Idempotency-Key mechanism. Static validation
+refuses unknown step shapes, identity/media write attempts, missing record
+sort/kind metadata, and overlong batches before any upstream write.
+
+At most 12 steps execute sequentially, **not atomically**. Each writer
+validates its own current native GET and persists one or more verified
+requests. The batch captures a fresh snapshot after each success and
+checks untouched blocks, then re-GETs all known blocks and compares the
+global revision before the next step. A concurrent change or uncertain
+write aborts. The `PartialWriteError` names only verified step types and
+the failed step; it does not contain personal values or imply rollback.
+Native field correctness cannot be prevalidated for future state after
+other steps mutate records, so late failures remain possible. No fresh
+live 104 website write was performed; new tests are synthetic.
+
 ## Restart-safe, opt-in HTTP idempotency (2026-11-21)
 
 The original local FastAPI service stored every Idempotency-Key in an

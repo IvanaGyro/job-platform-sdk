@@ -64,6 +64,7 @@ from .education_records import (
 )
 from .editor_limits import INPUT_FIELD_GROUPS, native_editor_limits
 from .revision_guard import is_revision, revision_matches, require_revision_match
+from .batch_edit import apply_native_batch, validate_batch_steps
 from .patch_verification import (
     PRESERVE_BLOCKS, stable_block_equal, verify_patch_transition,
     verify_untouched_blocks,
@@ -224,6 +225,15 @@ class Resume104Client:
         if not is_revision(stamp):
             raise VerificationError("104 resume revision unavailable for an edit")
         return stamp
+
+    async def apply_batch(
+        self, resume_id: str | int, steps: list[dict], *,
+        expected_timestamp: int | str,
+    ) -> dict:
+        """Non-atomic workflow of existing record/PATCH/theme/sort writers."""
+        return await apply_native_batch(
+            self, resume_id, steps, expected_timestamp=expected_timestamp,
+        )
 
     async def plan_edit(
         self, resume_id: str | int, changes: list[dict]
