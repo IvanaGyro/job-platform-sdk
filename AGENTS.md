@@ -10,14 +10,25 @@ certificate section), and the inspected /profile/, /profile/set/, and
 /profile/intro pages did not expose window.$nuxt?.$store; /profile/intro
 currently redirects to /resumes/, which is a **public resume-template**
 website, not the account resume editor. Never use public example resumes
-as test targets. The certificate center account-owned list and real
-frontend connect/disconnect path remain unobserved, so **zero P0-07 site
-CRUD writes were sent**. Before any mutation locate the authenticated
-personal resume editor and a reversible account-owned certificate, validate
-the actual site bridge, and only then run real connect/independent
-GET/disconnect/exact restore. P0-08 starts **only after real P0-07 CRUD
-passes**, per explicit user sequencing. Do not repeat routine workspace
-surveys, cycle proxies unnecessarily, or pivot to unrelated features.
+as test targets. The actual editor URL was subsequently confirmed from the deployed
+JavaScript `profileResumeEditNew` navigation mapping:
+`https://pda.104.com.tw/profile/edit?vno=<VERSION_NO>` (private version
+from `editor-selected-resume.json`). This URL returns HTTP 200 and loads
+the editor bundle plus `certificate-tool.umd.js`, and authenticated GET
+works; **however the JavaScript editor/store was not mounted** when using
+saved cookie/localStorage state: no certificate controls, `window.$nuxt`,
+`window.CertificateTool` or visible Vuex store, despite no observed 4xx
+or pageerror. The test resume is GENERAL, not SIMPLE; certificate formData
+is empty. One further fresh login on proxy #1 then raised
+`AuthenticationRequired`; do not assume a new login succeeds automatically.
+The certificate account-owned list and real frontend connect/disconnect
+write path remain unobserved, so **zero P0-07 site CRUD writes were sent**.
+The browser-only Vuex dispatch writer may be inapplicable to the currently
+loaded editor until this bridge is resolved. Before any mutation, establish
+the editor's actual store/UI and a safely reversible account-owned
+certificate, then do real connect/GET/disconnect/exact restore.
+P0-08 starts **only after real P0-07 CRUD passes**, per explicit user
+sequencing. Do not repeat this route hunt or pivot to other features.
 
 **Before selecting the next task, read [docs/unimplemented-editor-fields.md](docs/unimplemented-editor-fields.md).**
 It is the authoritative priority-ordered backlog of **fields/operations with no

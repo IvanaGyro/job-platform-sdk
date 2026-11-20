@@ -62,13 +62,26 @@ did not expose `window.$nuxt?.$store`. Importantly, the current
 **public resume template site** (not a personal resume editor); the
 `/resumes/{vno}/about` URL constructed from the backend `versionNo`
 landed on the site's not-found page. Do not operate on any public
-example profile in that directory. The correct personal editor action
-bridge, account-owned certificate option list and populated certificate
-GET still need live identification. **No real certificate link/unlink
-write was sent; no independent persistence/read-back/restore was
-achieved; newly live-verified fields: 0.** P0-08 stays deferred until
-P0-07 truly passes live CRUD. No cookies, titles, identifiers or
-certificate values are recorded in this public evidence note.
+example profile in that directory. The deployed editor navigation map was then found in module `1809`:
+`profileResumeEditNew` points to `profile/edit`, and another frontend
+reference appends `?vno=...`. The real, private-version editor URL
+`/profile/edit?vno=<VERSION_NO>` **returned HTTP 200 and a successful
+resumeByBlock GET**, loading the editor JS bundle and
+`certificate-tool.umd.js`. The test resume is `resumeType.value=1`
+(GENERAL), not SIMPLE. Nevertheless, under the previously saved
+cookie/localStorage context, the editor UI had no certificate controls,
+no visible mounted Vuex store, no `window.$nuxt?.$store` and no
+`window.CertificateTool`. No HTTP 4xx or JavaScript pageerror was
+observed during this navigation. A subsequent fresh proxy #1 login
+attempt raised `AuthenticationRequired`. Thus the correct personal
+editor **route** is known, but the authenticated **action bridge and
+account-owned certificate list remain unconfirmed**; the Vuex writer
+cannot yet be treated as real-site compatible. **No link/unlink requests
+were sent; zero additional live-verified fields.** The next action is
+explicit editor UI/store initialization plus certificate option retrieval,
+followed only then by a reversible association test. P0-08 remains
+deferred until real P0-07 connect/read/unlink/restore passes. No private
+version, certificate, account fields or session tokens are in this note.
 
 ## Latest evidence — 2026-11-18
 
