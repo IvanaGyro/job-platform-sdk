@@ -27,6 +27,35 @@ Only synthetic GET/PUT/POST/DELETE fixtures were used in the tests for
 this extension, not a current 104 login or live mutation. No rollback,
 upstream atomicity or account-wide state preservation is implied.
 
+## Restart-safe, opt-in HTTP idempotency (2026-11-21)
+
+The original local FastAPI service stored every Idempotency-Key in an
+in-memory dictionary, including possibly committed and ambiguous 104
+writes. Restarting or replacing the process discarded the cache and let
+the same key submit again. `http_idempotency.SQLiteIdempotencyJournal`
+now supports optional `JOB_PLATFORM_IDEMPOTENCY_DB=/absolute/private/path`
+(and explicit `create_app(idempotency_db_path=...)`). The database is
+validated **before browser login**; it must be an owner-only regular file
+with an existing parent directory. Its rows store HMAC-keyed opaque request
+identity, per-route fingerprints, operation states and successful safe
+responses, not raw keys. It is not encrypted and the creation response
+might contain resume metadata, so never check the database into Git or
+place it in a shared/synced directory. A dedicated user-private directory
+and Linux/macOS POSIX local filesystem are required; Windows ACL-based
+permissions are not implemented and fail closed.
+
+The API now re-reads reserved entries as journal-backed objects before
+calling upstream. Their `update()` writes the verified success state to
+SQLite before returning HTTP 200. Any crash or ambiguous upstream result
+leaves `indeterminate` persisted: replay returns HTTP 409 and never
+blindly retries. The same protection is used for resume creation, PATCH,
+all native record CRUD, CUSTOM, BIO/CERTIFICATE/UNDER18, theme, sort and
+file upload. Competing `INSERT`s are safely rejected with 409, but the
+server is still **single-worker only**; there is no distributed 104 account
+lock or cross-server transaction. Tests exercise fully synthetic HTTP app
+start/stop/restart, request collisions, identity confidentiality and
+uncertain-result blocking. No live resume write or login was performed.
+
 ## UNDER18 sensitive age/identity native writes (2026-11-20)
 
 The retained Vuex module for the optional UNDER18 section maps CREATE to

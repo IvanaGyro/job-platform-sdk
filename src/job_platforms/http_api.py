@@ -16,6 +16,11 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import Body, Depends, FastAPI, Header, HTTPException, Request
+from fastapi.responses import JSONResponse
+
+from job_platforms.http_idempotency import (
+    DuplicateReservationError, SQLiteIdempotencyJournal,
+)
 
 from job_platforms.core.capabilities import ProviderCapabilities
 from job_platforms.core.errors import (
@@ -68,6 +73,7 @@ TW104_CAPABILITIES = ProviderCapabilities(
 def create_app(
     config: AuthConfig | None = None, *, api_token: str | None = None,
     allow_experimental_writes: bool | None = None,
+    idempotency_db_path: str | None = None,
 ) -> FastAPI:
     token = api_token or os.getenv("JOB_PLATFORM_API_TOKEN")
     if not token or len(token) < 24:
@@ -77,24 +83,36 @@ def create_app(
         allow_experimental_writes = (
             os.getenv("JOB_PLATFORM_104_ENABLE_EXPERIMENTAL_WRITES") == "1"
         )
+    if idempotency_db_path is None:
+        idempotency_db_path = os.getenv("JOB_PLATFORM_IDEMPOTENCY_DB")
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        async with FreshBrowserSession(config) as session:
-            transport = os.getenv("JOB_PLATFORM_104_TRANSPORT", "browser")
-            if transport == "browser":
-                app.state.client = Resume104Client(session.page)
-            else:
-                app.state.client = await session.resume_client(
-                    transport=transport,
-                    allow_http_writes=(
-                        allow_experimental_writes
-                        and os.getenv("JOB_PLATFORM_104_CFFI_ENABLE_WRITES") == "1"
-                    ),
-                )
-            app.state.action_lock = asyncio.Lock()
-            app.state.idempotency_results = {}
-            yield
+        # Validate/lock down local persistence before starting a browser or
+        # trying to authenticate against the remote 104 website.
+        journal = (
+            SQLiteIdempotencyJournal(idempotency_db_path)
+            if idempotency_db_path else None
+        )
+        try:
+            async with FreshBrowserSession(config) as session:
+                transport = os.getenv("JOB_PLATFORM_104_TRANSPORT", "browser")
+                if transport == "browser":
+                    app.state.client = Resume104Client(session.page)
+                else:
+                    app.state.client = await session.resume_client(
+                        transport=transport,
+                        allow_http_writes=(
+                            allow_experimental_writes
+                            and os.getenv("JOB_PLATFORM_104_CFFI_ENABLE_WRITES") == "1"
+                        ),
+                    )
+                app.state.action_lock = asyncio.Lock()
+                app.state.idempotency_results = journal if journal is not None else {}
+                yield
+        finally:
+            if journal is not None:
+                journal.close()
 
     app = FastAPI(
         title="Job Platform SDK (unofficial)",
@@ -104,6 +122,15 @@ def create_app(
         docs_url=None,
         redoc_url=None,
     )
+
+    @app.exception_handler(DuplicateReservationError)
+    async def duplicate_reservation(_request: Request, _exc: DuplicateReservationError):
+        # Cross-process reservation races must fail closed before a second
+        # remote submission. Do not echo idempotency keys or request data.
+        return JSONResponse(
+            status_code=409,
+            content={"detail": "Operation already reserved; inspect before retrying"},
+        )
 
     async def authorize(authorization: str | None = Header(default=None)):
         expected = "Bearer " + token
@@ -288,6 +315,7 @@ def create_app(
                 translate_error(exc)
             entry = {"fingerprint": fingerprint, "state": "indeterminate"}
             request.app.state.idempotency_results[key] = entry
+            entry = request.app.state.idempotency_results[key]
             try:
                 result = await request.app.state.client.mutate_custom_layout(
                     resume_id, action, slot=slot, expected_timestamp=expected,
@@ -374,6 +402,7 @@ def create_app(
                 translate_error(exc)
             entry={"fingerprint":fingerprint,"state":"indeterminate"}
             request.app.state.idempotency_results[key]=entry
+            entry = request.app.state.idempotency_results[key]
             try:
                 result=await request.app.state.client.mutate_custom_text(
                     resume_id,action,slot=slot,expected_timestamp=expected,
@@ -526,14 +555,13 @@ def create_app(
             request.app.state.idempotency_results[cache_key] = {
                 "state": "indeterminate"
             }
+            record = request.app.state.idempotency_results[cache_key]
             try:
                 item = await request.app.state.client.create_resume()
             except JobPlatformError as exc:
                 translate_error(exc)
             else:
-                request.app.state.idempotency_results[cache_key] = {
-                    "state": "succeeded", "result": item
-                }
+                record.update({"state": "succeeded", "result": item})
                 return item
 
     @app.post(
@@ -602,6 +630,7 @@ def create_app(
                 # can occur after the remote server has committed the request.
                 record = {"fingerprint": fingerprint, "state": "indeterminate"}
                 request.app.state.idempotency_results[key] = record
+                record = request.app.state.idempotency_results[key]
                 result = await request.app.state.client.save_edit(plan)
                 record.update({"state": "succeeded", "result": result})
                 return result
@@ -662,6 +691,7 @@ def create_app(
 
             record = {"fingerprint": fingerprint, "state": "indeterminate"}
             request.app.state.idempotency_results[key] = record
+            record = request.app.state.idempotency_results[key]
             try:
                 result = await request.app.state.client.mutate_skill(
                     resume_id, action, changes=changes, position=position,
@@ -763,6 +793,7 @@ def create_app(
                 translate_error(exc)
             record = {"fingerprint": fingerprint, "state": "indeterminate"}
             request.app.state.idempotency_results[key] = record
+            record = request.app.state.idempotency_results[key]
             try:
                 result = await request.app.state.client.mutate_education(
                     resume_id, action, changes=changes, position=position,
@@ -864,6 +895,7 @@ def create_app(
                 translate_error(exc)
             record = {"fingerprint": fingerprint, "state": "indeterminate"}
             request.app.state.idempotency_results[key] = record
+            record = request.app.state.idempotency_results[key]
             try:
                 result = await request.app.state.client.mutate_experience(
                     resume_id, action, changes=changes, position=position,
@@ -976,6 +1008,7 @@ def create_app(
                 translate_error(exc)
             record = {"fingerprint": fingerprint, "state": "indeterminate"}
             request.app.state.idempotency_results[key] = record
+            record = request.app.state.idempotency_results[key]
             try:
                 result = await request.app.state.client.mutate_referrer(
                     resume_id, action, changes=changes, position=position,
@@ -1088,6 +1121,7 @@ def create_app(
                 translate_error(exc)
             record = {"fingerprint": fingerprint, "state": "indeterminate"}
             request.app.state.idempotency_results[key] = record
+            record = request.app.state.idempotency_results[key]
             try:
                 result = await request.app.state.client.mutate_project(
                     resume_id, action, changes=changes, position=position,
@@ -1197,6 +1231,7 @@ def create_app(
                 translate_error(exc)
             record = {"fingerprint": fingerprint, "state": "indeterminate"}
             request.app.state.idempotency_results[key] = record
+            record = request.app.state.idempotency_results[key]
             try:
                 result = await request.app.state.client.mutate_portfolio(
                     resume_id, action, position=position, changes=changes,
@@ -1315,6 +1350,7 @@ def create_app(
                 translate_error(exc)
             record = {"state": "indeterminate", "fingerprint": fingerprint}
             request.app.state.idempotency_results[key] = record
+            record = request.app.state.idempotency_results[key]
             try:
                 result = await request.app.state.client.upload_portfolio_file(
                     resume_id, expected_timestamp=expected,
@@ -1409,6 +1445,7 @@ def create_app(
                 translate_error(exc)
             record = {"fingerprint": fingerprint, "state": "indeterminate"}
             request.app.state.idempotency_results[key] = record
+            record = request.app.state.idempotency_results[key]
             try:
                 result = await request.app.state.client.mutate_language(
                     resume_id, kind, action, changes=changes, position=position,
@@ -1528,6 +1565,7 @@ def create_app(
                 translate_error(exc)
             record = {"fingerprint": fingerprint, "state": "indeterminate"}
             request.app.state.idempotency_results[key] = record
+            record = request.app.state.idempotency_results[key]
             try:
                 result = await request.app.state.client.set_theme(
                     resume_id, section, value, expected_timestamp=expected,
@@ -1590,6 +1628,7 @@ def create_app(
                 translate_error(exc)
             record = {"fingerprint": fingerprint, "state": "indeterminate"}
             request.app.state.idempotency_results[key] = record
+            record = request.app.state.idempotency_results[key]
             try:
                 result = await request.app.state.client.sort_records(
                     resume_id, section, source, target,
@@ -1652,6 +1691,7 @@ def create_app(
                 translate_error(exc)
             entry = {"state": "indeterminate", "fingerprint": fingerprint}
             request.app.state.idempotency_results[key] = entry
+            entry = request.app.state.idempotency_results[key]
             try:
                 result = await request.app.state.client.mutate_under18(
                     resume_id, action, changes=changes,
@@ -1736,6 +1776,7 @@ def create_app(
                 translate_error(exc)
             record = {"fingerprint": fingerprint, "state": "indeterminate"}
             request.app.state.idempotency_results[key] = record
+            record = request.app.state.idempotency_results[key]
             try:
                 result = await request.app.state.client.mutate_bio(
                     resume_id, action, changes=changes,
@@ -1811,6 +1852,7 @@ def create_app(
                 translate_error(exc)
             record = {"fingerprint": fingerprint, "state": "indeterminate"}
             request.app.state.idempotency_results[key] = record
+            record = request.app.state.idempotency_results[key]
             try:
                 result = await request.app.state.client.mutate_certificate_block(
                     resume_id, action, others=others, expected_timestamp=expected,

@@ -623,6 +623,28 @@ multi-record ordering. Signed file tokens and previews are not
 part of the stable displayed identity comparison.
 
 
+### Optional durable HTTP Idempotency-Key journal — 2026-11-21
+
+All earlier entries describing HTTP idempotency as *in-memory only*
+represent the previous default implementation. A new opt-in SQLite journal
+is now available via `JOB_PLATFORM_IDEMPOTENCY_DB` or
+`create_app(idempotency_db_path=...)`. The default remains in-memory.
+The journal is validated before authenticating a browser session; it
+requires an absolute owner-private POSIX local file and records opaque
+HMAC-hashed route/key identities, request fingerprints, result state and
+successful response metadata, not original request bodies. A potentially
+committed remote operation is reserved as `indeterminate` before network
+I/O; only confirmed success updates it. A crash, timeout or failure to
+commit the success status leaves the reservation persisted, and after a
+service restart repeating that key returns HTTP 409 rather than sending
+another request. Synthetic restart tests cover resume creation, SKILL
+update, UNDER18 sensitive-field privacy, collisions and ambiguous results.
+The file must remain outside the repository and on a persistent private
+volume; an ephemeral GitHub-hosted runner's SQLite file is **not** durable
+across jobs. The HTTP service remains single-worker only; this journal is
+neither a server-side 104 transaction nor globally shared account locking.
+No real account, resume edit or remote write was used to test this.
+
 ### Cross-section preservation for direct native CRUD — 2026-11-20
 
 The earlier `save_edit()` hardening checked collateral block changes during

@@ -68,6 +68,22 @@ verification failure; never retry an already-submitted write or claim an
 automatic rollback. This is a synthetic-tested client safety guard and is
 not upstream 104 atomic concurrency support.
 
+## Local HTTP idempotency persistence (2026-11-21)
+
+The server defaults to its original in-memory result map. For a stateful
+single-worker local API, opt in with `JOB_PLATFORM_IDEMPOTENCY_DB` pointing
+to a private, absolute SQLite file under an existing trusted POSIX folder.
+`SQLiteIdempotencyJournal` reserves the opaque HMAC-keyed request before
+network I/O and persists successful verification via a journal-backed
+`entry.update()`; every new route using `idempotency_results[key] = entry`
+**must read back** `entry = idempotency_results[key]` before calling upstream.
+Otherwise its successful in-memory dict mutation will not be committed to
+disk. Never auto-expire/reuse ambiguous entries, store raw request bodies,
+print private identity strings, or upload the SQLite file. A restarted
+service must replay successful results from disk and refuse uncertain
+entries with 409. This is not remote 104 transactional or multi-process
+locking. Test with synthetic app restarts and disk-read checks only.
+
 ## Sensitive UNDER18 identity writes (2026-11-20)
 
 The official Vuex source describes only CREATE/UPDATE via

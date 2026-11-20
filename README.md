@@ -757,9 +757,10 @@ parameter; non-adjacent move behavior is not yet verified.
 HTTP routes are protected by the bearer token and
 `JOB_PLATFORM_104_ENABLE_EXPERIMENTAL_WRITES=1`; all write routes require
 `If-Match` and an `Idempotency-Key`. Errors after a possibly committed
-remote write are **not retried** automatically. The idempotency cache is
-**not durable** after server restart, and independent 104 requests are
-not one atomic transaction.
+remote write are **not retried** automatically. The default idempotency cache is **in-memory only**. For long-running
+local HTTP services and workflows, a private, persistent SQLite journal is
+now an **opt-in** (see the HTTP section below). A website request and its
+local SQLite entry still cannot form one atomic transaction.
 
 Each modified section is written once, then independently read back.
 The PATCH verifier now checks **more than the requested target value**:
@@ -853,7 +854,47 @@ Routes:
 - `POST /v1/{provider}/resumes/{resume_id}/plan` (dry run only; validates mapped writers, returns planned sections)
 - `PATCH /v1/{provider}/resumes/{resume_id}` (**501 by default**; experimental BIO / CERTIFICATE / SIDEBAR / JOBCONDITION write when explicitly enabled)
 
-Except `/healthz`, routes require `Authorization: Bearer <token>`. The HTTP process maintains a browser session while running. In-process idempotency is not durable across server restarts. Keep it on localhost behind an authenticated TLS reverse proxy if remote access is needed.
+Except `/healthz`, routes require `Authorization: Bearer <token>`.
+The HTTP process maintains one browser session while running. Keep the
+service on localhost behind an authenticated TLS reverse proxy if remote
+access is needed.
+
+#### Optional restart-safe HTTP Idempotency-Key journal
+
+The default cache is still in-memory. To prevent a **previously reserved
+Idempotency-Key** from being resubmitted after the HTTP process restarts,
+opt in to a private **SQLite** journal (Linux/macOS POSIX filesystems):
+
+```bash
+mkdir -p -m 700 "$HOME/.local/state/job-platform-sdk"
+export JOB_PLATFORM_IDEMPOTENCY_DB="$HOME/.local/state/job-platform-sdk/idempotency.sqlite3"
+xvfb-run -a job-platform-server --host 127.0.0.1 --port 8000
+```
+
+The path must be absolute and its parent directory must already exist. New
+files are created owner-only (`0600`); existing databases must be owner-only
+regular files. Symlinks, world/group-readable files and unsupported Windows
+ACL cases fail closed rather than relaxing permissions. Keep the SQLite file
+on a trusted **persistent local disk/volume**, never commit or upload it,
+and protect it like other service-private state. It includes opaque HMAC
+key identifiers, request fingerprints, operation states and verified success
+responses (which may include resume metadata); it does **not** encrypt
+responses. It never stores raw UNDER18 request fields through this journal.
+
+The journal reserves `indeterminate` **before** a remote write and records
+`succeeded` only after verification. A completed response can be replayed
+after restart without another write. If the process crashed after the
+request may have reached 104, the persisted key remains indeterminate:
+HTTP returns `409`, **not a retry or rollback**. Inspect the current resume
+on the official website before deciding on any *new* operation/key.
+Even a persisted cache does not provide server-side compare-and-swap,
+account-wide transaction isolation, or a guarantee of zero duplicates if
+a client uses different keys. Run a **single API worker**; SQLite rejects
+competing duplicate reservations, but separate authenticated browser
+sessions are not an officially supported multi-worker coordinator. On
+short-lived GitHub-hosted runners, an ephemeral file does not persist across
+jobs: only a separately managed persistent volume gives cross-job protection.
+There is intentionally no automatic key expiration or uncertainty cleanup.
 
 ## GitHub Actions
 
@@ -954,9 +995,9 @@ name, attachName and url, then run:
 For PORTFOLIO, this create action accepts only a link URL; file uploads
 and replacement of existing attachments are deliberately rejected.
 It sends text-only multipart fields inside the authenticated browser
-and validates independent native read-back. The original in-process
-HTTP idempotency and opt-in protections apply. There is no SQLite or
-persistent state requirement for disposable SDK use.
+and validates independent native read-back. The HTTP idempotency and opt-in protections apply. SQLite remains
+optional: short-lived SDK calls do not need it, while a durable HTTP service
+can use `JOB_PLATFORM_IDEMPOTENCY_DB` as documented above.
 
 ### Optional hybrid 104 HTTP transport
 
