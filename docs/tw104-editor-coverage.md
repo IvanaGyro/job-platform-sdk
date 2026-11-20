@@ -211,6 +211,19 @@ every possible UI control.
 - `project`, `referrer` and `certificate` can have empty formData, so
   initialization and CRUD must not be inferred from a nonempty GET fixture.
 
+### Revision safety across all native 104 writers — 2026-11-20
+
+A cross-provider-layer code audit found that direct native actions previously
+compared Python `str()` representations without first checking that the 104
+`resumeTimestamp` was present and valid. It was theoretically possible for a
+GET missing the timestamp and a caller providing `None`/`"None"` to match.
+All SDK native writes and API preflights now use a shared typed revision
+validator that rejects these invalid cases before sending or reserving a
+write. Synthetic tests exercise every native writer against absent/invalid
+revisions and representative HTTP DELETE/PATCH routes, checking that no
+network write or Idempotency-Key reservation occurs. This is client-side
+safety only: server-side revision enforcement is still unverified.
+
 ### Read-only editor field limits — 2026-11-20
 
 The SDK/CLI/local authenticated HTTP API now expose `get_editor_limits()`

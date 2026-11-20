@@ -53,6 +53,19 @@ async with FreshBrowserSession(AuthConfig.from_env()) as session:
     verifier = Resume104Client(transport=await session.http_transport())
 ```
 
+## Revision preflight for all direct writes (2026-11-20)
+
+Always use `revision_guard.revision_matches(document, expected_timestamp)`
+on every SDK or HTTP writer. A missing, `None`, bool, malformed, oversized
+or sentinel-string `resumeTimestamp`/`If-Match` must fail before any site
+mutation. Do **not** fall back to `str(doc.get("resumeTimestamp")) == str(expected)`:
+this mistakenly accepts two missing values or a user-supplied `"None"`.
+The guard is a necessary client precondition, not a server CAS primitive,
+and does not supersede the transport `104-profile-ver` handshake. Tests
+must ensure the HTTP preflight does not reserve an Idempotency-Key on a
+missing/invalid revision. This is synthetic-tested; no 104 live write was
+made for this refactor.
+
 ## Non-writing PATCH planning (2026-11-20)
 
 Call `client.plan_edit()` or the CLI `plan` before a multi-section write. It

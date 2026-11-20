@@ -4,6 +4,24 @@ The default is still `BrowserTransport`: Patchright authenticates and issues
 same-origin requests. An opt-in `CurlCffiTransport` instead uses `curl_cffi`
 0.17 / Chrome 146 impersonation after a **successful browser login**.
 
+## Shared mandatory revision guard for all writes (2026-11-20)
+
+A follow-up SDK/HTTP audit found unsafe
+`str(before.get("resumeTimestamp")) == str(expected_timestamp)` patterns:
+missing GET revisions could appear equal to the text `"None"`, and boolean
+or other invalid versions might compare equal to numeric revisions. The
+single `revision_guard.py` now validates both the actual website GET revision
+and requested `If-Match` or SDK `expected_timestamp` before any operation.
+All native record CRUD, CUSTOM TEXT, LANGUAGE, theme, sort, multipart upload,
+file conversion and HTTP endpoints use this guard; JSON Patch planning and
+saving also require a valid revision. The guard allows native integer or
+opaque text versions and an equivalent text/number representation, but rejects
+missing/invalid values, sentinel strings and excessively long revisions.
+A rejected HTTP preflight does **not** reserve the operation's Idempotency-Key.
+These checks are synthetic-tested, not a proof that upstream 104 enforces
+atomic conflicts or that no other site/account-level changes can occur.
+No private credentials, browser session or real resume mutation were used.
+
 ## Read-only native editor field constraints (2026-11-20)
 
 `Resume104Client.get_editor_limits(section)` requests only the site's

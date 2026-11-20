@@ -25,6 +25,7 @@ from job_platforms.core.errors import (
 from job_platforms.providers.tw104 import AuthConfig, FreshBrowserSession, Resume104Client
 from job_platforms.providers.tw104.writers import checked_write_paths, changed_sections
 from job_platforms.providers.tw104.editor_limits import INPUT_FIELD_GROUPS
+from job_platforms.providers.tw104.revision_guard import is_revision, revision_matches
 from job_platforms.providers.tw104.skill_records import skill_operation_body
 from job_platforms.providers.tw104.education_records import education_operation_body
 from job_platforms.providers.tw104.experience_records import experience_operation_body
@@ -256,7 +257,7 @@ def create_app(
                 return record["result"]
             try:
                 before=await request.app.state.client.get_resume(resume_id)
-                if str(before.get("resumeTimestamp"))!=expected:
+                if not revision_matches(before, expected):
                     raise HTTPException(412,"Resume changed since prior GET")
                 existing=custom_text_form(before,slot=slot)
                 if action=="create":
@@ -462,7 +463,7 @@ def create_app(
                 return cached["result"]
             try:
                 plan, _ = await request.app.state.client.plan_edit(resume_id, operations)
-                if str(plan.base_timestamp) != expected_timestamp:
+                if not is_revision(plan.base_timestamp) or str(plan.base_timestamp) != expected_timestamp:
                     raise HTTPException(412, "Resume has changed since the caller read it")
                 # Reserve the key *before* any upstream write. A transport error
                 # can occur after the remote server has committed the request.
@@ -514,7 +515,7 @@ def create_app(
             # before reserving the key and attempting a remote mutation.
             try:
                 before = await request.app.state.client.get_resume(resume_id)
-                if str(before.get("resumeTimestamp")) != expected:
+                if not revision_matches(before, expected):
                     raise HTTPException(412, "Resume has changed since caller's read")
                 skill_operation_body(
                     before, action, changes=changes, position=position
@@ -616,7 +617,7 @@ def create_app(
                 return cached["result"]
             try:
                 before = await request.app.state.client.get_resume(resume_id)
-                if str(before.get("resumeTimestamp")) != expected:
+                if not revision_matches(before, expected):
                     raise HTTPException(412, "Resume changed since caller's read")
                 education_operation_body(
                     before, action, changes=changes, position=position
@@ -717,7 +718,7 @@ def create_app(
                 return cached["result"]
             try:
                 before = await request.app.state.client.get_resume(resume_id)
-                if str(before.get("resumeTimestamp")) != expected:
+                if not revision_matches(before, expected):
                     raise HTTPException(412, "Resume changed since caller's read")
                 experience_operation_body(
                     before, action, changes=changes, position=position
@@ -818,7 +819,7 @@ def create_app(
                 return cached["result"]
             try:
                 before = await request.app.state.client.get_resume(resume_id)
-                if str(before.get("resumeTimestamp")) != expected:
+                if not revision_matches(before, expected):
                     raise HTTPException(412, "Resume changed since caller's read")
                 form = before.get("referrer", {}).get("formData")
                 if not isinstance(form, dict):
@@ -930,7 +931,7 @@ def create_app(
                 return cached["result"]
             try:
                 before = await request.app.state.client.get_resume(resume_id)
-                if str(before.get("resumeTimestamp")) != expected:
+                if not revision_matches(before, expected):
                     raise HTTPException(412, "Resume changed since caller's read")
                 form = before.get("project", {}).get("formData")
                 if not isinstance(form, dict):
@@ -1037,7 +1038,7 @@ def create_app(
                 return cached["result"]
             try:
                 before = await request.app.state.client.get_resume(resume_id)
-                if str(before.get("resumeTimestamp")) != expected:
+                if not revision_matches(before, expected):
                     raise HTTPException(412, "Resume changed since caller's read")
                 if action == "create":
                     if position is not None:
@@ -1158,7 +1159,7 @@ def create_app(
                 return cached["result"]
             try:
                 before = await request.app.state.client.get_resume(resume_id)
-                if str(before.get("resumeTimestamp")) != expected:
+                if not revision_matches(before, expected):
                     raise HTTPException(412, "Resume changed since last read")
                 form = before.get("portfolio", {}).get("formData")
                 if not isinstance(form, dict):
@@ -1243,7 +1244,7 @@ def create_app(
                 return cached["result"]
             try:
                 before = await request.app.state.client.get_resume(resume_id)
-                if str(before.get("resumeTimestamp")) != expected:
+                if not revision_matches(before, expected):
                     raise HTTPException(412, "Resume changed since caller's read")
                 language_operation_body(
                     before, kind, action, changes=changes, position=position
@@ -1382,7 +1383,7 @@ def create_app(
                 return saved["result"]
             try:
                 before = await request.app.state.client.get_resume(resume_id)
-                if str(before.get("resumeTimestamp")) != expected:
+                if not revision_matches(before, expected):
                     raise HTTPException(412, "Resume changed since caller's read")
                 options = request.app.state.client._data(
                     await request.app.state.client.transport.get_json("/profile/ajax/options")
@@ -1447,7 +1448,7 @@ def create_app(
                 return cached["result"]
             try:
                 before = await request.app.state.client.get_resume(resume_id)
-                if str(before.get("resumeTimestamp")) != expected:
+                if not revision_matches(before, expected):
                     raise HTTPException(412, "Resume changed since caller's read")
                 sort_body(before, section, source, target, kind=kind)
             except (ValueError, TypeError, KeyError, UnsupportedWrite):
@@ -1494,7 +1495,7 @@ def create_app(
                 return cached["result"]
             try:
                 before = await request.app.state.client.get_resume(resume_id)
-                if str(before.get("resumeTimestamp")) != expected:
+                if not revision_matches(before, expected):
                     raise HTTPException(412, "Resume changed since caller's read")
                 bio_action_body(before, action, changes=changes)
             except (KeyError, TypeError, ValueError, UnsupportedWrite):
@@ -1569,7 +1570,7 @@ def create_app(
                 return cached["result"]
             try:
                 before = await request.app.state.client.get_resume(resume_id)
-                if str(before.get("resumeTimestamp")) != expected:
+                if not revision_matches(before, expected):
                     raise HTTPException(412, "Resume changed since caller's read")
                 certificate_block_body(before, action, others=others)
             except (TypeError, KeyError, ValueError, UnsupportedWrite):

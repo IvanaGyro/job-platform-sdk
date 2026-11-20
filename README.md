@@ -92,6 +92,16 @@ use `writable-paths` for the implemented JSON Patch subset. The SDK
 returns `limits_available:false` if the selected native group has no
 recognized numeric limits, rather than inventing a maximum.
 
+**Revision safety (all native mutations):** Every 104 write now requires
+a real, valid `resumeTimestamp` read from the requested resume, compared to
+the caller's explicit expected version. Integer/string representations of
+the same version are accepted, but missing or malformed versions (`None`,
+`null`, `undefined`, booleans, whitespace, oversized values) fail **before**
+any POST, PUT, DELETE or file conversion. The local HTTP wrapper also checks
+`If-Match` this way before reserving an Idempotency-Key. These are client-side
+preconditions and **do not establish atomic server-side concurrency control**;
+104's separate `104-profile-ver` transport handshake remains required.
+
 `client.save_edit(plan)` supports:
 
 - `/bio/formData/bio/chi` and `/bio/formData/bio/eng`. The BIO PUT has passed

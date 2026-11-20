@@ -58,6 +58,7 @@ from .education_records import (
     education_list, education_operation_body, verify_education_operation,
 )
 from .editor_limits import INPUT_FIELD_GROUPS, native_editor_limits
+from .revision_guard import is_revision, revision_matches, require_revision_match
 from .writers import (
     checked_write_paths, changed_sections, section_data, section_request_body,
     validate_section_edit, patch_path_catalog,
@@ -150,7 +151,7 @@ class Resume104Client:
         version = self._version(resume_id)
         document = await self.get_resume(version)
         timestamp = document.get("resumeTimestamp")
-        if type(timestamp) not in (int, str) or timestamp == "":
+        if not is_revision(timestamp):
             raise UnsupportedWrite("104 LANGUAGE current resume revision unavailable")
         records = language_lists(document)[kind]
         options = self._data(await self.transport.get_json("/profile/ajax/options"))
@@ -206,7 +207,7 @@ class Resume104Client:
         is also a conflict, rather than an implicit accept of None == None.
         """
         stamp = document.get("resumeTimestamp")
-        if type(stamp) not in (int, str) or (isinstance(stamp, str) and not stamp.strip()):
+        if not is_revision(stamp):
             raise VerificationError("104 resume revision unavailable for an edit")
         return stamp
 
@@ -251,10 +252,7 @@ class Resume104Client:
         async with self._write_lock:
             current = await self.get_resume(plan.resume_id)
             stamp = self._edit_timestamp(current)
-            if (type(plan.base_timestamp) not in (int, str)
-                    or plan.base_timestamp == ""
-                    or stamp != plan.base_timestamp):
-                raise ConflictError("Resume changed since the edit plan was prepared")
+            require_revision_match(current, plan.base_timestamp)
             updated = apply_json_patch(current, plan.operations)
             # Validate every serializer before submitting even the first PUT.
             desired = {name: section_data(updated, name) for name in sections}
@@ -327,7 +325,7 @@ class Resume104Client:
         version = self._version(resume_id)
         async with self._write_lock:
             before = await self.get_resume(version)
-            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+            if not revision_matches(before, expected_timestamp):
                 raise ConflictError("104 resume changed before the skill operation")
             body = skill_operation_body(
                 before, action, changes=changes, position=position
@@ -392,7 +390,7 @@ class Resume104Client:
         version = self._version(resume_id)
         async with self._write_lock:
             before = await self.get_resume(version)
-            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+            if not revision_matches(before, expected_timestamp):
                 raise ConflictError("104 resume changed before education operation")
             body = education_operation_body(
                 before, action, changes=changes, position=position
@@ -452,7 +450,7 @@ class Resume104Client:
         version = self._version(resume_id)
         async with self._write_lock:
             before = await self.get_resume(version)
-            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+            if not revision_matches(before, expected_timestamp):
                 raise ConflictError("104 resume changed before experience operation")
             body = experience_operation_body(
                 before, action, changes=changes, position=position
@@ -507,7 +505,7 @@ class Resume104Client:
         version = self._version(resume_id)
         async with self._write_lock:
             before = await self.get_resume(version)
-            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+            if not revision_matches(before, expected_timestamp):
                 raise ConflictError("104 resume changed before certificate operation")
             body = certificate_block_body(before, action, others=others)
             await self.transport.request(
@@ -550,7 +548,7 @@ class Resume104Client:
         version = self._version(resume_id)
         async with self._write_lock:
             before = await self.get_resume(version)
-            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+            if not revision_matches(before, expected_timestamp):
                 raise ConflictError("104 resume changed before BIO operation")
             body = bio_action_body(before, action, changes=changes)
             await self.transport.request(
@@ -596,7 +594,7 @@ class Resume104Client:
         version = self._version(resume_id)
         async with self._write_lock:
             before = await self.get_resume(version)
-            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+            if not revision_matches(before, expected_timestamp):
                 raise ConflictError("104 resume changed before referrer operation")
             form = before.get("referrer", {}).get("formData")
             if not isinstance(form, dict):
@@ -665,7 +663,7 @@ class Resume104Client:
         version = self._version(resume_id)
         async with self._write_lock:
             before = await self.get_resume(version)
-            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+            if not revision_matches(before, expected_timestamp):
                 raise ConflictError("104 resume changed before project operation")
             form = before.get("project", {}).get("formData")
             if not isinstance(form, dict):
@@ -732,7 +730,7 @@ class Resume104Client:
         version = self._version(resume_id)
         async with self._write_lock:
             before = await self.get_resume(version)
-            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+            if not revision_matches(before, expected_timestamp):
                 raise ConflictError("104 resume changed before portfolio operation")
             if action == "create":
                 if position is not None:
@@ -813,7 +811,7 @@ class Resume104Client:
         upload.validate()
         async with self._write_lock:
             before = await self.get_resume(version)
-            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+            if not revision_matches(before, expected_timestamp):
                 raise ConflictError("104 resume changed before portfolio file upload")
             form = before.get("portfolio", {}).get("formData")
             if not isinstance(form, dict):
@@ -874,7 +872,7 @@ class Resume104Client:
         item.validate()
         async with self._write_lock:
             before=await self.get_resume(version)
-            if str(before.get("resumeTimestamp"))!=str(expected_timestamp):
+            if not revision_matches(before, expected_timestamp):
                 raise ConflictError("104 resume changed before conversion request")
             response=await self.transport.request(
                 "POST","/api/resumes/files/convert-preview-thumbnail",
@@ -940,7 +938,7 @@ class Resume104Client:
         version=self._version(resume_id)
         async with self._write_lock:
             before=await self.get_resume(version)
-            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+            if not revision_matches(before, expected_timestamp):
                 raise ConflictError("104 CUSTOM changed before operation")
             existing=custom_text_form(before,slot=slot)
             if action=="create":
@@ -1010,7 +1008,7 @@ class Resume104Client:
         version = self._version(resume_id)
         async with self._write_lock:
             before = await self.get_resume(version)
-            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+            if not revision_matches(before, expected_timestamp):
                 raise ConflictError("104 resume changed before language operation")
             body = language_operation_body(
                 before, kind, action, changes=changes, position=position
@@ -1073,7 +1071,7 @@ class Resume104Client:
         version = self._version(resume_id)
         async with self._write_lock:
             before = await self.get_resume(version)
-            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+            if not revision_matches(before, expected_timestamp):
                 raise ConflictError("104 resume changed before theme selection")
             options = self._data(await self.transport.get_json("/profile/ajax/options"))
             body = theme_body(before, options, section, selected_theme)
@@ -1085,7 +1083,7 @@ class Resume104Client:
                 }
             latest = await self.get_resume(version)
             if (
-                str(latest.get("resumeTimestamp")) != str(expected_timestamp)
+                not revision_matches(latest, expected_timestamp)
                 or latest.get(section) != before.get(section)
             ):
                 raise ConflictError("104 resume changed while validating theme")
@@ -1125,7 +1123,7 @@ class Resume104Client:
         version = self._version(resume_id)
         async with self._write_lock:
             before = await self.get_resume(version)
-            if str(before.get("resumeTimestamp")) != str(expected_timestamp):
+            if not revision_matches(before, expected_timestamp):
                 raise ConflictError("Resume changed before native sort operation")
             body = sort_body(
                 before, section, from_position, to_position, kind=kind
