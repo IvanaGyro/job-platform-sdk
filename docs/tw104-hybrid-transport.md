@@ -50,6 +50,29 @@ Native field correctness cannot be prevalidated for future state after
 other steps mutate records, so late failures remain possible. No fresh
 live 104 website write was performed; new tests are synthetic.
 
+## Read-only batch first-step native preflight (2026-11-21)
+
+The original batch write accepted a schema-validated multi-step list, but
+could not tell a caller before starting whether the first operation's
+current sort, native field value, site option or dynamic record capacity
+was usable. `batch_preflight.preview_native_batch()` now performs read-only
+preflight using the same native serializers/options as the first supported
+record, JSON Patch, theme or sort writer. The SDK exposes
+`Resume104Client.plan_batch()`, CLI exposes `job-platform batch-plan`, and
+local bearer-protected HTTP exposes
+`POST /v1/tw104/resumes/{resume_id}/batch/plan` with `If-Match`; no
+experimental-write flag or idempotency reservation is required.
+
+The planner validates every step's *static structure* up front, but only
+checks the **first** step's current native data. Later steps carry
+`deferred_pending_prior_steps`; after a preceding CREATE/DELETE/theme
+change, positional records and allowed fields may differ. The result
+contains only safe labels and explicit no-write flags, not user data,
+request bodies or API selector lists. A successful preflight does not
+reserve a website revision or prove that a later POST/PUT will succeed.
+Only synthetic GET/options fixtures were used; no real website write or
+new 104 authentication was needed.
+
 ## Restart-safe, opt-in HTTP idempotency (2026-11-21)
 
 The original local FastAPI service stored every Idempotency-Key in an

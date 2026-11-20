@@ -164,6 +164,30 @@ and do not commit such files):
 ]
 ```
 
+**Read-only preflight before submitting a batch:**
+
+```bash
+job-platform batch-plan VERSION_NO --steps-file private-steps.json \
+  --if-match TIMESTAMP
+```
+
+The Python SDK provides `await client.plan_batch(resume_id, steps,
+expected_timestamp=revision)`; the local authenticated HTTP API has
+`POST /v1/tw104/resumes/{resume_id}/batch/plan` with `If-Match` and the
+same JSON array. These **read-only** entry points work even when
+experimental writes are disabled, need no Idempotency-Key or write
+confirmation, and do not return resume contents or constructed native
+request bodies. The planner checks all step **structures** and then validates
+**only the first step** against the current 104 resume, plus site options
+or capacity rules when source-mapped. Its status is
+`eligible_on_current_snapshot`, **not** a guarantee that the site will
+accept a future write. Later steps explicitly report
+`deferred_pending_prior_steps`, because CREATE/DELETE/ordering changes can
+change the current form and record positions. The plan always reports
+`persisted:false`, `network_write_sent:false` and
+`current_site_write_success_verified:false`. The first step may still fail
+if the remote site changes between preflight and actual submission.
+
 Python SDK: `await client.apply_batch(resume_id, steps,
 expected_timestamp=revision)`. CLI:
 

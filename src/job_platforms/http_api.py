@@ -569,6 +569,34 @@ def create_app(
                 return item
 
     @app.post(
+        "/v1/tw104/resumes/{resume_id}/batch/plan",
+        dependencies=[Depends(authorize)],
+    )
+    async def plan_batch_http(
+        resume_id: str, request: Request, steps: list[dict] = Body(...),
+        if_match: str | None = Header(default=None, alias="If-Match"),
+    ):
+        """Read-only first-step serializer preflight; no idempotency reservation."""
+        if if_match is None:
+            raise HTTPException(428, "If-Match resumeTimestamp required")
+        try:
+            validate_batch_steps(steps)
+        except (UnsupportedWrite, ValueError, KeyError, TypeError):
+            raise HTTPException(422, "Unsupported 104 batch plan") from None
+        try:
+            return await request.app.state.client.plan_batch(
+                resume_id, steps, expected_timestamp=if_match.strip('"'),
+            )
+        except UnsupportedWrite:
+            raise HTTPException(422, "104 first batch step is not eligible") from None
+        except ConflictError:
+            raise HTTPException(412, "104 resume revision changed") from None
+        except (ValueError, TypeError, KeyError):
+            raise HTTPException(422, "Invalid 104 batch preflight") from None
+        except JobPlatformError as exc:
+            translate_error(exc)
+
+    @app.post(
         "/v1/tw104/resumes/{resume_id}/batch",
         dependencies=[Depends(authorize)],
     )

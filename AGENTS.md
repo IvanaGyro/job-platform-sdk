@@ -68,6 +68,21 @@ verification failure; never retry an already-submitted write or claim an
 automatic rollback. This is a synthetic-tested client safety guard and is
 not upstream 104 atomic concurrency support.
 
+## Read-only workflow batch preflight (2026-11-21)
+
+`batch_preflight.preview_native_batch()` checks all batch step structures,
+then performs a **read-only native validation of the first step** using
+current resume GET, site options/capacity for LANGUAGE, REFERRER, PROJECT
+and theme changes, or the existing JSON Patch plan serializer. Later
+steps are explicitly deferred rather than incorrectly described as
+verified. The SDK `plan_batch`, CLI `batch-plan`, and bearer-only local HTTP
+`POST .../batch/plan` have no write/confirmation flag or idempotency
+reservation and must **never** call a remote mutation. No personal field
+values or native request bodies may appear in result/error objects.
+A plan is not a lock on the remote 104 revision and is not proof of
+successful future persistence. Exercise synthetic read fixtures and
+verify that every write-call list stays empty.
+
 ## 104 workflow batch writes (2026-11-21)
 
 `batch_edit.validate_batch_steps` whitelists at most 12 ordered steps:

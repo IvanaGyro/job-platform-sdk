@@ -623,6 +623,23 @@ multi-record ordering. Signed file tokens and previews are not
 part of the stable displayed identity comparison.
 
 
+### Batch preflight for workflow safety — 2026-11-21
+
+Added a separate read-only `plan_batch` SDK method, CLI `batch-plan`,
+and bearer-authenticated local HTTP `POST /v1/tw104/resumes/{id}/batch/plan`.
+This API validates the *whole* batch's structural allowlist, then checks
+only the **first** native step against current GET data and relevant source-
+mapped backend options/capacity, without sending any upstream write.
+Later steps are explicitly deferred because previous mutations can change
+native sort IDs, available options or form structure. Response fields
+include `network_write_sent:false`, `persisted:false`, and
+`current_site_write_success_verified:false`. No personal field values,
+raw serialization bodies or selectable option labels are included.
+The new tests cover SKILL, LANGUAGE, LAYOUT theme, BIO PATCH, bearer,
+If-Match, CLI dispatch and strict failure before write; all synthetic.
+A preview cannot guarantee actual persistence or detect a subsequent
+concurrent change. No live account was accessed to develop this.
+
 ### Non-atomic ordered batch of already-supported writers — 2026-11-21
 
 New `batch_edit.py` statically validates ordered 104 native record CRUD,
