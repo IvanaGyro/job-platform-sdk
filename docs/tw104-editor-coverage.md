@@ -52,13 +52,23 @@ opt-in HTTP PUT/DELETE actions exist. No account-global
 `api/certifications/delete` is called.
 
 **Evidence status:** frontend source mapping + synthetic tests only.
-One authorized *read-only* login attempt on the previously successful
-proxy #6 ended with `AuthenticationRequired` before the certificate
-GET; no write took place, no user certificates were disclosed, and
-**newly real-verified fields: 0**. The endpoint path and real populated
-certification GET remain unobserved; no live CRUD/read-back/restore
-is claimed. The action is experimental and may fail closed on the
-current site if its Vuex module isn't loaded.
+Earlier proxy #6 login failed, but on 2026-11-21 a fresh authorized
+**proxy #1 login succeeded**, and independent real 104 resume GETs
+succeeded. The user-selected test resume's `certificate.formData` is
+currently **empty**, not an initialized grouped `certifications` list.
+The inspected `/profile/`, `/profile/set/`, `/profile/intro` page views
+did not expose `window.$nuxt?.$store`. Importantly, the current
+`/profile/intro` redirected to `/resumes/`, which 104 identifies as a
+**public resume template site** (not a personal resume editor); the
+`/resumes/{vno}/about` URL constructed from the backend `versionNo`
+landed on the site's not-found page. Do not operate on any public
+example profile in that directory. The correct personal editor action
+bridge, account-owned certificate option list and populated certificate
+GET still need live identification. **No real certificate link/unlink
+write was sent; no independent persistence/read-back/restore was
+achieved; newly live-verified fields: 0.** P0-08 stays deferred until
+P0-07 truly passes live CRUD. No cookies, titles, identifiers or
+certificate values are recorded in this public evidence note.
 
 ## Latest evidence — 2026-11-18
 

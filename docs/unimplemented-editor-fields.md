@@ -17,9 +17,13 @@
 `deleteCertificationConnect` 可免去猜測 API URL；寫入前會檢查目前
 網頁選取履歷及帳號既有證照清單，寫入後 GET 驗證分組
 `certifications[].items[].id`、其餘證照 metadata 與其他履歷區塊。
-**尚未通過真實 CRUD；2026-11-21 唯讀登入查核回報
-`AuthenticationRequired`，沒有送出任何修改。真實覆蓋率增量 0。**
-恢復認證、執行獨立 GET 及精確還原是此 ID 的剩餘交付條件。
+**仍未通過真實 CRUD。** 2026-11-21 改用代理 #1 後登入成功，
+104 真實測試履歷 GET 成功；但該履歷 `certificate.formData` 是空的，
+查到的 `/profile/`、`/profile/set/` 頁面沒有載入預期的 Vuex store；
+`/profile/intro` 轉到 `/resumes/`，那是公開履歷範本，不是個人編輯器。
+**尚未執行任何證照關聯寫入、解除或還原；真實覆蓋率增量 0。**
+先找出真正的個人履歷證照編輯入口、帳號可連結的證照及 GET 結構，
+完成 P0-07 實際寫入／獨立讀回／原狀還原後，才開始 P0-08。
 P0-08 的外語證照關聯依賴此項契約；不可把 P0-07 的本地測試當作
 已完成的網站支援。
 

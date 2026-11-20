@@ -2,13 +2,22 @@
 
 **Current user-directed start: P0-07 onward. P0-01 through P0-06
 are explicitly deferred; do not work on them until the user requests it.**
-P0-07 already has a browser-only Vuex association writer, but remains
-**LIVE-BLOCKED** after an AuthenticationRequired result in the one
-2026-11-21 read-only login attempt. Its real-site association/unlink,
-independent GET and exact restoration must still be verified. P0-08 depends
-on this certificate linkage. Treat this as the active ID, not an excuse
-to pivot to CLASSIC/BANNER, caching, test counts or general infrastructure.
-Do not cycle proxies or repeat authentication attempts blindly.
+P0-07 has an experimental browser-only Vuex association writer but remains
+**LIVE-BLOCKED**. On 2026-11-21 the existing authorized proxy #1 login
+**succeeded**, and independent native 104 resume GET succeeded repeatedly.
+The chosen test resume's certificate.formData is **empty** (no initialized
+certificate section), and the inspected /profile/, /profile/set/, and
+/profile/intro pages did not expose window.$nuxt?.$store; /profile/intro
+currently redirects to /resumes/, which is a **public resume-template**
+website, not the account resume editor. Never use public example resumes
+as test targets. The certificate center account-owned list and real
+frontend connect/disconnect path remain unobserved, so **zero P0-07 site
+CRUD writes were sent**. Before any mutation locate the authenticated
+personal resume editor and a reversible account-owned certificate, validate
+the actual site bridge, and only then run real connect/independent
+GET/disconnect/exact restore. P0-08 starts **only after real P0-07 CRUD
+passes**, per explicit user sequencing. Do not repeat routine workspace
+surveys, cycle proxies unnecessarily, or pivot to unrelated features.
 
 **Before selecting the next task, read [docs/unimplemented-editor-fields.md](docs/unimplemented-editor-fields.md).**
 It is the authoritative priority-ordered backlog of **fields/operations with no
