@@ -59,7 +59,7 @@ from .education_records import (
 )
 from .writers import (
     checked_write_paths, changed_sections, section_data, section_request_body,
-    validate_section_edit,
+    validate_section_edit, patch_path_catalog,
 )
 
 
@@ -93,6 +93,11 @@ class Resume104Client:
         if not isinstance(payload, dict) or not isinstance(payload.get("data"), dict):
             raise VerificationError("Unexpected 104 response structure")
         return payload["data"]
+
+    @staticmethod
+    def supported_patch_paths() -> dict:
+        """Discover known JSON Patch targets without login or resume access."""
+        return patch_path_catalog()
 
     async def list_resumes(self) -> list[dict]:
         data = self._data(await self.transport.get_json("/profile/ajax/overview"))
@@ -182,19 +187,43 @@ class Resume104Client:
             })
         return found
 
+    @staticmethod
+    def _edit_timestamp(document: dict) -> str | int:
+        """Require a real revision on every versioned PATCH plan.
+
+        A GET without `resumeTimestamp` must never become a writable plan
+        with base_timestamp=None. A subsequently missing or invalid version
+        is also a conflict, rather than an implicit accept of None == None.
+        """
+        stamp = document.get("resumeTimestamp")
+        if type(stamp) not in (int, str) or (isinstance(stamp, str) and not stamp.strip()):
+            raise VerificationError("104 resume revision unavailable for an edit")
+        return stamp
+
     async def plan_edit(
         self, resume_id: str | int, changes: list[dict]
     ) -> tuple[EditPlan, dict]:
         document = await self.get_resume(resume_id)
+        timestamp = self._edit_timestamp(document)
         operations = [JsonPatchOperation.from_dict(item) for item in changes]
         affected = {op.path.split("/")[1] if op.path.startswith("/") else ""
                     for op in operations}
         if not affected <= set(self.SECTIONS):
             raise ValueError("JSON Patch may affect only editable resume sections")
+        # A PLAN is a prediction of which 104 writes are supported, not
+        # merely a generic JSON document preview. Reject unsupported PATCH
+        # operations and malformed native source shapes *before* returning
+        # a plan that a caller could mistakenly consider safe to persist.
+        paths = checked_write_paths(operations)
+        sections = changed_sections(paths)
         updated = apply_json_patch(document, operations)
+        for section in sections:
+            validate_section_edit(document, updated, section)
+            section_data(updated, section)
+            section_request_body(updated, section)
         plan = EditPlan(
             resume_id=self._version(resume_id),
-            base_timestamp=document.get("resumeTimestamp"),
+            base_timestamp=timestamp,
             operations=operations,
         )
         return plan, updated
@@ -211,7 +240,10 @@ class Resume104Client:
         verified_sections = []
         async with self._write_lock:
             current = await self.get_resume(plan.resume_id)
-            if current.get("resumeTimestamp") != plan.base_timestamp:
+            stamp = self._edit_timestamp(current)
+            if (type(plan.base_timestamp) not in (int, str)
+                    or plan.base_timestamp == ""
+                    or stamp != plan.base_timestamp):
                 raise ConflictError("Resume changed since the edit plan was prepared")
             updated = apply_json_patch(current, plan.operations)
             # Validate every serializer before submitting even the first PUT.

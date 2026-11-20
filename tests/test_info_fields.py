@@ -11,6 +11,7 @@ from job_platforms.providers.tw104.info_fields import (
 )
 from job_platforms.providers.tw104.writers import (
     changed_sections, checked_write_paths, section_request_body,
+    patch_path_catalog,
 )
 
 FORM = {
@@ -100,6 +101,22 @@ class InfoTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("height", body["addon"])
         self.assertEqual(document, BASE)
 
+    def test_static_patch_catalog_reports_only_supported_paths(self):
+        catalog = patch_path_catalog()
+        self.assertEqual(catalog["operation"], "replace")
+        self.assertFalse(catalog["persisted"])
+        self.assertFalse(catalog["atomic"])
+        paths = {path for items in catalog["sections"].values() for path in items}
+        self.assertEqual(paths, set(INFO_PATHS) | {
+            path for path in paths if not path.startswith("/info/")
+        })
+        self.assertIn("/info/formData/info/motto", paths)
+        self.assertIn("/experience/formData/seniority/value", paths)
+        self.assertNotIn("/info/formData/info/cellphone", paths)
+        self.assertNotIn("/experience/formData/experiences", paths)
+        self.assertEqual(Resume104Client.supported_patch_paths(), catalog)
+        self.assertNotIn("synthetic", str(catalog).lower())
+
     def test_patch_whitelist_is_specific_to_resume_fields(self):
         allowed = [
             JsonPatchOperation("replace", "/info/formData/info/motto", "Changed"),
@@ -152,6 +169,60 @@ class InfoTests(unittest.IsolatedAsyncioTestCase):
         body = info_request_body(doc)["blockValueList"]["info"]["info"]
         self.assertEqual(body["honoraryDischargeYear"], "")
         self.assertEqual(body["honoraryDischargeMonth"], "")
+
+    async def test_plan_read_only_test_precondition_is_allowed(self):
+        client = Client()
+        plan, updated = await client.plan_edit("synthetic", [
+            {"op": "test", "path": "/info/formData/info/cellphone",
+             "value": "0000000000"},
+            {"op": "replace", "path": "/info/formData/info/motto",
+             "value": "Different"},
+        ])
+        self.assertEqual(plan.base_timestamp, 100)
+        self.assertEqual(updated["info"]["formData"]["info"]["motto"], "Different")
+        self.assertEqual(client.transport.calls, [])
+
+    async def test_no_revision_never_yields_an_edit_plan_or_writes(self):
+        client = Client()
+        client.doc.pop("resumeTimestamp")
+        with self.assertRaises(VerificationError):
+            await client.plan_edit("synthetic", [{
+                "op": "replace", "path": "/info/formData/info/motto",
+                "value": "Not writable",
+            }])
+        plan = EditPlan("synthetic", None, [
+            JsonPatchOperation("replace", "/info/formData/info/motto", "Not writable"),
+        ])
+        with self.assertRaises(VerificationError):
+            await client.save_edit(plan)
+        self.assertEqual(client.transport.calls, [])
+
+    async def test_plan_rejects_unmapped_or_malformed_info_before_any_write(self):
+        client = Client()
+        for path, value in (
+            ("/info/formData/info/cellphone", "1234567890"),
+            ("/info/formData/info/motto", {"unexpected": "object"}),
+            ("/info/formData/info/city", []),
+        ):
+            with self.subTest(path=path, value=value):
+                with self.assertRaises(UnsupportedWrite):
+                    await client.plan_edit("synthetic", [{
+                        "op": "replace", "path": path, "value": value,
+                    }])
+                self.assertEqual(client.transport.calls, [])
+                self.assertEqual(client.doc, BASE)
+
+    async def test_plan_rejects_otherwise_valid_multi_section_with_unmapped_path(self):
+        client = Client()
+        with self.assertRaises(UnsupportedWrite):
+            await client.plan_edit("synthetic", [
+                {"op": "replace", "path": "/info/formData/info/motto",
+                 "value": "Safe request"},
+                {"op": "replace", "path": "/info/formData/info/cellphone",
+                 "value": "1234567890"},
+            ])
+        self.assertEqual(client.transport.calls, [])
+        self.assertEqual(client.doc, BASE)
 
     async def test_multiple_info_fields_saved_in_one_put(self):
         client = Client()

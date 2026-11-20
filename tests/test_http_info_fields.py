@@ -44,6 +44,9 @@ class InfoHttpTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(plan.status_code, 200)
         self.assertFalse(plan.json()["persisted"])
+        self.assertEqual(plan.json()["planned_sections"], ["info"])
+        self.assertEqual(plan.json()["maximum_write_requests"], 1)
+        self.assertFalse(plan.json()["atomic"])
         first = await self.http.patch(ROOT, json=PATCH, headers=headers())
         replay = await self.http.patch(ROOT, json=PATCH, headers=headers())
         mismatch = await self.http.patch(
@@ -55,6 +58,27 @@ class InfoHttpTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(len(self.app.state.client.transport.calls), 1)
         self.assertEqual(first.json()["verified_sections"], ["info"])
+
+    async def test_unmapped_plan_rejected_without_write_or_idempotency_reservation(self):
+        request = [{
+            "op": "replace", "path": "/info/formData/info/cellphone",
+            "value": "0123456789",
+        }]
+        rejected = await self.http.post(
+            ROOT + "/plan", json=request,
+            headers={"Authorization": "Bearer " + TOKEN},
+        )
+        self.assertEqual(rejected.status_code, 501)
+        self.assertEqual(self.app.state.client.transport.calls, [])
+        self.assertEqual(self.app.state.idempotency_results, {})
+        invalid = await self.http.post(
+            ROOT + "/plan", json=[{
+                "op": "replace", "path": "/info/formData/info/motto",
+                "value": {"not": "text"},
+            }], headers={"Authorization": "Bearer " + TOKEN},
+        )
+        self.assertEqual(invalid.status_code, 501)
+        self.assertEqual(self.app.state.client.transport.calls, [])
 
     async def test_unmapped_account_field_never_write(self):
         request = [{

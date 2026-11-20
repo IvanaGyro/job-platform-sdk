@@ -211,6 +211,20 @@ every possible UI control.
 - `project`, `referrer` and `certificate` can have empty formData, so
   initialization and CRUD must not be inferred from a nonempty GET fixture.
 
+### JSON Patch preflight and supported-path discovery — 2026-11-20
+
+The previously permissive `plan_edit` preview now validates the real writer
+whitelist and serializes each changed block before returning a plan. It rejects
+missing/invalid `resumeTimestamp`, unsupported account/media fields,
+non-replace mutations, invalid INFO selectors and SIDEBAR metadata changes
+*without* making any upstream write. Read-only `test` conditions can reference
+other native fields without granting those fields write permission. The CLI
+`writable-paths`, SDK `supported_patch_paths` and token-protected HTTP
+`GET /v1/tw104/writable-paths` list the exact locally mapped `replace` paths;
+these are **not** universal edit permissions, and custom/media/record CRUD
+have separate operations. The plan endpoint returns affected block names and
+`atomic:false`. All evidence for this continuation is synthetic.
+
 ## Next technical milestones
 
 1. Observe every control in the **104** editor and capture the request *shape*

@@ -97,6 +97,18 @@ class SidebarTests(unittest.IsolatedAsyncioTestCase):
                     await client.save_edit(self.plan(target))
                 self.assertEqual(client.transport.calls, [])
 
+    async def test_plan_does_not_preview_unsafe_metadata_overwrite(self):
+        client = Client()
+        original = list(copy.deepcopy(BASE["sidebar"]))
+        changed = copy.deepcopy(original)
+        changed[0]["customMeta"] = "clobbered"
+        with self.assertRaises(UnsupportedWrite):
+            await client.plan_edit("synthetic", [
+                {"op": "replace", "path": "/sidebar", "value": changed}
+            ])
+        self.assertEqual(client.transport.calls, [])
+        self.assertEqual(client.doc, BASE)
+
     async def test_noop_does_not_send_put(self):
         client = Client()
         result = await client.save_edit(self.plan(BASE["sidebar"]))

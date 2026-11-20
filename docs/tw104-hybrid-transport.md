@@ -4,6 +4,26 @@ The default is still `BrowserTransport`: Patchright authenticates and issues
 same-origin requests. An opt-in `CurlCffiTransport` instead uses `curl_cffi`
 0.17 / Chrome 146 impersonation after a **successful browser login**.
 
+## Versioned JSON Patch planning and writer discovery (2026-11-20)
+
+- `Resume104Client.plan_edit()` is a strict, non-writing preflight. It requires
+  the original GET to supply a usable `resumeTimestamp`, permits `test`
+  preconditions against readable fields, but rejects `replace` operations
+  outside the explicitly mapped whitelist. All changed native sections are
+  serialized and validated **before** issuing a plan. A plan preview therefore
+  no longer promises persistence for an unsupported field. `save_edit()`
+  independently checks the version again and rejects a missing revision.
+- `job-platform writable-paths` reads the explicit mapping **offline without
+  authentication**, and the bearer-token-protected
+  `GET /v1/tw104/writable-paths` and Python
+  `Resume104Client.supported_patch_paths()` expose the same catalog. A
+  source-mapped path is not necessarily live-write verified on the website;
+  native record CRUD, theme, media and upload routes are separate.
+- The HTTP `POST .../plan` response identifies `planned_sections`, an upper
+  bound on section PUT requests, and `atomic:false` for caller guidance.
+  Actual multi-section PATCH remains non-transactional. Tests are entirely
+  synthetic; **no 104 authentication or live mutation** was used here.
+
 ## Guarded 2026-11-20 continuation — no new real mutations
 
 - LANGUAGE DELETE verification now protects surviving FOREIGN certificate

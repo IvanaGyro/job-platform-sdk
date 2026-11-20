@@ -53,6 +53,16 @@ async with FreshBrowserSession(AuthConfig.from_env()) as session:
     verifier = Resume104Client(transport=await session.http_transport())
 ```
 
+## Non-writing PATCH planning (2026-11-20)
+
+Call `client.plan_edit()` or the CLI `plan` before a multi-section write. It
+now requires a usable `resumeTimestamp`, checks every mapped write path and
+serializes every affected block without submitting changes. Unsupported
+account identity/media fields fail preflight; successful planning does **not**
+prove the upstream website will accept a write. Use the offline command
+`job-platform writable-paths` to list currently implemented `replace` paths,
+not all fields returned by 104. Never interpret it as universal edit coverage.
+
 ## Security and safe live writes
 
 - Maintain the original authenticated login proxy, 104-domain cookie scope

@@ -70,7 +70,7 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
         document = {"data": {
             "resume": {"vno": "synthetic-1"},
             "resumeTimestamp": 123,
-            "bio": {"formData": {"bio": {"chi": "old"}}},
+            "bio": {"formData": {"bio": {"chi": "old", "eng": ""}}},
         }}
         page = FakePage([{
             "status": 200, "content_type": "application/json",

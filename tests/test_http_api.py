@@ -59,6 +59,18 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((missing.status_code, bad.status_code,
                           good.status_code), (401, 401, 200))
 
+    async def test_static_writable_paths_are_authenticated_and_no_resume_needed(self):
+        unauth = await self.http.get("/v1/tw104/writable-paths")
+        self.assertEqual(unauth.status_code, 401)
+        found = await self.http.get(
+            "/v1/tw104/writable-paths", headers=self.bearer(),
+        )
+        self.assertEqual(found.status_code, 200)
+        catalog = found.json()
+        self.assertIn("/info/formData/info/motto", catalog["sections"]["info"])
+        self.assertFalse(catalog["atomic"])
+        self.assertFalse(catalog["persisted"])
+
     async def test_provider_capabilities(self):
         response = await self.http.get("/v1/providers",
                                        headers=self.bearer())

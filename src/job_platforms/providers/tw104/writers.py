@@ -186,6 +186,30 @@ def bio_request_body(document: dict[str, Any]) -> dict:
     return section_request_body(document, "bio")
 
 
+def patch_path_catalog() -> dict[str, Any]:
+    """Describe exactly the currently mapped JSON Patch REPLACE targets.
+
+    Site GET schemas contain many read-only identity, media and record-list
+    fields. Exposing the narrow local write whitelist lets API consumers
+    choose a supported path before attempting a plan. This is not proof of
+    successful upstream submission: real write verification varies by field.
+    Native record CRUD, themes and uploads use separate explicit methods.
+    """
+    grouped: dict[str, list[str]] = {}
+    for path, section in sorted(WRITE_PATH_TO_SECTION.items()):
+        grouped.setdefault(section, []).append(path)
+    return {
+        "provider": "tw104",
+        "operation": "replace",
+        "sections": grouped,
+        "test_preconditions": "Allowed on readable existing JSON Pointer paths",
+        "native_record_crud": "Separate SDK/CLI/HTTP methods",
+        "scope": "source-mapped only; current 104 site acceptance not guaranteed",
+        "atomic": False,
+        "persisted": False,
+    }
+
+
 def checked_write_paths(operations: list) -> list[str]:
     """Only strict complete-field replacement is currently supported."""
     paths = []

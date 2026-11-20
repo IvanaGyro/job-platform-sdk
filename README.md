@@ -64,7 +64,23 @@ asyncio.run(main())
 
 
 `client.plan_edit(version, changes)` applies RFC 6901 JSON Pointers to a **local
-copy** of the original response. `client.save_edit(plan)` supports:
+copy** of the original response. Before returning an executable plan it now
+requires a valid `resumeTimestamp`, rejects unsupported write paths and
+operations, and validates all modified sections against their source-mapped
+104 serializers. A JSON Patch `test` against an existing read-only field is
+allowed as a precondition; it does not make that field writable. A plan is a
+**local preflight, not proof the website will accept the write**.
+
+Discover the static writer whitelist without signing in using
+`job-platform writable-paths` (or Python
+`Resume104Client.supported_patch_paths()`). The authenticated local API
+also exposes `GET /v1/tw104/writable-paths`. These return the source-mapped
+JSON Patch `replace` paths, not native record CRUD or upload endpoints.
+The `POST /v1/tw104/resumes/{id}/plan` result also reports ordered
+`planned_sections`, `maximum_write_requests`, and `atomic:false` to make
+multi-section writes' non-transactional behavior explicit.
+
+`client.save_edit(plan)` supports:
 
 - `/bio/formData/bio/chi` and `/bio/formData/bio/eng`. The BIO PUT has passed
   a real modified-value write, exact read-back, restore and read-back test.
@@ -608,6 +624,8 @@ export JOB_PLATFORM_104_PROXY_FILE=/run/secrets/104-proxies
 # Optional: restrict connection attempts to a previously tested proxy index.
 # Avoids lengthy retries across proxies during diagnosis:
 export JOB_PLATFORM_104_PROXY_PRIORITY=4
+# Offline, source-mapped PATCH whitelist: does NOT need credentials or proxy.
+job-platform writable-paths
 xvfb-run -a job-platform --provider tw104 probe
 xvfb-run -a job-platform --provider tw104 list
 xvfb-run -a job-platform --provider tw104 get VERSION_NO
@@ -661,7 +679,8 @@ Routes:
 - `GET /v1/{provider}/resumes/{resume_id}/schema`
 - `GET /v1/{provider}/resumes/{resume_id}/sections/{section}`
 - `POST /v1/{provider}/resumes` (requires `Idempotency-Key`)
-- `POST /v1/{provider}/resumes/{resume_id}/plan` (dry run only)
+- `GET /v1/tw104/writable-paths` (static source-mapped PATCH whitelist; requires bearer token, no site request)
+- `POST /v1/{provider}/resumes/{resume_id}/plan` (dry run only; validates mapped writers, returns planned sections)
 - `PATCH /v1/{provider}/resumes/{resume_id}` (**501 by default**; experimental BIO / CERTIFICATE / SIDEBAR / JOBCONDITION write when explicitly enabled)
 
 Except `/healthz`, routes require `Authorization: Bearer <token>`. The HTTP process maintains a browser session while running. In-process idempotency is not durable across server restarts. Keep it on localhost behind an authenticated TLS reverse proxy if remote access is needed.

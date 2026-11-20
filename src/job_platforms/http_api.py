@@ -23,6 +23,7 @@ from job_platforms.core.errors import (
     UnsupportedWrite, UpstreamError, VerificationError, PartialWriteError,
 )
 from job_platforms.providers.tw104 import AuthConfig, FreshBrowserSession, Resume104Client
+from job_platforms.providers.tw104.writers import checked_write_paths, changed_sections
 from job_platforms.providers.tw104.skill_records import skill_operation_body
 from job_platforms.providers.tw104.education_records import education_operation_body
 from job_platforms.providers.tw104.experience_records import experience_operation_body
@@ -165,6 +166,11 @@ def create_app(
             "yourator": {"provider": "yourator", "implemented": False},
             "greenhouse": {"provider": "greenhouse", "implemented": False},
         }
+
+    @app.get("/v1/tw104/writable-paths", dependencies=[Depends(authorize)])
+    async def writable_paths():
+        # Static source mapping only: does not read or write any resume.
+        return Resume104Client.supported_patch_paths()
 
     @app.get("/v1/{provider}/resumes", dependencies=[Depends(authorize)])
     async def list_resumes(provider: str, request: Request):
@@ -399,7 +405,13 @@ def create_app(
                 plan, _ = await request.app.state.client.plan_edit(
                     resume_id, operations
                 )
-            return {"plan": plan.to_dict(), "persisted": False}
+            sections = changed_sections(checked_write_paths(plan.operations))
+            return {
+                "plan": plan.to_dict(), "persisted": False,
+                "planned_sections": sections,
+                "maximum_write_requests": len(sections),
+                "atomic": False,  # Cross-section 104 PUTs are not transactional.
+            }
         except JobPlatformError as exc:
             translate_error(exc)
         except (ValueError, KeyError, IndexError, TypeError):

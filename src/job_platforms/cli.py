@@ -10,6 +10,9 @@ import sys
 from pathlib import Path
 
 from job_platforms.providers.tw104 import AuthConfig, FreshBrowserSession, Resume104Client
+from job_platforms.providers.tw104.writers import (
+    checked_write_paths, changed_sections, patch_path_catalog,
+)
 from job_platforms.providers.tw104.custom_text_contract import (
     custom_text_create_body, custom_text_update_body, custom_delete_body,
 )
@@ -63,6 +66,10 @@ def _parser() -> argparse.ArgumentParser:
     custom_plan.add_argument("--html-file", default=None)
     custom_plan.add_argument("--options-file", default=None)
     custom_plan.add_argument("--existing-form-file", default=None)
+    sub.add_parser(
+        "writable-paths",
+        help="Offline list of source-mapped JSON Patch replacement paths; no login",
+    )
     sub.add_parser("probe", help="Authentication and resume count; no personal values")
     sub.add_parser("list", help="Print private resume summaries as JSON")
     get = sub.add_parser("get", help="Print a private resume as JSON")
@@ -189,6 +196,12 @@ async def _run(args):
             "persisted": False, "network_sent": False,
             **operation,
         }, ensure_ascii=False, indent=2))
+        return
+    if args.command == "writable-paths":
+        print(json.dumps(
+            patch_path_catalog(),
+            ensure_ascii=False, indent=2,
+        ))
         return
     if args.command == "custom-text-plan":
         # Deliberately offline. No login/session/remote write or state persists.
@@ -384,13 +397,14 @@ async def _run(args):
                     "operations": [{"op": op.op, "path": op.path}
                                    for op in plan.operations],
                     "persisted": False,
+                    "planned_sections": changed_sections(checked_write_paths(plan.operations)),
+                    "atomic": False,
                 }
             else:
                 from job_platforms.core.errors import ConflictError
                 if str(plan.base_timestamp) != args.if_match.strip('"'):
                     raise ConflictError("Resume has changed since the caller read it")
                 if args.confirm == "experimental-bio-write":
-                    from job_platforms.providers.tw104.writers import checked_write_paths
                     paths = checked_write_paths(plan.operations)
                     if any(not path.startswith("/bio/") for path in paths):
                         raise ValueError(

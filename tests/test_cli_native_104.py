@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from job_platforms.cli import _parser, _run
+from job_platforms.core.patch import EditPlan, JsonPatchOperation
 
 
 class DummyClient:
@@ -41,6 +42,11 @@ class DummyClient:
     async def mutate_referrer(self, version, action, **kwargs):
         self.calls.append(("referrer", version, action, kwargs))
         return {"verified": True}
+
+    async def plan_edit(self, version, operations):
+        self.calls.append(("plan", version, operations))
+        return (EditPlan(version, 42, [JsonPatchOperation.from_dict(op)
+                                      for op in operations]), {})
 
     async def get_language_editor_options(self, version, kind):
         self.calls.append(("language-options", version, kind))
@@ -88,6 +94,31 @@ class CLI104Tests(unittest.IsolatedAsyncioTestCase):
         with redirect_stdout(io.StringIO()) as captured:
             await _run(args)
         return json.loads(captured.getvalue())
+
+    async def test_writable_paths_cli_needs_no_login(self):
+        with patch("job_platforms.cli.AuthConfig.from_env",
+                   side_effect=AssertionError("Must not access credentials")), \
+             patch("job_platforms.cli.FreshBrowserSession",
+                   side_effect=AssertionError("Must not open a browser")):
+            data = await self.execute(["writable-paths"])
+        self.assertEqual(data["operation"], "replace")
+        self.assertIn("/bio/formData/bio/chi", data["sections"]["bio"])
+        self.assertFalse(data["persisted"])
+        self.assertEqual(DummyClient.calls, [])
+
+    async def test_plan_reports_sections_and_does_not_trigger_remote_write(self):
+        with tempfile.TemporaryDirectory() as folder:
+            file = Path(folder) / "synthetic-patch.json"
+            file.write_text(json.dumps([
+                {"op": "test", "path": "/bio/formData/bio/eng", "value": ""},
+                {"op": "replace", "path": "/bio/formData/bio/chi",
+                 "value": "Synthetic-only"},
+            ]))
+            result = await self.execute(["plan", "synthetic", "--patch-file", str(file)])
+            self.assertFalse(result["persisted"])
+            self.assertFalse(result["atomic"])
+            self.assertEqual(result["planned_sections"], ["bio"])
+            self.assertEqual(len(DummyClient.calls), 1)
 
     async def test_language_options_read_only_cli_dispatch(self):
         data = await self.execute(["language-options", "synthetic", "foreign"])
