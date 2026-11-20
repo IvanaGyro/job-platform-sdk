@@ -41,7 +41,7 @@ class CertificateConnectionTests(unittest.IsolatedAsyncioTestCase):
 
     def test_invalid_ids_never_generate_action(self):
         for value in ([], [0], [-1], [True], ["1"], [1,1],
-                      [1]*31, "bad", None, [1,1.5]):
+                      [1]*31, list(range(1, 22)), "bad", None, [1,1.5]):
             with self.subTest(value=value), self.assertRaises(UnsupportedWrite):
                 certificate_connect_plan(value)
         for value in (-1, 0, True, "", "42", None):

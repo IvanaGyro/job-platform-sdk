@@ -49,6 +49,10 @@ from job_platforms.providers.tw104.transport import (
 from job_platforms.providers.tw104.certificate_block_actions import (
     certificate_block_body,
 )
+from job_platforms.providers.tw104.certificate_connection_records import (
+    validate_certificate_action,
+)
+from job_platforms.providers.tw104.transport import BrowserTransport
 from job_platforms.providers.tw104.custom_layout_records import (
     layout_operation_body,
 )
@@ -1979,6 +1983,93 @@ def create_app(
         return await native_certificate_block_action(
             resume_id, request, "clear", others=None,
             if_match=if_match, idempotency_key=idempotency_key,
+        )
+
+    async def native_certificate_link_action(
+        resume_id: str, request: Request, action: str, *,
+        ids: list[int] | None, record_id: int | None,
+        if_match: str | None, idempotency_key: str | None,
+    ):
+        if not allow_experimental_writes:
+            raise HTTPException(501, "104 certificate association requires write opt-in")
+        if if_match is None:
+            raise HTTPException(428, "If-Match resumeTimestamp required")
+        if not idempotency_key or len(idempotency_key) < 16:
+            raise HTTPException(400, "Idempotency-Key must be at least 16 characters")
+        expected = if_match.strip('"')
+        fingerprint = hmac.new(
+            token.encode("utf-8"),
+            json.dumps({"action": action, "ids": ids, "recordId": record_id,
+                        "timestamp": expected},
+                       sort_keys=True, separators=(",", ":")).encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        key = ("CERTIFICATE_ASSOCIATION", resume_id, idempotency_key)
+        async with request.app.state.action_lock:
+            cached = request.app.state.idempotency_results.get(key)
+            if cached is not None:
+                if cached["fingerprint"] != fingerprint:
+                    raise HTTPException(409, "Certificate association key reused")
+                if cached["state"] != "succeeded":
+                    raise HTTPException(409, "Certificate association uncertain; inspect before retry")
+                return cached["result"]
+            try:
+                client = request.app.state.client
+                if not isinstance(client.transport, BrowserTransport):
+                    raise UnsupportedWrite("Certificate links require browser mode")
+                before = await client.get_resume(resume_id)
+                if not revision_matches(before, expected):
+                    raise HTTPException(412, "Resume changed since prior read")
+                validate_certificate_action(
+                    before, action=action, ids=ids, record_id=record_id,
+                )
+            except (UnsupportedWrite, TypeError, KeyError, ValueError):
+                raise HTTPException(422, "Unsupported certificate association operation") from None
+            except JobPlatformError as exc:
+                translate_error(exc)
+            record = {"fingerprint": fingerprint, "state": "indeterminate"}
+            request.app.state.idempotency_results[key] = record
+            record = request.app.state.idempotency_results[key]
+            try:
+                result = await client.mutate_certificate_connections(
+                    resume_id, action, ids=ids, record_id=record_id,
+                    expected_timestamp=expected,
+                )
+            except JobPlatformError as exc:
+                translate_error(exc)
+            else:
+                record.update({"state": "succeeded", "result": result})
+                return result
+
+    @app.put(
+        "/v1/tw104/resumes/{resume_id}/certificate-links",
+        dependencies=[Depends(authorize)],
+    )
+    async def connect_certificates(
+        resume_id: str, request: Request, changes: dict = Body(...),
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        if set(changes) != {"ids"}:
+            raise HTTPException(422, "Expected only ids array")
+        return await native_certificate_link_action(
+            resume_id, request, "connect", ids=changes["ids"],
+            record_id=None, if_match=if_match, idempotency_key=idempotency_key,
+        )
+
+    @app.delete(
+        "/v1/tw104/resumes/{resume_id}/certificate-links/{record_id}",
+        dependencies=[Depends(authorize)],
+    )
+    async def disconnect_certificate(
+        resume_id: str, record_id: int, request: Request,
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        return await native_certificate_link_action(
+            resume_id, request, "disconnect", ids=None,
+            record_id=record_id, if_match=if_match,
+            idempotency_key=idempotency_key,
         )
 
     return app

@@ -21,7 +21,7 @@ verification record; local CI passes do not increase usable-field coverage.
 | `experience` | POST, PUT, DELETE; ordering, seniority | Native record CRUD accepts unordered contiguous GET sort keys; CREATE with companyVisibility=False fails before write | **SDK CREATE (companyVisibility=True), DELETE and exact restore independently verified on 2026-11-19**; prior UPDATE restored; hidden-company CREATE still unsupported |
 | `jobCondition` | PUT; separate layout/theme PUT | Source-mapped full native form serializer, experimental | **preferJobContent PUT/read-back/exact restore**; other fields unverified |
 | `skill` | POST, PUT, DELETE; ordering | Source-mapped record CRUD + adjacent swap sorting (experimental) | **CRUD restored**; sort/theme unverified |
-| `certificate` | PUT, DELETE; certification connections | Existing text PUT plus first-empty PUT and guarded clear; global associations excluded | **SDK initialize + clear verified and restored live** |
+| `certificate` | PUT, DELETE; certification connections | Existing text PUT/initialize/clear; **new browser-only official Vuex connect/disconnect writer**, no global certificate mutation | **Text SDK initialize + clear verified live**; association writer synthetic-only and live-blocked |
 | `language` | POST, PUT, DELETE; local/foreign records | Native CRUD with duplicate IDs/type-changing UPDATE blocked, native per-kind count preflight, normalized contiguous sort identity; adjacent sort experimental; linked certificates blocked | **Local CREATE/DELETE exactly restored**; local/foreign UPDATE restored; a FOREIGN duplicate-type POST overwrote the original, then SDK UPDATE exactly restored it. Unique FOREIGN CREATE/DELETE unverified |
 | `project` | POST, PUT, DELETE; reorder; attachments | No-media CRUD and adjacent reorder; media pending | **SDK create, update and delete verified live and restored**; sorting synthetic |
 | `portfolio` | POST, DELETE; attachments/upload; reorder | LINK=2 POST, FILE=1 bounded binary POST, one-record DELETE, adjacent reorder; preview/conversion pending | **Browser and curl_cffi LINK/PDF CRUD restored; 2/3-entry insertion order verified**; preview/checksum/blob lifecycle unverified |
@@ -35,6 +35,30 @@ verification record; local CI passes do not increase usable-field coverage.
 For source details see [104 upstream contract](tw104-upstream-contract.md).
 Some frontend functions call additional endpoints not in `resumeByBlock`, such
 as certificate association, media uploads, and record sort operations.
+
+### P0-07 certificate association via official browser Vuex — 2026-11-21
+
+The deployed frontend module 779c dispatches
+`form/certificate/setCertificationConnect` and
+`form/certificate/deleteCertificationConnect` to its own
+`api/certificationConnect/put` and `delete` actions.
+A new *browser-only* `mutate_certificate_connections` uses those
+**existing official UI actions**, not a guessed `/profile/ajax` URL.
+It only operates on account-owned certificate IDs with source UI's
+20-item import cap, checks the editor's active `vno`, and GET-verifies
+`certifications[].items[].id` plus all existing certificate
+metadata and unrelated resume sections. Separate CLI and authenticated,
+opt-in HTTP PUT/DELETE actions exist. No account-global
+`api/certifications/delete` is called.
+
+**Evidence status:** frontend source mapping + synthetic tests only.
+One authorized *read-only* login attempt on the previously successful
+proxy #6 ended with `AuthenticationRequired` before the certificate
+GET; no write took place, no user certificates were disclosed, and
+**newly real-verified fields: 0**. The endpoint path and real populated
+certification GET remain unobserved; no live CRUD/read-back/restore
+is claimed. The action is experimental and may fail closed on the
+current site if its Vuex module isn't loaded.
 
 ## Latest evidence — 2026-11-18
 

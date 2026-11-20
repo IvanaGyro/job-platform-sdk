@@ -35,6 +35,19 @@ def _parser() -> argparse.ArgumentParser:
         help="104 API backend; curl_cffi reuses browser login cookies and proxy",
     )
     sub = parser.add_subparsers(dest="command", required=True)
+    cert_write = sub.add_parser(
+        "certificate-links",
+        help="P0-07 certificate connect/disconnect via official browser Vuex",
+    )
+    cert_write.add_argument("resume_id")
+    cert_write.add_argument("action", choices=["connect", "disconnect"])
+    cert_write.add_argument("--ids-file", default=None,
+                            help="Private JSON list of account-owned certificate IDs")
+    cert_write.add_argument("--record-id", type=int, default=None)
+    cert_write.add_argument("--if-match", required=True)
+    cert_write.add_argument("--confirm",
+                            choices=["experimental-certificate-association-write"],
+                            required=True)
     cert_plan = sub.add_parser(
         "certificate-link-plan",
         help="Offline 104 certification association request planning; no write",
@@ -415,6 +428,24 @@ async def _run(args):
                 args.resume_id, args.action, changes=changes,
                 expected_timestamp=args.if_match.strip('"'),
                 acknowledge_identity_write=True,
+            )
+        elif args.command == "certificate-links":
+            if args.transport != "browser":
+                raise ValueError("Certificate associations require the official browser")
+            if (args.action == "connect") != (args.ids_file is not None):
+                raise ValueError("Connect requires --ids-file only")
+            if (args.action == "disconnect") != (args.record_id is not None):
+                raise ValueError("Disconnect requires --record-id only")
+            if args.action == "connect" and args.record_id is not None:
+                raise ValueError("Connect cannot include --record-id")
+            if args.action == "disconnect" and args.ids_file is not None:
+                raise ValueError("Disconnect cannot include --ids-file")
+            ids = (json.loads(Path(args.ids_file).read_text(encoding="utf-8"))
+                   if args.ids_file is not None else None)
+            result = await client.mutate_certificate_connections(
+                args.resume_id, args.action, ids=ids,
+                record_id=args.record_id,
+                expected_timestamp=args.if_match.strip('"'),
             )
         elif args.command == "certificate-block":
             if (args.action == "initialize") != (args.others_file is not None):

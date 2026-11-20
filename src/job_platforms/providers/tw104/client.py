@@ -34,6 +34,10 @@ from .bio_actions import bio_action_body, verify_bio_action
 from .certificate_block_actions import (
     certificate_block_body, verify_certificate_block,
 )
+from .certificate_connection_records import (
+    dispatch_certification_action, validate_certificate_action,
+    verify_certificate_association,
+)
 from .project_records import (
     project_records, project_operation_body, verify_project_operation,
 )
@@ -543,6 +547,58 @@ class Resume104Client:
             raise VerificationError(
                 "EXPERIENCE write submitted but record state could not be "
                 "verified; inspect before retrying"
+            )
+
+    async def mutate_certificate_connections(
+        self, resume_id: str | int, action: str, *,
+        expected_timestamp: int | str,
+        ids: list[int] | None = None,
+        record_id: int | None = None,
+    ) -> dict:
+        """P0-07 browser-only official Vuex certificate import/disconnect.
+
+        Uses official frontend action, not an inferred HTTP path. Requires
+        initialized grouped GET, matching editor vno and browser action.
+        Not yet live-verified on 104; never touches account-level cert CRUD.
+        """
+        if not isinstance(self.transport, BrowserTransport):
+            raise UnsupportedWrite(
+                "104 certificate associations require the official browser editor"
+            )
+        version = self._version(resume_id)
+        async with self._write_lock:
+            before = await self.get_resume(version)
+            require_revision_match(before, expected_timestamp)
+            desired = validate_certificate_action(
+                before, action=action, ids=ids, record_id=record_id,
+            )
+            await dispatch_certification_action(
+                self.transport.page, resume_id=version, action=action,
+                ids=ids or [], record_id=record_id,
+            )
+            for attempt in range(4):
+                try:
+                    after = await self.get_resume(version)
+                    verified = verify_certificate_association(
+                        before, after, desired_ids=desired,
+                    ) and verify_untouched_blocks(
+                        before, after, changed="certificate",
+                    )
+                except Exception:
+                    raise VerificationError(
+                        "104 certification action submitted; read-back unavailable"
+                    ) from None
+                if verified:
+                    return {
+                        "resume_id": version, "section": "certificate",
+                        "action": action, "persisted": True, "verified": True,
+                        "atomic": True, "linked_count": len(desired),
+                        "source": "official_browser_vuex",
+                    }
+                if attempt < 3:
+                    await asyncio.sleep(0.75)
+            raise VerificationError(
+                "104 certification action submitted but exact state not verified"
             )
 
     async def mutate_certificate_block(

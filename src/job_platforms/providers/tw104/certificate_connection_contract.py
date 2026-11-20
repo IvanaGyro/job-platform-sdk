@@ -20,7 +20,7 @@ from typing import Any
 
 from job_platforms.core.errors import UnsupportedWrite
 
-MAX_SELECTION = 30
+MAX_SELECTION = 20  # Source UI importLimit=20 (official certificate editor)
 
 
 def _id(value: Any) -> int:

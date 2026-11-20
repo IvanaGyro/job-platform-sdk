@@ -150,6 +150,43 @@ be detected; independent server-side version checks remain unverified.
   submits or overwrites the individual `experiences` list. **Synthetic-tested,
   not live-tested.** Independent EXPERIENCE record CRUD is documented below.
 
+### P0-07 certificate associations (official Vuex, experimental)
+
+104's deployed frontend implements resume certificate association through
+Vuex actions `form/certificate/setCertificationConnect` and
+`form/certificate/deleteCertificationConnect`. A new browser-only SDK
+method calls **those actual frontend actions** instead of guessing the
+unverified HTTP path:
+
+```python
+await client.mutate_certificate_connections(
+    resume_id, "connect", ids=[account_cert_id],
+    expected_timestamp=revision,
+)
+await client.mutate_certificate_connections(
+    resume_id, "disconnect", record_id=account_cert_id,
+    expected_timestamp=new_revision,
+)
+```
+
+CLI: `job-platform certificate-links VERSION_NO connect --ids-file
+PRIVATE_JSON --if-match TIMESTAMP --confirm
+experimental-certificate-association-write`; for unlink use
+`disconnect --record-id ID` instead of the ids file. The local
+bearer-protected HTTP API supports `PUT
+/v1/tw104/resumes/{resume_id}/certificate-links` with
+`{"ids":[ACCOUNT_CERT_IDS]}` and `DELETE .../certificate-links/{record_id}`.
+It requires experimental writes, `If-Match` and `Idempotency-Key`.
+Only official browser mode works. The SDK guards current resume ID,
+account-owned certificate IDs, current imported associations, preserves
+unrelated values and verifies saved grouped certificate IDs on a new GET.
+It never deletes or changes the user's *global* certificate records.
+
+**Not site-verified:** synthetic tests pass, but the real read-only
+login attempt on 2026-11-21 failed with `AuthenticationRequired`.
+No live certificate connect/disconnect/restore is proven and no
+website mutations were made. Real-site verified coverage added: **0**.
+
 ### Sequential native edit batch for workflows (experimental)
 
 A workflow can now combine the **existing** supported 104 writers into one

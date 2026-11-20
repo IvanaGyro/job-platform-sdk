@@ -1,5 +1,15 @@
 ## Mandatory mainline: missing executable editor field writers (2026-11-21)
 
+**Current user-directed start: P0-07 onward. P0-01 through P0-06
+are explicitly deferred; do not work on them until the user requests it.**
+P0-07 already has a browser-only Vuex association writer, but remains
+**LIVE-BLOCKED** after an AuthenticationRequired result in the one
+2026-11-21 read-only login attempt. Its real-site association/unlink,
+independent GET and exact restoration must still be verified. P0-08 depends
+on this certificate linkage. Treat this as the active ID, not an excuse
+to pivot to CLASSIC/BANNER, caching, test counts or general infrastructure.
+Do not cycle proxies or repeat authentication attempts blindly.
+
 **Before selecting the next task, read [docs/unimplemented-editor-fields.md](docs/unimplemented-editor-fields.md).**
 It is the authoritative priority-ordered backlog of **fields/operations with no
 safe executable writer**. Claim one P0/P1 ID and keep working on that ID unless
