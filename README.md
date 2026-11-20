@@ -210,12 +210,12 @@ synthetic-tested but not real status-verified.
 
 **Still incomplete:** CUSTOM MAGAZINE and complex media update
 flows, account-level certification CRUD/links, binary previews/
-thumbnail/conversion, remaining INFO/UNDER18/SIDEBAR fields and
+thumbnail/conversion, remaining INFO/UNDER18 live validation/SIDEBAR fields and
 live tests for EDUCATION/EXPERIENCE/LANGUAGE/JOB_CONDITION.
 See the PR body's completed/unfinished checklist and the
 [redacted integration report](docs/tw104-live-smoke-report.md).
 
-### Read-only dynamic CUSTOM slots and UNDER18
+### Dynamic CUSTOM slots and UNDER18 read/schema access
 
 Full 104 resume GET responses can include dynamically numbered
 CUSTOM sections from custom1 through custom6, as well as an optional
@@ -234,7 +234,50 @@ The custom-slots response includes detected names and field
 schemas only, not full personal values; get-section returns the
 actual private section contents and is bearer-protected in HTTP.
 If the full GET does not include a dynamic slot, it is not invented.
-No dynamic CUSTOM or UNDER18 mutation route has been enabled.
+CUSTOM dynamic slot CRUD is covered by separate theme-specific APIs.
+UNDER18 has a new strictly gated source-mapped POST/PUT adapter described
+below; its native populated GET structure is synthetic-tested only.
+
+### UNDER18 age/identity native form (source-mapped, experimental)
+
+The retained official frontend Vuex module defines **POST create** and **PUT
+update** on `/profile/ajax/resumeByBlock/under18`, with exactly three native
+fields: `birthdayDocument` (string), `idType` (integer), and
+`selfIdentityConfirmed` (Boolean). The SDK now exposes
+`await client.mutate_under18(resume_id, "create" | "update",
+changes=identity_data, expected_timestamp=revision,
+acknowledge_identity_write=True)` and returns only non-personal operation
+status. A separate explicit acknowledgement is mandatory: this is an age /
+identity attestation, **not an ordinary background resume field edit**.
+
+A locally protected UTF-8 JSON file with exactly the three fields can be
+submitted through the CLI:
+
+```bash
+job-platform under18 VERSION_NO create --changes-file private-identity.json \
+  --if-match TIMESTAMP --acknowledge-identity-write \
+  --confirm experimental-under18-write
+```
+
+The bearer-protected local HTTP API provides
+`POST /v1/tw104/resumes/{resume_id}/under18` and `PUT` on the same path.
+Each write requires `JOB_PLATFORM_104_ENABLE_EXPERIMENTAL_WRITES=1`,
+`If-Match`, an `Idempotency-Key` of at least 16 characters, and the
+separate `X-Identity-Write-Acknowledgement: true` header. It validates
+all field types and full native GET ownership, compares revisions,
+rejects already-created or absent records and unchanged updates, then
+verifies read-back and preservation of other known resume sections.
+Ambiguous remote writes are not automatically retried. Sensitive values
+are never echoed by the new SDK/HTTP write result, and must never be
+committed or logged. Input length/type bounds are **SDK safety limits**,
+not 104-published form constraints.
+
+**Evidence limit:** the saved official frontend provides the request shape,
+but the authorized test resume had no UNDER18 data. The new adapter is
+**synthetic-tested only; no populated live GET, POST, PUT or restore has
+been demonstrated**. Its current-site acceptance and identity semantics
+must be checked independently before production use. No DELETE is
+implemented, because this frontend module only supplies POST/PUT.
 
 ### Live 104 test-resume verification (2026-11-17)
 

@@ -4,6 +4,29 @@ The default is still `BrowserTransport`: Patchright authenticates and issues
 same-origin requests. An opt-in `CurlCffiTransport` instead uses `curl_cffi`
 0.17 / Chrome 146 impersonation after a **successful browser login**.
 
+## UNDER18 sensitive age/identity native writes (2026-11-20)
+
+The retained Vuex module for the optional UNDER18 section maps CREATE to
+`POST /profile/ajax/resumeByBlock/under18` and UPDATE to the corresponding
+PUT. The body has exactly the `birthdayDocument`, `idType`, and
+`selfIdentityConfirmed` fields under `blockValueList.under18`. The new
+`under18_records.py` and guarded SDK, CLI and local HTTP write routes
+validate all three field types, prohibit silent defaulting of identity
+attestation, and require an explicit sensitive-data acknowledgement in
+addition to the experimental write opt-in. HTTP additionally needs bearer,
+If-Match, a long Idempotency-Key and
+`X-Identity-Write-Acknowledgement: true`. The result is deliberately only
+operation status; no identity text is returned. A fresh post-write GET must
+show the intended full three-field data without collateral changes to
+other sections. Ambiguous writes are never blindly retried.
+
+The real authorized test resume had no UNDER18 native GET field. Only
+source mapping and synthetic tests exist; actual account eligibility,
+server acceptance and full identity semantics remain **unverified**.
+No live website login or write was carried out for this change. Do not
+use it as a substitute for official identity verification or submit
+unconfirmed personal details.
+
 ## Cross-section PATCH preservation and fresh GET between PUTs (2026-11-20)
 
 An audit of `save_edit()` found that a correct **target value** could

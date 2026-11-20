@@ -53,6 +53,22 @@ async with FreshBrowserSession(AuthConfig.from_env()) as session:
     verifier = Resume104Client(transport=await session.http_transport())
 ```
 
+## Sensitive UNDER18 identity writes (2026-11-20)
+
+The official Vuex source describes only CREATE/UPDATE via
+`resumeByBlock/under18`, with `birthdayDocument`, `idType` and
+`selfIdentityConfirmed`. New `mutate_under18()` is experimental, requires
+`acknowledge_identity_write=True`, and never includes those values in
+success/error results. CLI `under18` additionally requires
+`--acknowledge-identity-write` and explicit confirmation, while HTTP
+POST/PUT needs `X-Identity-Write-Acknowledgement: true`, experimental
+write opt-in, Bearer, If-Match and Idempotency-Key. Do not add a guessed
+DELETE, infer legal attestation values, log actual identity data, or
+claim that frontend source mapping proves website acceptance. The known
+authorized resume had no UNDER18 GET sample; synthetic tests only. Treat
+any newly discovered native field or media value as unsupported until it
+has an authorized, privacy-preserving contract and write/restore evidence.
+
 ## Multi-section PATCH read-back and pre-PUT checks (2026-11-20)
 
 Do **not** approve a write solely because the requested value matches

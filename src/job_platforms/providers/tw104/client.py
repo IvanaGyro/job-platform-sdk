@@ -51,6 +51,7 @@ from .custom_themes import custom_theme_capabilities
 from .custom_layout_records import (
     LAYOUT_THEMES, layout_operation_body, verify_layout_mutation,
 )
+from .under18_records import under18_operation_body, verify_under18_operation
 from .portfolio_preview import conversion_file_id,convert_status_summary
 from .referrer_records import (
     referrer_records, referrer_operation_body, verify_referrer_operation,
@@ -605,6 +606,60 @@ class Resume104Client:
                     await asyncio.sleep(0.75)
             raise VerificationError(
                 "104 BIO native write submitted; new state not verified"
+            )
+
+    async def mutate_under18(
+        self,
+        resume_id: str | int,
+        action: str,
+        *,
+        changes: dict,
+        expected_timestamp: int | str,
+        acknowledge_identity_write: bool = False,
+    ) -> dict:
+        """Guarded 104 UNDER18 native POST/PUT (synthetic-tested only).
+
+        Age or identity attestations must not be inferred from account state.
+        Explicit consent is mandatory even when the caller uses the Python
+        API directly, which has no HTTP/CLI opt-in flag to rely upon.
+        Never echo birthdayDocument/idType or raw response on success.
+        """
+        if acknowledge_identity_write is not True:
+            raise UnsupportedWrite("104 UNDER18 identity write needs explicit acknowledgement")
+        if action not in ("create", "update"):
+            raise UnsupportedWrite("104 UNDER18 supports create/update only")
+        version = self._version(resume_id)
+        async with self._write_lock:
+            before = await self.get_resume(version)
+            if not revision_matches(before, expected_timestamp):
+                raise ConflictError("104 resume revision changed before UNDER18 write")
+            body = under18_operation_body(before, action, changes=changes)
+            await self.transport.request(
+                "POST" if action == "create" else "PUT",
+                "/profile/ajax/resumeByBlock/under18",
+                params={"vno": version}, json_data=body,
+            )
+            for attempt in range(4):
+                try:
+                    after = await self.get_resume(version)
+                    if verify_under18_operation(
+                        before, after, action, body=body,
+                    ):
+                        return {
+                            "resume_id": version, "section": "under18",
+                            "action": action, "persisted": True,
+                            "verified": True, "atomic": True,
+                            "contains_identity_values": False,
+                            "live_sdk_verified": False,
+                        }
+                except Exception:
+                    raise VerificationError(
+                        "104 UNDER18 request submitted; read-back unavailable"
+                    ) from None
+                if attempt < 3:
+                    await asyncio.sleep(0.75)
+            raise VerificationError(
+                "104 UNDER18 request submitted; identity result unverified"
             )
 
     async def mutate_referrer(

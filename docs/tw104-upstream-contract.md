@@ -609,12 +609,21 @@ See tw104-live-smoke-report.md.
 ### Optional dynamic section GET exposure
 
 The native editor registers up to six CUSTOM slots (custom1..custom6).
-The current client exposes these section names and optional under18
-in full-resume schema/get-section results, without implementing a
-write serializer for either group. list_custom_slots enumerates
-only actual object keys returned by the current GET; missing slots
-stay absent. The designated authenticated test resume included
-no custom1..custom6 or under18 top-level entries.
+The current client exposes these section names and optional UNDER18
+in full-resume schema/get-section results. The older read-only checkpoint
+was later superseded by theme-specific CUSTOM native writers and a new
+source-mapped UNDER18 guarded POST/PUT implementation. The latter derives
+from the retained Vuex source's `api/resumeByBlock/post`/`put` with
+`block=UNDER18` and exactly
+`blockValueList.under18={birthdayDocument,idType,selfIdentityConfirmed}`.
+The new `under18_records.py` requires explicit sensitive identity-writing
+acknowledgement, the current version, exactly three valid fields and a
+strict native GET shape, and verifies the full result. The real designated
+test resume included **no UNDER18 entry**, so every UNDER18 write test is
+synthetic; a populated native GET and the actual upstream identity semantics
+have not been checked. The SDK requires explicit caller acknowledgement;
+local API and CLI additionally require separate identity-write opt-in.
+`list_custom_slots` still enumerates only actual returned CUSTOM keys.
 
 
 ### Real corrected SDK wrapper lifecycle

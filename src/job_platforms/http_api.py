@@ -36,6 +36,7 @@ from job_platforms.providers.tw104.portfolio_records import (
     portfolio_file_fields,
 )
 from job_platforms.providers.tw104.bio_actions import bio_action_body
+from job_platforms.providers.tw104.under18_records import under18_operation_body
 from job_platforms.providers.tw104.transport import (
     BrowserUpload, MAX_BROWSER_UPLOAD_BYTES,
 )
@@ -157,6 +158,8 @@ def create_app(
                 "experimental_custom_layout_actions": ["create", "update", "delete"],
                 "experimental_custom_layout_themes": {"CLASSIC": 1, "BANNER": 2},
                 "experimental_bio_actions": ["create", "clear"],
+                "experimental_under18_actions": ["create", "update"],
+                "under18_requires_identity_acknowledgement": True,
                 "experimental_record_operations": {
                     "skill": ["create", "update", "delete"],
                     "education": ["create", "update", "delete"],
@@ -1597,6 +1600,105 @@ def create_app(
             else:
                 record.update({"state": "succeeded", "result": result})
                 return result
+
+    async def native_under18_action(
+        resume_id: str, request: Request, action: str, *,
+        changes: dict, if_match: str | None, idempotency_key: str | None,
+        acknowledgement: str | None,
+    ):
+        # Age/identity attestation is not a regular background resume edit.
+        # Require a separate explicit per-request acknowledgement as well as
+        # the experimental-write gate, Bearer token, and If-Match revision.
+        if not allow_experimental_writes:
+            raise HTTPException(501, "104 UNDER18 identity write needs experimental opt-in")
+        if acknowledgement != "true":
+            raise HTTPException(428, "Explicit X-Identity-Write-Acknowledgement: true required")
+        if if_match is None:
+            raise HTTPException(428, "If-Match resumeTimestamp required")
+        if not idempotency_key or len(idempotency_key) < 16:
+            raise HTTPException(400, "Idempotency-Key of at least 16 characters required")
+        expected = if_match.strip('"')
+        try:
+            # Validate before hashing/storing any identity-sensitive values.
+            # Never send the raw document value in a response or log.
+            under18_operation_body(
+                {"resume": {"vno": resume_id}}, "create", changes=changes,
+            )
+        except (UnsupportedWrite, ValueError, TypeError, KeyError):
+            raise HTTPException(422, "Invalid UNDER18 identity fields") from None
+        # A keyed fingerprint avoids retaining raw personal values in the
+        # idempotency cache and prevents offline guessing of small documents.
+        fingerprint = hmac.new(token.encode("utf-8"), json.dumps({
+            "action": action, "data": changes, "version": expected,
+        }, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8"),
+            hashlib.sha256).hexdigest()
+        key = ("UNDER18", resume_id, idempotency_key)
+        async with request.app.state.action_lock:
+            previous = request.app.state.idempotency_results.get(key)
+            if previous is not None:
+                if previous["fingerprint"] != fingerprint:
+                    raise HTTPException(409, "Idempotency-Key reused for another identity write")
+                if previous["state"] != "succeeded":
+                    raise HTTPException(409, "Identity write outcome uncertain; inspect before retrying")
+                return previous["result"]
+            try:
+                before = await request.app.state.client.get_resume(resume_id)
+                if not revision_matches(before, expected):
+                    raise HTTPException(412, "Resume changed since prior GET")
+                under18_operation_body(before, action, changes=changes)
+            except (UnsupportedWrite, ValueError, TypeError, KeyError):
+                raise HTTPException(422, "Invalid UNDER18 state or unsupported identity form") from None
+            except JobPlatformError as exc:
+                translate_error(exc)
+            entry = {"state": "indeterminate", "fingerprint": fingerprint}
+            request.app.state.idempotency_results[key] = entry
+            try:
+                result = await request.app.state.client.mutate_under18(
+                    resume_id, action, changes=changes,
+                    expected_timestamp=expected,
+                    acknowledge_identity_write=True,
+                )
+            except JobPlatformError as exc:
+                translate_error(exc)
+            else:
+                entry.update({"state": "succeeded", "result": result})
+                return result
+
+    @app.post(
+        "/v1/tw104/resumes/{resume_id}/under18",
+        dependencies=[Depends(authorize)],
+    )
+    async def create_under18(
+        resume_id: str, request: Request, changes: dict = Body(...),
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+        acknowledgement: str | None = Header(
+            default=None, alias="X-Identity-Write-Acknowledgement",
+        ),
+    ):
+        return await native_under18_action(
+            resume_id, request, "create", changes=changes,
+            if_match=if_match, idempotency_key=idempotency_key,
+            acknowledgement=acknowledgement,
+        )
+
+    @app.put(
+        "/v1/tw104/resumes/{resume_id}/under18",
+        dependencies=[Depends(authorize)],
+    )
+    async def update_under18(
+        resume_id: str, request: Request, changes: dict = Body(...),
+        if_match: str | None = Header(default=None, alias="If-Match"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+        acknowledgement: str | None = Header(
+            default=None, alias="X-Identity-Write-Acknowledgement",
+        ),
+    ):
+        return await native_under18_action(
+            resume_id, request, "update", changes=changes,
+            if_match=if_match, idempotency_key=idempotency_key,
+            acknowledgement=acknowledgement,
+        )
 
     async def native_bio_action(
         resume_id: str, request: Request, action: str, *,

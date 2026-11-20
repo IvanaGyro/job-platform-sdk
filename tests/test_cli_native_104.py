@@ -27,6 +27,10 @@ class DummyClient:
         self.calls.append(("certificate-block", version, action, kwargs))
         return {"verified": True}
 
+    async def mutate_under18(self, version, action, **kwargs):
+        self.calls.append(("under18", version, action, kwargs))
+        return {"verified": True, "contains_identity_values": False}
+
     async def mutate_bio(self, version, action, **kwargs):
         self.calls.append(("bio-action", version, action, kwargs))
         return {"verified": True}
@@ -219,6 +223,32 @@ class CLI104Tests(unittest.IsolatedAsyncioTestCase):
             "sort", "synthetic", "referrer", 1, 2,
             {"expected_timestamp": "41"},
         ))
+
+    async def test_under18_cli_requires_separate_identity_acknowledgement(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "synthetic-private-identity.json"
+            data = {"birthdayDocument": "synthetic-nonidentity-token",
+                    "idType": 0, "selfIdentityConfirmed": False}
+            source.write_text(json.dumps(data), encoding="utf-8")
+            args = ["under18", "synthetic", "create", "--changes-file", str(source),
+                    "--if-match", "123", "--confirm", "experimental-under18-write"]
+            with self.assertRaisesRegex(ValueError, "acknowledge"):
+                await self.execute(args)
+            self.assertEqual(DummyClient.calls, [])
+            result = await self.execute(args + ["--acknowledge-identity-write"])
+            self.assertTrue(result["verified"])
+            self.assertFalse(result["contains_identity_values"])
+            self.assertEqual(DummyClient.calls, [
+                ("under18", "synthetic", "create", {
+                    "changes": data, "expected_timestamp": "123",
+                    "acknowledge_identity_write": True,
+                }),
+            ])
+            with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                _parser().parse_args([
+                    "under18", "synthetic", "delete", "--changes-file", str(source),
+                    "--if-match", "123", "--confirm", "experimental-under18-write",
+                ])
 
     async def test_bio_create_and_clear_native_cli(self):
         with tempfile.TemporaryDirectory() as folder:

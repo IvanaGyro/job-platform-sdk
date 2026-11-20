@@ -23,7 +23,7 @@ and successful real 104 writes.** Each is a separate evidence level.
 | `sidebar` | PUT | Complete-list reorder only; metadata edits rejected | **One adjacent swap PUT and exact restore** |
 | `layout` | PUT | Per-section themes using current 104 options; FILE token-safe verifier | **JOB_CONDITION theme PUT and restore via SDK verified**; other themes/sections unverified |
 | `custom` | POST, PUT, DELETE | **SDK TEXT=3 CRUD live**; CLASSIC/BANNER raw native CRUD live and **new single no-media SDK/CLI/HTTP CRUD synthetic-tested**; IMAGE=4 synthetic PNG raw native create/delete live; MAGAZINE incomplete | TEXT SDK real; CLASSIC/BANNER new wrappers synthetic-only |
-| `under18` | POST, PUT | Optional native section/schema **read-only**; no remote writer | No |
+| `under18` | POST, PUT | **New guarded native create/update SDK, CLI and HTTP** with explicit identity acknowledgement; synthetic-tested only | **No real populated GET or live write** |
 
 For source details see [104 upstream contract](tw104-upstream-contract.md).
 Some frontend functions call additional endpoints not in `resumeByBlock`, such
@@ -534,9 +534,11 @@ blocks without returning personal content.
 
 HTTP /custom-slots and CLI custom-slots expose this read-only
 discovery. Missing dynamic sections are not synthesized and all
-custom/under18 write paths remain unsupported. The user's test
-resume has no CUSTOM or UNDER18 keys in its authenticated GET;
-populated dynamic response shapes are not yet real-verified.
+unmapped custom fields and generic PATCH to UNDER18 remain unsupported.
+A separate guarded UNDER18 POST/PUT SDK/CLI/HTTP writer was later added,
+but its exact native populated GET contract is still synthetic-tested only.
+The authorized test resume has no UNDER18 key in its authenticated GET;
+real identity GET/write/restore evidence is unavailable.
 
 
 ### Second completed SDK write/read-back/restore cycle
@@ -620,6 +622,29 @@ swap and its reverse**, not a proof of non-adjacent or arbitrary
 multi-record ordering. Signed file tokens and previews are not
 part of the stable displayed identity comparison.
 
+
+### Guarded UNDER18 age/identity POST/PUT — 2026-11-20
+
+The retained official Vuex source dispatches `api/resumeByBlock/post` or
+`api/resumeByBlock/put` with `block=UNDER18`, and exactly
+`blockValueList.under18={birthdayDocument,idType,selfIdentityConfirmed}`.
+The new standalone `under18_records.py` and
+`Resume104Client.mutate_under18()` map these two native requests, requiring
+all three correctly typed fields, strict `resumeTimestamp` matching,
+non-replacement of a populated CREATE, an existing UPDATE target, and an
+**additional explicit acknowledgement** of sensitive age/identity writing.
+Each submitted action must read back exactly those fields while preserving
+all other known resume sections. New CLI `under18` and HTTP POST/PUT
+`/v1/tw104/resumes/{resume_id}/under18` are experimental and require opt-in;
+HTTP additionally requires bearer authentication, Idempotency-Key and
+`X-Identity-Write-Acknowledgement:true`. No ambiguous response is retried;
+SDK/HTTP result objects omit all identity fields.
+
+The authorized real test resume did not include UNDER18, so populated GET
+and all integrated create/update/restore behavior remain **synthetic-only**.
+No real age/identity data was collected, read, submitted or committed. This
+is an experimental separate native action, **not** a general-purpose JSON
+Patch write path, nor a validated legal-identity verification workflow.
 
 ### Multi-section PATCH preservation and revision race checks — 2026-11-20
 

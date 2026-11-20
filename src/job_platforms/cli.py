@@ -140,6 +140,20 @@ def _parser() -> argparse.ArgumentParser:
     certificate_block.add_argument(
         "--confirm", choices=["experimental-certificate-write"], required=True,
     )
+    under18_action = sub.add_parser(
+        "under18",
+        help="104 native age/identity data POST or PUT (EXPERIMENTAL; sensitive)",
+    )
+    under18_action.add_argument("resume_id")
+    under18_action.add_argument("action", choices=["create", "update"])
+    under18_action.add_argument("--changes-file", required=True,
+        help="Locally protected JSON with all 3 identity fields (never print/commit)")
+    under18_action.add_argument("--if-match", required=True)
+    under18_action.add_argument("--acknowledge-identity-write", action="store_true",
+        help="Explicit confirmation to submit sensitive age/identity data")
+    under18_action.add_argument(
+        "--confirm", choices=["experimental-under18-write"], required=True,
+    )
     bio_action = sub.add_parser(
         "bio-action", help="104 initial BIO POST or clear/delete (experimental)"
     )
@@ -362,6 +376,15 @@ async def _run(args):
                     Path(args.html_file).read_text(encoding="utf-8")
                     if args.html_file is not None else None
                 ),
+            )
+        elif args.command == "under18":
+            if not args.acknowledge_identity_write:
+                raise ValueError("Sensitive UNDER18 write needs --acknowledge-identity-write")
+            changes = json.loads(Path(args.changes_file).read_text(encoding="utf-8"))
+            result = await client.mutate_under18(
+                args.resume_id, args.action, changes=changes,
+                expected_timestamp=args.if_match.strip('"'),
+                acknowledge_identity_write=True,
             )
         elif args.command == "certificate-block":
             if (args.action == "initialize") != (args.others_file is not None):
