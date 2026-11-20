@@ -702,11 +702,27 @@ remote write are **not retried** automatically. The idempotency cache is
 **not durable** after server restart, and independent 104 requests are
 not one atomic transaction.
 
-Each modified section is written once with sibling fields preserved, then
-verified by reading back. **Multiple sections are not atomic**: if a later
-section fails, `PartialWriteError` reports earlier verified sections and the
-failed section without exposing resume data. Unmapped paths and operations are
-rejected before any write.
+Each modified section is written once, then independently read back.
+The PATCH verifier now checks **more than the requested target value**:
+all known unrelated resume blocks (`education`, `experience`, `bio`,
+`certificate`, `sidebar`, numbered CUSTOM slots, etc.) must survive unchanged.
+It protects EXPERIENCE records during a seniority-only PUT, BIO metadata,
+CERTIFICATE associations during a text/list PUT, and each SIDEBAR row's full
+metadata during reorder. The one observed exception is the four regenerated
+opaque PORTFOLIO FILE access fields (`fileId`, `thumbnailFileId`, `src`,
+`url`); **LINK destinations are always checked**.
+
+Before every *subsequent* section PUT the SDK performs another GET, checks
+the global `resumeTimestamp`, and verifies all known blocks still match the
+previous read-back, including pending blocks whose native request bodies
+were prepared earlier. **Multiple sections are not atomic**: if the next
+write fails or a conflict is detected, `PartialWriteError` reports earlier
+verified sections and the failed section without exposing resume data. A
+failed or ambiguous read-back is never treated as success or automatically
+retried, even if the target text happens to match. These stronger guards
+are **synthetic-tested**, do not provide server-side CAS or rollback, and
+may deliberately reject changed/unknown GET metadata rather than guess.
+Unmapped paths and operations are rejected before any write.
 
 ## CLI
 

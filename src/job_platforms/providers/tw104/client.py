@@ -63,6 +63,9 @@ from .education_records import (
 )
 from .editor_limits import INPUT_FIELD_GROUPS, native_editor_limits
 from .revision_guard import is_revision, revision_matches, require_revision_match
+from .patch_verification import (
+    PRESERVE_BLOCKS, stable_block_equal, verify_patch_transition,
+)
 from .writers import (
     checked_write_paths, changed_sections, section_data, section_request_body,
     validate_section_edit, patch_path_catalog,
@@ -274,15 +277,33 @@ class Resume104Client:
                 if before[name] == desired[name]:
                     continue
                 try:
-                    # Prior section read-backs refresh the version header. Never
-                    # use that fresh header to overwrite a stale pending block.
-                    # A cross-block transaction is not atomic; this detects
-                    # intervening changes before each subsequent request.
-                    if section_data(latest, name) != before[name]:
+                    # Every subsequent PUT gets a *new* source-of-truth GET.
+                    # An external editor may have changed the pending block
+                    # between our previous successful read-back and this PUT.
+                    # Signed FILE access tokens are the only documented
+                    # volatile exception; all other native blocks are stable.
+                    if verified_sections:
+                        refreshed = await self.get_resume(plan.resume_id)
+                        # Metadata-only external edits can advance the
+                        # global revision without changing a known block.
+                        if not revision_matches(
+                            refreshed, self._edit_timestamp(latest),
+                        ) or not all(stable_block_equal(
+                            latest, refreshed, block,
+                        ) for block in PRESERVE_BLOCKS):
+                            raise ConflictError(
+                                "Resume changed between successive section writes"
+                            )
+                        latest = refreshed
+                    # A cross-block PATCH is not atomic. The serializer body
+                    # was built before the first PUT, so never overwrite a
+                    # pending block if it changed while prior PUTs completed.
+                    if not stable_block_equal(current, latest, name):
                         raise ConflictError(
                             "A pending resume section changed during the save"
                         )
                     # Do not automatically retry if the response is ambiguous.
+                    pre_put = latest
                     await self.transport.put_json(
                         f"/profile/ajax/resumeByBlock/{name}",
                         bodies[name], params={"vno": plan.resume_id}
@@ -290,7 +311,9 @@ class Resume104Client:
                     for attempt in range(4):
                         after = await self.get_resume(plan.resume_id)
                         latest = after
-                        if section_data(after, name) == desired[name]:
+                        if verify_patch_transition(
+                            pre_put, after, name, desired[name],
+                        ):
                             verified_sections.append(name)
                             break
                         if attempt < 3:

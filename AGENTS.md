@@ -53,6 +53,21 @@ async with FreshBrowserSession(AuthConfig.from_env()) as session:
     verifier = Resume104Client(transport=await session.http_transport())
 ```
 
+## Multi-section PATCH read-back and pre-PUT checks (2026-11-20)
+
+Do **not** approve a write solely because the requested value matches
+GET. `save_edit()` uses `patch_verification.verify_patch_transition()`
+to verify all non-target native blocks; BIO/CERTIFICATE/EXPERIENCE also
+protect their other form fields and SIDEBAR protects entire row metadata.
+A real no-op double GET documented only four volatile PORTFOLIO **FILE**
+access fields; LINK URLs, file names and content fields remain strict.
+Before the second and every later PUT, re-GET the resume, check the
+latest `resumeTimestamp` and compare all known blocks to the previous
+verified snapshot. A pending block changed by another writer must never
+be overwritten using an earlier-serialized body. These checks are
+synthetic-tested and conservative, not atomic CAS/transaction support;
+never retry a submitted but unverified write or claim an automatic rollback.
+
 ## CUSTOM source-defined content slots (2026-11-20)
 
 Official bundle module 5255 defines `contentNumber` as 1 for CLASSIC,

@@ -621,6 +621,24 @@ multi-record ordering. Signed file tokens and previews are not
 part of the stable displayed identity comparison.
 
 
+### Multi-section PATCH preservation and revision race checks — 2026-11-20
+
+Target-only read-back could previously accept seniority changes that
+destroyed the `experience.formData.experiences` array, or BIO/CERTIFICATE
+text updates whose collateral effect modified unrelated metadata.
+`patch_verification.py` now verifies the full stable sibling blocks,
+non-target fields of BIO/CERTIFICATE/EXPERIENCE, and all SIDEBAR record
+metadata; not merely target values or reordered IDs. The existing
+narrow four-field exception for rotating PORTFOLIO **FILE** URLs/tokens
+is reused, but LINK URLs remain strict. Multi-section saves perform a
+fresh GET and global revision check **between** sequential PUTs, detecting
+an external update that arrived after the previous read-back.
+Synthetic tests include clobbered work history, certification links,
+BIO metadata, sidebar row metadata, changed LINK URLs, rotating FILE
+tokens, metadata-only revision races and failed later PUT preservation.
+These guards remain best-effort and **not a 104 server-side atomic write**.
+No website login or mutation was involved in this refactor.
+
 ### CUSTOM theme content slot limits and offline capabilities (2026-11-20)
 
 The deployed production Vue bundle module `5255` exports a per-theme

@@ -3,7 +3,7 @@ import asyncio
 import copy
 import unittest
 
-from job_platforms.core.errors import PartialWriteError, UnsupportedWrite
+from job_platforms.core.errors import PartialWriteError, UnsupportedWrite, VerificationError
 from job_platforms.core.patch import EditPlan, JsonPatchOperation
 from job_platforms.providers.tw104.client import Resume104Client
 from job_platforms.providers.tw104.writers import (
@@ -137,7 +137,7 @@ class MultiSectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(client.doc["bio"]["formData"]["bio"]["chi"], "new Chinese")
         self.assertEqual(certificate_data(client.doc)["others"], "original")
 
-    async def test_concurrent_certificate_change_aborts_next_put(self):
+    async def test_unexpected_certificate_change_during_bio_prevents_progress(self):
         client = WriterClient()
         original_put = client.transport.put_json
 
@@ -159,10 +159,11 @@ class MultiSectionTests(unittest.IsolatedAsyncioTestCase):
                 "local change",
             ),
         ])
-        with self.assertRaises(PartialWriteError) as err:
+        # The external change occurred *during* BIO PUT. With strict
+        # cross-section verification, the BIO write cannot be certified
+        # because an unrelated section changed during that same request.
+        with self.assertRaises(VerificationError):
             await client.save_edit(plan)
-        self.assertEqual(err.exception.verified_sections, ["bio"])
-        self.assertEqual(err.exception.failed_section, "certificate")
         self.assertEqual(len(client.transport.calls), 1)
         self.assertEqual(
             len(client.doc["certificate"]["formData"]["certificate"][

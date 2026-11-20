@@ -4,6 +4,37 @@ The default is still `BrowserTransport`: Patchright authenticates and issues
 same-origin requests. An opt-in `CurlCffiTransport` instead uses `curl_cffi`
 0.17 / Chrome 146 impersonation after a **successful browser login**.
 
+## Cross-section PATCH preservation and fresh GET between PUTs (2026-11-20)
+
+An audit of `save_edit()` found that a correct **target value** could
+conceal damage elsewhere: a seniority-only EXPERIENCE PUT previously
+verified only `seniority.value`, not surviving `experiences[]`; BIO and
+CERTIFICATE also projected only a subset of their native form metadata;
+SIDEBAR read-back checked only reordered IDs, not the row contents. The
+new `patch_verification.py` compares every known non-target native resume
+block against the immediately preceding pre-PUT GET. Within the target
+BIO, CERTIFICATE and EXPERIENCE blocks it also protects non-target fields;
+SIDEBAR must contain each original row and complete metadata, regardless
+of order. No type/category/media identifiers may be silently discarded.
+
+The site regenerates exactly four known PORTFOLIO FILE access fields on
+unmodified GETs: `fileId`, `thumbnailFileId`, `src`, and `url`. The guard
+reuses the independently live-observed FILE-only exception from
+`layout_theme.py`. It still checks LINK destination URLs, file names,
+record identities, metadata and all other sections exactly. A changed
+unrecognized field fails closed (possible false negative rather than a
+false claim of verified persistence).
+
+For multi-section PATCH, the SDK now makes an extra GET before **every
+subsequent PUT**, comparing the latest global `resumeTimestamp` and all
+known blocks to the last verified read-back. It aborts if a second editor
+changes a pending block (or advances a previously verified revision) in
+the interval. This remains client-side checking, **not atomic server-side
+compare-and-swap**. A submitted but unverified write is not retried;
+`PartialWriteError` reports verified earlier blocks if a later block fails.
+All new checks were tested using synthetic GET/PUT fixtures; there was
+no new 104 site login, read or write in this continuation.
+
 ## CUSTOM frontend content cardinalities and offline inspection (2026-11-20)
 
 Production Vue module 5255 maps `CustomThemeImage` and
