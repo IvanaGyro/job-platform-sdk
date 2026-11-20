@@ -4,6 +4,9 @@ The default is still `BrowserTransport`: Patchright authenticates and issues
 same-origin requests. An opt-in `CurlCffiTransport` instead uses `curl_cffi`
 0.17 / Chrome 146 impersonation after a **successful browser login**.
 
+For a step-by-step login, proxy and 403 diagnosis, see the
+[104 sign-in and transport runbook](tw104-login-troubleshooting.md).
+
 ## Collateral-change detection for all native writer families (2026-11-20)
 
 The earlier cross-section preservation check covered multi-field JSON
@@ -90,8 +93,9 @@ place it in a shared/synced directory. A dedicated user-private directory
 and Linux/macOS POSIX local filesystem are required; Windows ACL-based
 permissions are not implemented and fail closed.
 
-The API now re-reads reserved entries as journal-backed objects before
-calling upstream. Their `update()` writes the verified success state to
+After assigning `idempotency_results[key] = entry`, each route must read back
+`entry = idempotency_results[key]` before calling upstream. The journal-backed
+entry's `update()` writes the verified success state to
 SQLite before returning HTTP 200. Any crash or ambiguous upstream result
 leaves `indeterminate` persisted: replay returns HTTP 409 and never
 blindly retries. The same protection is used for resume creation, PATCH,
@@ -310,7 +314,9 @@ field constraints do not establish write support.
    Environment proxies are disabled; it never silently switches to direct IP.
 4. HTTP requests share a lock and refresh the in-memory `104-profile-ver`
    response header. HTTP session cookies update from Set-Cookie.
-5. The HTTP transport closes with the browser session. No SQLite or disk cache.
+5. HTTP transports close when the owning `FreshBrowserSession` exits. Closing
+   only Chromium during explicit detachment leaves its HTTP transports available
+   until that exit. The handoff itself keeps cookies in memory.
 
 Both implementations share the `Resume104Client` method surface, so the
 client can read overview, resumeByBlock and options through either transport.

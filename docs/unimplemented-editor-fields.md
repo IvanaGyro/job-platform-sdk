@@ -11,30 +11,13 @@
 **從 P0-07 開始，依序往 P0-08、P0-09 ……前進。P0-01～P0-06 暫不處理。**
 這是優先順序調整，不表示前六項已完成，也不得擅自回去實作。
 
-**目前 P0-07 狀態：已新增可執行的 browser-only SDK／CLI／HTTP
-證照關聯／單筆解除 writer，但真實 104 網站驗證仍阻塞。**
-官方 Vuex action `form/certificate/setCertificationConnect`、
-`deleteCertificationConnect` 可免去猜測 API URL；寫入前會檢查目前
-網頁選取履歷及帳號既有證照清單，寫入後 GET 驗證分組
-`certifications[].items[].id`、其餘證照 metadata 與其他履歷區塊。
-**仍未通過真實 CRUD。** 2026-11-21 改用代理 #1 後登入成功，
-104 真實測試履歷 GET 成功；但該履歷 `certificate.formData` 是空的，
-查到的 `/profile/`、`/profile/set/` 頁面沒有載入預期的 Vuex store；
-`/profile/intro` 轉到 `/resumes/`，那是公開履歷範本，不是個人編輯器。
-已從官方編譯前端找到真正的個人編輯路徑
-`/profile/edit?vno=<VERSION_NO>`；使用私人測試履歷的版本成功得到
-HTTP 200 並載入編輯器 JS，但保存的登入狀態下**沒有掛載證照 UI／
-可用 Vuex store**。其後再試代理 #1 的全新登入回報
-`AuthenticationRequired`。此後**也已測試 curl_cffi 混合傳輸**：
-代理 #1 的同 Session 瀏覽器真實 GET 成功，但 `curl_cffi
-chrome146` 的 Overview GET 為 HTTP 403；改 `chrome150` 仍是 403，
-另一次瀏覽器入口自身也得到 403。Cloudflare 僅見 edge headers，
-不是已確認的 challenge；不能斷言一定是 TLS 指紋或密碼問題。
-**尚未執行任何證照關聯寫入、解除或還原；真實覆蓋率增量 0。**
-下一步定位真正可操作的編輯器／HTTP 證照關聯、帳號可連結證照與
-穩定原生 Session，完成 P0-07 寫入／獨立讀回／還原後才開始 P0-08。
-P0-08 的外語證照關聯依賴此項契約；不可把 P0-07 的本地測試當作
-已完成的網站支援。
+**P0-07 已有實驗性的 browser-only 證照關聯／解除 writer，真實網站驗證仍阻塞。**
+目前須確認個人編輯器的證照操作可用、帳號有可安全連結的證照，並在授權測試履歷完成
+關聯、獨立 GET、解除與精確還原。已送出的 P0-07 寫入為 0，新增真實驗證欄位為 0。
+P0-07 驗證通過後才開始 P0-08。
+
+- [目前阻礙與實測證據](tw104-editor-coverage.md#p0-07-certificate-association-via-official-browser-vuex--2026-11-21)
+- [登入、proxy 與 browser／curl 偵錯流程](tw104-login-troubleshooting.md)
 
 ## A. 104：仍未實作的欄位缺口
 
