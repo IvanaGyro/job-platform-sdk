@@ -26,6 +26,10 @@ class FakeClient:
     async def get_schema(self, version):
         return {"bio": {"type": "object"}}
 
+    async def get_editor_limits(self, section):
+        return {"section": section, "read_only": True,
+                "constraints": {"count": 3}}
+
     async def create_resume(self):
         self.creates += 1
         return {"versionNo": "created-test-1"}
@@ -58,6 +62,19 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
                                    headers=self.bearer())
         self.assertEqual((missing.status_code, bad.status_code,
                           good.status_code), (401, 401, 200))
+
+    async def test_editor_limit_endpoint_requires_auth_and_valid_section(self):
+        path = "/v1/tw104/editor-limits/project"
+        unauthorized = await self.http.get(path)
+        self.assertEqual(unauthorized.status_code, 401)
+        good = await self.http.get(path, headers=self.bearer())
+        self.assertEqual(good.status_code, 200)
+        self.assertEqual(good.json()["section"], "project")
+        self.assertTrue(good.json()["read_only"])
+        unknown = await self.http.get(
+            "/v1/tw104/editor-limits/under18", headers=self.bearer()
+        )
+        self.assertEqual(unknown.status_code, 422)
 
     async def test_static_writable_paths_are_authenticated_and_no_resume_needed(self):
         unauth = await self.http.get("/v1/tw104/writable-paths")

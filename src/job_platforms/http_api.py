@@ -24,6 +24,7 @@ from job_platforms.core.errors import (
 )
 from job_platforms.providers.tw104 import AuthConfig, FreshBrowserSession, Resume104Client
 from job_platforms.providers.tw104.writers import checked_write_paths, changed_sections
+from job_platforms.providers.tw104.editor_limits import INPUT_FIELD_GROUPS
 from job_platforms.providers.tw104.skill_records import skill_operation_body
 from job_platforms.providers.tw104.education_records import education_operation_body
 from job_platforms.providers.tw104.experience_records import experience_operation_body
@@ -166,6 +167,16 @@ def create_app(
             "yourator": {"provider": "yourator", "implemented": False},
             "greenhouse": {"provider": "greenhouse", "implemented": False},
         }
+
+    @app.get("/v1/tw104/editor-limits/{section}", dependencies=[Depends(authorize)])
+    async def editor_limits(section: str, request: Request):
+        if section not in INPUT_FIELD_GROUPS:
+            raise HTTPException(422, "104 editor limit section unsupported")
+        try:
+            async with request.app.state.action_lock:
+                return await request.app.state.client.get_editor_limits(section)
+        except JobPlatformError as exc:
+            translate_error(exc)
 
     @app.get("/v1/tw104/writable-paths", dependencies=[Depends(authorize)])
     async def writable_paths():

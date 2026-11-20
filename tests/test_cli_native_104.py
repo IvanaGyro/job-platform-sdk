@@ -48,6 +48,11 @@ class DummyClient:
         return (EditPlan(version, 42, [JsonPatchOperation.from_dict(op)
                                       for op in operations]), {})
 
+    async def get_editor_limits(self, section):
+        self.calls.append(("editor-limits", section))
+        return {"section": section, "constraints": {"count": 3},
+                "read_only": True, "persisted": False}
+
     async def get_language_editor_options(self, version, kind):
         self.calls.append(("language-options", version, kind))
         return {"resume_id": version, "kind": kind, "remaining_capacity": 2,
@@ -119,6 +124,15 @@ class CLI104Tests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(result["atomic"])
             self.assertEqual(result["planned_sections"], ["bio"])
             self.assertEqual(len(DummyClient.calls), 1)
+
+    async def test_editor_limits_read_only_cli_dispatch(self):
+        result = await self.execute(["editor-limits", "project"])
+        self.assertEqual(result["section"], "project")
+        self.assertEqual(result["constraints"]["count"], 3)
+        self.assertFalse(result["persisted"])
+        self.assertEqual(DummyClient.calls, [("editor-limits", "project")])
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            _parser().parse_args(["editor-limits", "under18"])
 
     async def test_language_options_read_only_cli_dispatch(self):
         data = await self.execute(["language-options", "synthetic", "foreign"])

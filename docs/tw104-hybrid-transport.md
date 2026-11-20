@@ -4,6 +4,19 @@ The default is still `BrowserTransport`: Patchright authenticates and issues
 same-origin requests. An opt-in `CurlCffiTransport` instead uses `curl_cffi`
 0.17 / Chrome 146 impersonation after a **successful browser login**.
 
+## Read-only native editor field constraints (2026-11-20)
+
+`Resume104Client.get_editor_limits(section)` requests only the site's
+`/profile/ajax/inputField` data and exposes numeric/bool field boundaries,
+not full raw metadata. `job-platform editor-limits project` and bearer-only
+`GET /v1/tw104/editor-limits/project` use the same SDK method. The native
+frontend uses plural groups `projects`/`portfolios`/`referrers`/`customs`;
+these are mapped to the SDK's singular section names. A sanitizer omits
+all unknown scalar fields, strings (including regexes), arrays and invalid
+values; malformed or missing groups fail closed. This work is synthetic-
+tested; the current upstream response has not been rechecked live, and
+field constraints do not establish write support.
+
 ## Versioned JSON Patch planning and writer discovery (2026-11-20)
 
 - `Resume104Client.plan_edit()` is a strict, non-writing preflight. It requires

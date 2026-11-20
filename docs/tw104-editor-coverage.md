@@ -211,6 +211,22 @@ every possible UI control.
 - `project`, `referrer` and `certificate` can have empty formData, so
   initialization and CRUD must not be inferred from a nonempty GET fixture.
 
+### Read-only editor field limits — 2026-11-20
+
+The SDK/CLI/local authenticated HTTP API now expose `get_editor_limits()`
+through the official read-only `GET /profile/ajax/inputField` metadata route.
+The source-to-section names are mapped from the deployed frontend's
+`inputField.data`/`jsonInputField` bindings, including plural `projects`,
+`portfolios`, `referrers` and `customs`. The returned JSON is strictly
+filtered to recognized numeric/bool metadata (`count`, `maxLength`,
+`minLength`, `htmlMaxLength`, `min`/`max`, `required` and related bounds).
+No raw text, regex, arrays or private resume fields are returned. The
+result explicitly distinguishes an empty known group from a missing group,
+rejects unknown sections and size/depth anomalies, and reports
+`limits_available` without inventing constraints. This is **synthetic-tested
+and source-mapped only**; no new 104 login, server read or write was made.
+`inputField` limits do not prove that the SDK can write every named field.
+
 ### JSON Patch preflight and supported-path discovery — 2026-11-20
 
 The previously permissive `plan_edit` preview now validates the real writer

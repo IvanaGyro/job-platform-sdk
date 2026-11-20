@@ -80,6 +80,18 @@ The `POST /v1/tw104/resumes/{id}/plan` result also reports ordered
 `planned_sections`, `maximum_write_requests`, and `atomic:false` to make
 multi-section writes' non-transactional behavior explicit.
 
+The SDK additionally exposes read-only
+`await client.get_editor_limits("project")` (and `language`, `info`,
+`experience`, etc.) for numeric/bool field limits from the official
+`/profile/ajax/inputField` response. Equivalent entry points are
+`job-platform editor-limits project` and token-protected
+`GET /v1/tw104/editor-limits/project`. The response omits unknown strings,
+regexes, option lists, private values and raw site JSON. Limits are
+**form metadata**, not proof that every field is supported by the writer;
+use `writable-paths` for the implemented JSON Patch subset. The SDK
+returns `limits_available:false` if the selected native group has no
+recognized numeric limits, rather than inventing a maximum.
+
 `client.save_edit(plan)` supports:
 
 - `/bio/formData/bio/chi` and `/bio/formData/bio/eng`. The BIO PUT has passed
@@ -626,6 +638,8 @@ export JOB_PLATFORM_104_PROXY_FILE=/run/secrets/104-proxies
 export JOB_PLATFORM_104_PROXY_PRIORITY=4
 # Offline, source-mapped PATCH whitelist: does NOT need credentials or proxy.
 job-platform writable-paths
+# Requires one authenticated 104 read-only session:
+xvfb-run -a job-platform editor-limits project
 xvfb-run -a job-platform --provider tw104 probe
 xvfb-run -a job-platform --provider tw104 list
 xvfb-run -a job-platform --provider tw104 get VERSION_NO
@@ -680,6 +694,7 @@ Routes:
 - `GET /v1/{provider}/resumes/{resume_id}/sections/{section}`
 - `POST /v1/{provider}/resumes` (requires `Idempotency-Key`)
 - `GET /v1/tw104/writable-paths` (static source-mapped PATCH whitelist; requires bearer token, no site request)
+- `GET /v1/tw104/editor-limits/{section}` (current source-mapped numeric/bool field constraints, authenticated read-only 104 GET, no resume content)
 - `POST /v1/{provider}/resumes/{resume_id}/plan` (dry run only; validates mapped writers, returns planned sections)
 - `PATCH /v1/{provider}/resumes/{resume_id}` (**501 by default**; experimental BIO / CERTIFICATE / SIDEBAR / JOBCONDITION write when explicitly enabled)
 

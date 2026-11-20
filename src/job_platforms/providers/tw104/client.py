@@ -57,6 +57,7 @@ from .experience_records import (
 from .education_records import (
     education_list, education_operation_body, verify_education_operation,
 )
+from .editor_limits import INPUT_FIELD_GROUPS, native_editor_limits
 from .writers import (
     checked_write_paths, changed_sections, section_data, section_request_body,
     validate_section_edit, patch_path_catalog,
@@ -125,6 +126,15 @@ class Resume104Client:
         if not isinstance(item, (dict, list)):
             raise ResumeNotFound("Selected resume section is unavailable")
         return item
+
+    async def get_editor_limits(self, section: str) -> dict:
+        """Read the official editor's non-personal numeric field constraints."""
+        if section not in INPUT_FIELD_GROUPS:
+            raise UnsupportedWrite("104 editor limit section unsupported")
+        response = self._data(await self.transport.get_json(
+            "/profile/ajax/inputField"
+        ))
+        return native_editor_limits(response, section)
 
     async def get_language_editor_options(
         self, resume_id: str | int, kind: str,

@@ -336,6 +336,14 @@ private Modal directory. They are never part of the public repository.
   and HTTP GET `/v1/tw104/resumes/{resume_id}/languages/{kind}/options`
   share that SDK method, with synthetic parity coverage. No real CREATE is
   implied by availability in this read-only catalog.
+- Native form limits (read-only): The frontend references
+  `inputField.data` and `jsonInputField` for section-level constraints,
+  including `projects`, `portfolios`, `referrers` and `customs`.
+  `GET /profile/ajax/inputField` has previously been read in an authorized
+  104 session. `get_editor_limits(section)` returns only recognized
+  numeric/boolean field constraints, not the site's raw reply or other
+  personal fields. This endpoint is source-mapped and synthetic-tested;
+  freshness on the current live website is not newly verified.
 - LANGUAGE FOREIGN duplicate-type POST (2026-11-19): when the existing
   foreign record had the same type selector as a proposed second one,
   104 **overwrote the original row**, instead of appending a new row.

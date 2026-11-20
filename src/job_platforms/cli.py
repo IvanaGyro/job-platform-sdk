@@ -81,6 +81,12 @@ def _parser() -> argparse.ArgumentParser:
         help="Inspect discovered native custom1..custom6 schema without writing",
     )
     custom_slots.add_argument("resume_id")
+    editor_limits = sub.add_parser(
+        "editor-limits",
+        help="Read current site numeric/bool limits for one native 104 section",
+    )
+    from job_platforms.providers.tw104.editor_limits import INPUT_FIELD_GROUPS
+    editor_limits.add_argument("section", choices=tuple(INPUT_FIELD_GROUPS))
     language_choices = sub.add_parser(
         "language-options",
         help="Read current 104 foreign/local language choices and capacity; no write",
@@ -283,6 +289,8 @@ async def _run(args):
             result = await client.list_custom_slots(args.resume_id)
         elif args.command == "get-section":
             result = await client.get_section(args.resume_id, args.section)
+        elif args.command == "editor-limits":
+            result = await client.get_editor_limits(args.section)
         elif args.command == "language-options":
             result = await client.get_language_editor_options(
                 args.resume_id, args.kind,
