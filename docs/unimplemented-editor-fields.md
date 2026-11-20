@@ -25,9 +25,14 @@
 `/profile/edit?vno=<VERSION_NO>`；使用私人測試履歷的版本成功得到
 HTTP 200 並載入編輯器 JS，但保存的登入狀態下**沒有掛載證照 UI／
 可用 Vuex store**。其後再試代理 #1 的全新登入回報
-`AuthenticationRequired`。**尚未執行任何證照關聯寫入、解除或還原；
-真實覆蓋率增量 0。** 下一步定位編輯器初始化與帳號可連結證照，
-完成 P0-07 實際寫入／獨立讀回／原狀還原後，才開始 P0-08。
+`AuthenticationRequired`。此後**也已測試 curl_cffi 混合傳輸**：
+代理 #1 的同 Session 瀏覽器真實 GET 成功，但 `curl_cffi
+chrome146` 的 Overview GET 為 HTTP 403；改 `chrome150` 仍是 403，
+另一次瀏覽器入口自身也得到 403。Cloudflare 僅見 edge headers，
+不是已確認的 challenge；不能斷言一定是 TLS 指紋或密碼問題。
+**尚未執行任何證照關聯寫入、解除或還原；真實覆蓋率增量 0。**
+下一步定位真正可操作的編輯器／HTTP 證照關聯、帳號可連結證照與
+穩定原生 Session，完成 P0-07 寫入／獨立讀回／還原後才開始 P0-08。
 P0-08 的外語證照關聯依賴此項契約；不可把 P0-07 的本地測試當作
 已完成的網站支援。
 

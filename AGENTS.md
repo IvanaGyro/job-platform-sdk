@@ -23,10 +23,28 @@ is empty. One further fresh login on proxy #1 then raised
 `AuthenticationRequired`; do not assume a new login succeeds automatically.
 The certificate account-owned list and real frontend connect/disconnect
 write path remain unobserved, so **zero P0-07 site CRUD writes were sent**.
+**curl_cffi fallback was attempted on the retained authenticated
+proxy #1 session in this continuation:** The previously proven hybrid
+method still exists at `FreshBrowserSession.http_transport()` and
+`CurlCffiTransport.from_storage_state()`; browser cookies, original
+proxy, User-Agent, and chrome TLS impersonation were reused. On one
+same-session/proxy comparison, genuine browser resume GET succeeded, but
+`curl_cffi` `GET /profile/ajax/overview` received **HTTP 403** with
+Cloudflare *edge headers*, **not a confirmed challenge**. The running
+Chromium reported Chrome **149**, but `curl_cffi 0.17` supports only
+`chrome146` or `chrome150` nearby. One explicit `chrome150` curl
+GET also returned 403; on a separate comparison the browser's entry
+navigation itself returned 403. Do not falsely infer a password error or
+that JA3 mismatch alone caused rejection. Stop repeated 403 retries.
+Keep all cookie/proxy/response bodies private; those test scripts/logs
+are under /workspace/104-private/integration-tests only. No certificate
+writes were sent; **live-verified fields added: zero**.
+
 The browser-only Vuex dispatch writer may be inapplicable to the currently
 loaded editor until this bridge is resolved. Before any mutation, establish
-the editor's actual store/UI and a safely reversible account-owned
-certificate, then do real connect/GET/disconnect/exact restore.
+a working native HTTP/browser authenticated editor or validated endpoint
+and a safely reversible account-owned certificate, then do real
+connect/GET/disconnect/exact restore.
 P0-08 starts **only after real P0-07 CRUD passes**, per explicit user
 sequencing. Do not repeat this route hunt or pivot to other features.
 

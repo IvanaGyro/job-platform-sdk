@@ -83,6 +83,31 @@ followed only then by a reversible association test. P0-08 remains
 deferred until real P0-07 connect/read/unlink/restore passes. No private
 version, certificate, account fields or session tokens are in this note.
 
+### P0-07 curl_cffi same-proxy authenticated-session investigation — 2026-11-21
+
+Reused the **previously successful** browser-login → same-proxy/session
+→ `curl_cffi` native-104 transport workflow rather than guessing a
+certificate link endpoint. The private session was saved from a real
+proxy #1 login; no new user data were entered. In one same-proxy,
+same-cookie comparison, the headful Patchright Chromium session (Chrome
+149) could still load `/profile/` and successfully GET the selected
+resume, while `CurlCffiTransport` impersonating Chrome 146 received
+**HTTP 403** on a read-only
+`GET /profile/ajax/overview`. Cloudflare **edge headers** appeared,
+but no explicit `cf-mitigated: challenge` was verified; attribution
+to either 104 or Cloudflare is **undetermined**.
+
+Installed `curl_cffi` version 0.17.0 has Chrome 146 and Chrome 150
+profiles, not 149. A separate saved-cookie/same-proxy Chrome 150
+read-only GET still received **403**, so JA3 version mismatch **alone
+is not an established explanation**. Another comparison saw browser
+entry navigation itself return 403, showing variable upstream access
+on that proxy. This does not erase prior real hybrid-transport write
+successes elsewhere in the repo: it describes **this session, proxy
+and date**. No unsafe write, no proxy cycling after the 403 findings,
+no certificate import or unlink, and **zero new real-verified fields**.
+Private diagnostics remain outside Git. P0-08 is not started.
+
 ## Latest evidence — 2026-11-18
 
 The user-authorized test resume completed independently read-verified and
