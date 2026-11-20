@@ -7,6 +7,13 @@ redacted GET responses (November 2026). The site can change at any time.
 **Do not equate GET field presence, observed frontend calls, synthetic tests
 and successful real 104 writes.** Each is a separate evidence level.
 
+**Mainline implementation backlog:** [unimplemented-editor-fields.md](unimplemented-editor-fields.md).
+This lists **only missing executable writers**, not existing but unverified
+FOREIGN CREATE/DELETE, CLASSIC/BANNER, UNDER18 or other native actions.
+Agents must choose the priority ID there instead of independent
+infrastructure work. This inventory remains the separate real-site
+verification record; local CI passes do not increase usable-field coverage.
+
 | Native group | Frontend operation families seen | Implementation in this PR | Live 104 write/read-back |
 |---|---|---|---|
 | `info` | PUT; related identity and optional information | Source-mapped selected resume INFO fields (experimental); account/media excluded | **Motto PUT/read-back/exact restore**; remaining fields incomplete |
@@ -254,30 +261,21 @@ these are **not** universal edit permissions, and custom/media/record CRUD
 have separate operations. The plan endpoint returns affected block names and
 `atomic:false`. All evidence for this continuation is synthetic.
 
-## Next technical milestones
+## Canonical next work and evidence standards (2026-11-21)
 
-1. Observe every control in the **104** editor and capture the request *shape*
-   for its create/update/delete/reorder actions. Do not store real payload
-   values in the repository.
-2. Extend the existing native record/layout encoders for `info`, referrer,
-   project, portfolio, certificate connections, media, and remaining ordering; validate every supported JSON Patch path before network I/O.
-3. Live-test each source-mapped operation on the designated test resume,
-   using private backups and exact read-back/restore where reversible.
-4. Extend the synthetic Python SDK, HTTP API and CLI test matrix; harden
-   remote-conflict reconciliation and login recovery. SQLite and persistent
-   idempotency are out of scope for disposable execution.
+**Use [the missing executable writer backlog](unimplemented-editor-fields.md)
+for all new field implementation tasks.** It lists the specific known
+unimplemented 104 fields/operations with binding P0/P1 IDs and separately
+identifies Cake, Yourator and Greenhouse provider gaps. Do not start from
+the historical milestones below: they predate the newer source-mapped SDK,
+media-conversion, batch and idempotency features.
 
-Current definitions:
-
-- **Verified:** Real 104 mutation submitted, exact changed-value read-back,
-  then original restored and independently read back.
-- **Experimental:** Upstream source-mapped serializer plus synthetic tests,
-  with no successful real 104 write/read-back yet.
-- **Unavailable:** No safe writer; PATCH is rejected rather than guessed.
-
-The scope is **only 104**. No common data schema or adapter behavior is being
-designed for other job platforms.
-
+Existing but unverified features (especially FOREIGN CREATE/DELETE) remain
+**live-validation tasks**, not missing implementations. Only authorized
+website writes plus independent GET and exact restoration count as a new
+usable-field result. If site authentication/API calls fail, state the
+blocker and **zero new live-verified fields** instead of reporting code
+coverage, mock tests or CI as user-facing product progress.
 
 ## 2026-11-17 incremental coverage
 

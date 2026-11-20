@@ -4,6 +4,12 @@ An unofficial, extensible Python SDK, CLI and optional HTTP API for managing job
 
 **Status: alpha.** The initial working provider is [104 Job Bank](https://www.104.com.tw/) in Taiwan. Providers for **Cake**, **Yourator**, and **Greenhouse** are planned, but **not implemented**.
 
+**Missing editable-field implementation backlog:** [docs/unimplemented-editor-fields.md](docs/unimplemented-editor-fields.md).
+Agents must work in its P0/P1 ID order unless the user redirects them.
+It excludes features already implemented but waiting for live site testing.
+Only authorized real 104 persistence, independent GET and exact restoration
+increase the reported usable-field coverage; synthetic tests and CI do not.
+
 **For coding agents:** Read [AGENTS.md](AGENTS.md) before development.
 In particular, reuse an authenticated 104 browser/HTTP session across a
 planned batch of API calls and tests; do not repeatedly log in unless

@@ -1,3 +1,27 @@
+## Mandatory mainline: missing executable editor field writers (2026-11-21)
+
+**Before selecting the next task, read [docs/unimplemented-editor-fields.md](docs/unimplemented-editor-fields.md).**
+It is the authoritative priority-ordered backlog of **fields/operations with no
+safe executable writer**. Claim one P0/P1 ID and keep working on that ID unless
+the user explicitly changes the task. Do not switch to caching, idempotency,
+preflight, batch orchestration, CI, framework refactoring or another easier
+field merely because the chosen site's request is blocked.
+
+**Do not add existing but unverified writers to the unimplemented backlog.**
+FOREIGN CREATE/DELETE, CUSTOM CLASSIC/BANNER no-media CRUD and UNDER18
+POST/PUT already have source-mapped SDK implementations. Site validation is
+tracked separately in docs/tw104-editor-coverage.md; do not redo those
+implementations or claim new feature coverage from Mock/CI results.
+
+**Only real authorized 104 persistence, independent GET and exact restoration
+count toward usable editor-field coverage.** Where a field supports UPDATE
+only, use the appropriate reversible live edit/read/restore cycle; don't
+force unsupported CRUD. In every report identify the backlog ID and state
+the number of newly live-verified fields. If a website/authentication
+blocker prevents the real test, explicitly report **0 new live-verified
+fields** and investigate that blocker rather than invent another task.
+Never modify unrelated resumes or leak live user data.
+
 # Instructions for coding agents
 
 These project rules apply to contributors and AI coding agents working on the
