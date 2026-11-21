@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+.venv/
+venv/
+.coverage
+# Local/private configuration and authentication
+.env
+.env.*
+!.env.example
+*credential*
+*cookie*
+*session*
+*storage-state*
+*playwright-auth*
+*proxy-list*
+*webshare*
+*.har
+*.trace
+*.log
+private/
+secrets/
+state/
+output/
+artifacts/
+*.sqlite
+# Playwright artifacts
+test-results/
+playwright-report/
+
+# Local authenticated integration harnesses and generated staging artifacts
+tests/private_*.py
+tests/live_*.py
+**/*bio-backup*
+**/*private-profile*
+http-new-*.txt
+readme-new-*.txt
