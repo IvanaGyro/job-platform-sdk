@@ -293,6 +293,25 @@ this curl request. They do not isolate which signal triggered it.
 Follow the challenge guidance above before any further direct-client
 testing.
 
+### Impersonation with identical outbound HTTP headers
+
+A real-site read used headed Chromium 149 to authenticate and obtain a
+valid overview. CDP captured the successful GET's complete outbound
+headers in memory, including its exact Cookie header. After Chromium's
+profile process exited, curl_cffi used the same proxy, chrome150
+impersonation, default_headers=False, and those captured headers.
+Chrome 150 was selected because the installed curl_cffi has no Chrome
+149 impersonation profile.
+
+The curl debug callback confirmed equal header-name sets, equal values
+for every captured header and a byte-identical Cookie header value.
+CONNECT returned 200. TLS 1.2 and HTTP/1.1 negotiated successfully.
+The overview GET returned 403 with cf-mitigated: challenge and did not
+yield a resume list. No account or resume mutation was attempted.
+This establishes equality of HTTP header fields in this comparison.
+TLS handshake details, profile version and connection state were not
+proven identical. It does not identify the challenge trigger.
+
 ## What to leave in the handoff
 
 Record UTC time, proxy index, client/version, stage, host and path without
