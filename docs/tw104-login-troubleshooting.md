@@ -166,6 +166,24 @@ navigation abort also needs its own diagnosis. Record the resulting page
 and SDK stage without inferring credential rejection or an HTTP block from
 the abort alone.
 
+### Follow-up connection controls
+
+On two configured proxies, `curl_cffi` itself completed CONNECT and a
+neutral HTTPS GET with either the SDK's credential-in-URL format or
+separate proxy credentials. Both forms returned CONNECT 200 and HTTP 200.
+That verifies the proxy authentication format against the control endpoint.
+It leaves the earlier destination-specific curl code 7 unexplained.
+
+Two attempts to verify detached mode stopped before account entry. The
+normal attempt saw PDA entry 403 with edge headers, then official sign-in
+HTML 200 with the account input missing. In a separate attempt, observing
+the form for eight additional seconds still produced no account input.
+The page's own `login_init` returned HTTP 401 JSON. This result does not
+support extending the form timeout as a fix. When the same condition
+occurs, check the browser's background sign-in requests before changing
+curl settings. Resume detached verification once the normal sign-in flow
+again reaches an authenticated browser overview.
+
 ## What to leave in the handoff
 
 Record UTC time, proxy index, client/version, stage, host and path without
