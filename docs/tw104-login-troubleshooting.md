@@ -184,6 +184,27 @@ occurs, check the browser's background sign-in requests before changing
 curl settings. Resume detached verification once the normal sign-in flow
 again reaches an authenticated browser overview.
 
+### Standalone headed browser check
+
+A standalone probe ran headed Patchright under Xvfb without importing
+the SDK. It waited for the official account field to become visible,
+with a 55-second budget to account for slower renders. The flow relied
+on the page's own initialization instead of issuing an extra
+`login_init` request.
+
+On the live attempt, the account field appeared about one second after
+the visibility wait started. A PDA background request had already
+returned HTTP 403 with `cf-mitigated: challenge`. The probe stopped
+before credential entry. It did not reach the authenticated overview
+or curl handoff. In this case a visible sign-in form was compatible
+with a challenge on a separate PDA request.
+
+A loopback control used the same standalone libraries and confirmed
+that headed Chromium could establish a synthetic HttpOnly session,
+close completely and leave `curl_cffi` able to read the authenticated
+overview with HTTP 200. This control exercised the handoff mechanics
+without the third-party proxy or 104 rules.
+
 ## What to leave in the handoff
 
 Record UTC time, proxy index, client/version, stage, host and path without
