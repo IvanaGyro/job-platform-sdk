@@ -259,6 +259,22 @@ Cloudflare challenge iframe, challenge DOM or challenge header. Keep
 such a 403 distinct from a confirmed challenge on a background request.
 A generic `403` or `cf-ray` alone does not establish an IP block.
 
+### Browser closed before the curl request
+
+A later live run verified a valid browser overview (HTTP 200), retained
+the scoped session state in memory, closed Chromium and confirmed that
+its profile process exited. A fresh `curl_cffi` client on the same
+configured route then received CONNECT 200, negotiated TLS 1.2 and
+HTTP/1.1, and sent the overview GET. The destination response was
+HTTP 403 with Cloudflare edge headers and no observed challenge
+marker. Curl did not obtain a resume list. Chromium had likewise used
+TLS 1.2 and HTTP/1.1 for its successful GET.
+
+An earlier curl attempt while Chromium was still open got 429 during
+CONNECT. These are separate runs. The later success establishing the
+tunnel does not prove browser connection occupancy caused the earlier
+429. The source of the destination 403 is still unconfirmed.
+
 ## What to leave in the handoff
 
 Record UTC time, proxy index, client/version, stage, host and path without
