@@ -232,6 +232,33 @@ It did not exercise the SDK's official sign-in fallback. The earlier
 successful SDK browser login saw init 200. The available comparisons
 do not isolate a cause for the different results.
 
+### Live browser success via the official login link
+
+The public 104 home page links to `https://login.104.com.tw/login`.
+On a configured route, starting from that link led to a 200
+`login_init`, successful password and MFA steps, and a return to PDA.
+Waiting for the PDA profile navigation to finish allowed headed
+Patchright, without the SDK, to read a valid resume list from
+`GET /profile/ajax/overview` on two runs.
+
+- In the first run, asynchronous `curl_cffi` on the same route and
+  with the same approved session returned curl error 7 and no HTTP
+  response. An immediate browser recheck on that session returned 200.
+- On a separate fresh login with the same route and endpoint,
+  synchronous `curl_cffi` established proxy CONNECT (200), then
+  received a destination HTTP 403 with Cloudflare edge headers and no
+  observed challenge marker. The response body was not retained, so
+  the denial source remains unresolved. Chromium was not deliberately
+  detached for either comparison.
+
+In the preceding three-route comparison, two routes reached a 200 PDA
+entry page but stopped during sign-in with 401, before obtaining an
+authenticated list. The other route returned a first-document 403
+with a 104-branded error page. The page had one iframe, with no observed
+Cloudflare challenge iframe, challenge DOM or challenge header. Keep
+such a 403 distinct from a confirmed challenge on a background request.
+A generic `403` or `cf-ray` alone does not establish an IP block.
+
 ## What to leave in the handoff
 
 Record UTC time, proxy index, client/version, stage, host and path without
