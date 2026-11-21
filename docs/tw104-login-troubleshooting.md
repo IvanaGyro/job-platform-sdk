@@ -211,6 +211,27 @@ returned HTTP 200 and the account field became visible after about
 timed out during the account step, before reaching the password step
 or making an authenticated overview request.
 
+### Proxy and entry-route comparison
+
+Two configured proxies were checked with fresh headed Chromium sessions
+on the same runner. Direct official sign-in returned HTTP 200 and
+displayed the account form on both routes. On both routes the page's
+own `login_init` returned HTTP 401, with no challenge marker observed
+on these responses. No account credentials were entered. This shows
+that changing between these two proxy routes did not resolve the
+pre-account 401.
+
+The SDK uses a fresh persistent Chromium context, begins at the PDA
+entry page, may visit PDA profile before official sign-in, and runs
+an explicit same-origin `login_init` gate before account entry. The
+standalone direct probe uses a fresh ordinary browser context and
+observes the page's own init request. A separate same-proxy probe used
+the SDK-style context and initial PDA route, but received HTTP 403 on
+that first document without a challenge marker and stopped there.
+It did not exercise the SDK's official sign-in fallback. The earlier
+successful SDK browser login saw init 200. The available comparisons
+do not isolate a cause for the different results.
+
 ## What to leave in the handoff
 
 Record UTC time, proxy index, client/version, stage, host and path without
