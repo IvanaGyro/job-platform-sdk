@@ -312,6 +312,45 @@ This establishes equality of HTTP header fields in this comparison.
 TLS handshake details, profile version and connection state were not
 proven identical. It does not identify the challenge trigger.
 
+### Successful standalone handoff using Chrome 150 and raw request headers
+
+The next authorized real-site run succeeded. Headed Patchright under Xvfb
+used Chrome for Testing 150.0.7871.124 with the established official
+login entry, completed password and MFA, and verified the overview.
+Chromium NetLog capture mode Everything retained its actual HTTP/1.1
+request line and header lines privately. After closing Chromium and
+confirming its profile process had exited, a synchronous curl_cffi
+Session on the same proxy used chrome150 impersonation,
+default_headers=False and those raw header names and values, including
+the complete original Cookie header in memory.
+
+CONNECT returned 200. The first and second GETs of the real overview
+both returned HTTP 200 with valid resume-list JSON. The second GET
+reused the curl session. No SDK or test server was used.
+
+Raw comparison established equal request lines and equal HTTP field
+names/values. Curl moved Connection from the second header to the
+last position. All other header spellings and their relative order
+matched. This means the raw header block was not byte-identical.
+
+Captured PDA ClientHello messages had equal cipher-suite lists,
+supported-group lists and ALPN offers (h2 and http/1.1), after
+excluding GREASE IDs. Their extension ID sets matched, while extension
+order differed. The last captured browser PDA ClientHello was 2013
+bytes and curl's was 1821 bytes. Among their shared extensions,
+session_ticket (35) had a different length. The browser's last PDA
+handshake was not conclusively associated with the overview connection,
+so these observations characterize captured handshakes, not an exact
+connection-to-connection proof.
+
+Several variables changed together from the previous failed run:
+browser major version, raw header spelling/order input and a later
+fresh login/session. This success does not isolate the cause of the
+earlier challenge or guarantee future acceptance. NetLogs, TLS debug
+chunks, screenshots and request bytes contain sensitive session data
+and remain outside Git. The standalone reproduction script remains
+in the private integration-tests workspace as handoff-chrome150-netlog.py.
+
 ## What to leave in the handoff
 
 Record UTC time, proxy index, client/version, stage, host and path without
