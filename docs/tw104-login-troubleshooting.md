@@ -205,6 +205,12 @@ close completely and leave `curl_cffi` able to read the authenticated
 overview with HTTP 200. This control exercised the handoff mechanics
 without the third-party proxy or 104 rules.
 
+A follow-up started at the official sign-in page directly. The page
+returned HTTP 200 and the account field became visible after about
+1.2 seconds. The page's own `login_init` returned HTTP 401. The probe
+timed out during the account step, before reaching the password step
+or making an authenticated overview request.
+
 ## What to leave in the handoff
 
 Record UTC time, proxy index, client/version, stage, host and path without
