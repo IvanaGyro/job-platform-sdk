@@ -351,6 +351,26 @@ chunks, screenshots and request bytes contain sensitive session data
 and remain outside Git. The standalone reproduction script remains
 in the private integration-tests workspace as handoff-chrome150-netlog.py.
 
+### Successful version-mismatch control
+
+A follow-up used the original Chromium 149 with curl_cffi chrome150
+impersonation and the same raw-NetLog header copying as the successful
+Chrome 150 run. After a first attempt stopped during post-MFA navigation
+before any curl GET, the script tolerated interrupted navigation and
+allowed the PDA page to settle longer. The next fresh login verified
+a valid browser overview, closed Chromium and confirmed its process
+exited. The curl GET then returned CONNECT 200 and destination HTTP
+200 with a valid resume list. A second GET on the same curl session
+also returned a valid list with HTTP 200.
+
+The captured header-name sets, all values and complete Cookie header
+matched. Both clients negotiated HTTP/1.1 and TLS 1.2. This demonstrates
+that matching browser major versions was not necessary in this
+successful run. Compared with the earlier 149/150 failure, the raw
+header representation and login session also changed, so the evidence
+does not isolate header spelling/order as the cause of success.
+Private reproduction script: handoff-chrome149-raw-settled.py.
+
 ## What to leave in the handoff
 
 Record UTC time, proxy index, client/version, stage, host and path without
