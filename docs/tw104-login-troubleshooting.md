@@ -275,6 +275,24 @@ CONNECT. These are separate runs. The later success establishing the
 tunnel does not prove browser connection occupancy caused the earlier
 429. The source of the destination 403 is still unconfirmed.
 
+### Same-session header comparison and confirmed challenge
+
+A live headed-browser GET returned a valid overview with HTTP 200.
+After Chromium exited, the independent curl client used the same route,
+matched the browser's ordinary Accept, Accept-Language and same-origin
+Referer, and received CONNECT 200. Its request reached the destination
+over HTTP/1.1 and TLS 1.2. The overview response was HTTP 403 HTML with
+both `cf-mitigated: challenge` and Cloudflare challenge markup.
+
+The two outbound requests had the same 17 non-Cloudflare cookie names,
+with 16 equal values. Accept-Encoding differed. Chromium also sent
+its usual User-Agent, connection, Fetch Metadata and client hints.
+Only field names, aggregate equality counts and response indicators
+were retained. The observations establish an active challenge on
+this curl request. They do not isolate which signal triggered it.
+Follow the challenge guidance above before any further direct-client
+testing.
+
 ## What to leave in the handoff
 
 Record UTC time, proxy index, client/version, stage, host and path without
